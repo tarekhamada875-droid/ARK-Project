@@ -1,0 +1,17 @@
+{
+  "name": "PARQ SYSTEM",
+  "short_name": "PARQ",
+  "description": "نظام ذكى لإدارة جراجات السيارات فى مصر",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2993/2993685.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
