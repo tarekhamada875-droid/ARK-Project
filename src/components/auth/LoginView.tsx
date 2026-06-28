@@ -67,10 +67,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
       >
         <style>{`
           @keyframes warning-stripe-march {
-            from { background-position: 0 0; }
-            to { background-position: 40px 0; }
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-40px, 0, 0); }
           }
           .marching-warning-stripes {
+            width: calc(100% + 40px);
             background-image: repeating-linear-gradient(
               -45deg,
               #ef4444,
@@ -80,9 +81,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
             );
             background-size: 40px 40px;
             animation: warning-stripe-march 1s linear infinite;
+            will-change: transform;
           }
         `}</style>
-        <div className="absolute top-0 left-0 right-0 h-3.5 marching-warning-stripes z-10" />
+        <div className="absolute top-0 left-0 h-3.5 marching-warning-stripes z-10" />
 
         {/* Upper Header Accent */}
         <div className="flex flex-col items-center justify-center mb-6 sm:mb-8 select-none text-center">

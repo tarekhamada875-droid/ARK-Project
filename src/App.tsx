@@ -1985,10 +1985,11 @@ export default function App() {
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 max-w-sm w-full flex flex-col items-center gap-6 border border-slate-100 dark:border-slate-800 shadow-2xl transition-all relative overflow-hidden pt-10">
               <style>{`
                 @keyframes warning-stripe-march {
-                  from { background-position: 0 0; }
-                  to { background-position: 40px 0; }
+                  from { transform: translate3d(0, 0, 0); }
+                  to { transform: translate3d(-40px, 0, 0); }
                 }
                 .marching-warning-stripes {
+                  width: calc(100% + 40px);
                   background-image: repeating-linear-gradient(
                     -45deg,
                     #ef4444,
@@ -1998,9 +1999,10 @@ export default function App() {
                   );
                   background-size: 40px 40px;
                   animation: warning-stripe-march 1s linear infinite;
+                  will-change: transform;
                 }
               `}</style>
-              <div className="absolute top-0 left-0 right-0 h-3.5 marching-warning-stripes z-10" />
+              <div className="absolute top-0 left-0 h-3.5 marching-warning-stripes z-10" />
               <div className="space-y-2">
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-sans">تنبيه دخول جديد! ⚠️</h2>
                 <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
