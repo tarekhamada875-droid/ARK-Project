@@ -63,8 +63,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-3xl p-6 sm:p-10 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none"
+        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-3xl p-6 sm:p-10 pt-10 sm:pt-14 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none overflow-hidden"
       >
+        <style>{`
+          @keyframes warning-stripe-march {
+            from { background-position: 0 0; }
+            to { background-position: 40px 0; }
+          }
+          .marching-warning-stripes {
+            background-image: repeating-linear-gradient(
+              -45deg,
+              #ef4444,
+              #ef4444 10px,
+              #1e293b 10px,
+              #1e293b 20px
+            );
+            background-size: 40px 40px;
+            animation: warning-stripe-march 1s linear infinite;
+          }
+        `}</style>
+        <div className="absolute top-0 left-0 right-0 h-3.5 marching-warning-stripes z-10" />
+
         {/* Upper Header Accent */}
         <div className="flex flex-col items-center justify-center mb-6 sm:mb-8 select-none text-center">
           <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 font-sans">بوابة الدخول</h2>

@@ -377,7 +377,7 @@ export const GarageDashboardView = memo(({
                             <span className="font-bold text-sm">الأشتراكات</span>
                           </div>
                           {subscribersCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-black animate-pulse">
+                            <span className="px-2 py-0.5 rounded-md bg-red-600 text-white dark:bg-red-500 dark:text-slate-950 text-xs font-black">
                               {subscribersCount}
                             </span>
                           )}
