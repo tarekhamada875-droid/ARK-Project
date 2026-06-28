@@ -181,9 +181,9 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
     const diffTime = end.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays < 0) return { label: 'منتهي', color: 'bg-red-50 text-red-600 border-red-200' };
-    if (diffDays <= 3) return { label: `ينتهي بعد ${diffDays} أيام`, color: 'bg-orange-50 text-orange-600 border-orange-200' };
-    return { label: 'ساري', color: 'bg-green-50 text-green-600 border-green-200' };
+    if (diffDays < 0) return { label: 'منتهي', color: 'bg-red-50 text-red-600 border-red-200', isAlert: true };
+    if (diffDays <= 3) return { label: `ينتهي بعد ${diffDays} أيام`, color: 'bg-orange-50 text-orange-600 border-orange-200', isAlert: true };
+    return { label: 'ساري', color: 'bg-green-50 text-green-600 border-green-200', isAlert: false };
   };
 
   const handleOpenAdd = () => {
@@ -470,7 +470,22 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
               const status = getStatus(subscriber.endDate);
               
               return (
-                <div key={subscriber.id} className="bg-[#faf9f6] dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div 
+                  key={subscriber.id} 
+                  className={`bg-[#faf9f6] dark:bg-slate-900 rounded-2xl border transition-all duration-200 flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden ${
+                    status.isAlert 
+                      ? 'border-red-500/90 dark:border-red-500/70 shadow-[0_4px_20px_rgba(239,68,68,0.12)] bg-red-50/5 dark:bg-red-950/5 pt-6 pb-4 px-4' 
+                      : 'border-slate-200 dark:border-slate-800 p-4'
+                  }`}
+                >
+                  {status.isAlert && (
+                    <div 
+                      className="absolute top-0 left-0 right-0 h-2 z-10"
+                      style={{
+                        backgroundImage: 'repeating-linear-gradient(-45deg, #ef4444, #ef4444 8px, #1e293b 8px, #1e293b 16px)'
+                      }}
+                    />
+                  )}
                   
                   <div className="flex items-center gap-4">
                     <div className="w-[110px] shrink-0">
