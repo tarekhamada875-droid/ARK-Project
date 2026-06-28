@@ -63,28 +63,61 @@ export const LoginView: React.FC<LoginViewProps> = ({
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-3xl p-6 sm:p-10 pt-10 sm:pt-14 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none overflow-hidden"
+        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-3xl pt-10 pb-10 sm:pt-14 sm:pb-14 px-6 sm:px-10 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none overflow-hidden"
       >
         <style>{`
-          @keyframes warning-stripe-march {
-            from { transform: translate3d(0, 0, 0); }
-            to { transform: translate3d(-40px, 0, 0); }
-          }
-          .marching-warning-stripes {
-            width: calc(100% + 40px);
+          .stripes-right {
+            width: 100%;
             background-image: repeating-linear-gradient(
               -45deg,
               #ef4444,
-              #ef4444 10px,
-              #1e293b 10px,
-              #1e293b 20px
+              #ef4444 3.5px,
+              #1e293b 3.5px,
+              #1e293b 7px
             );
-            background-size: 40px 40px;
-            animation: warning-stripe-march 1s linear infinite;
-            will-change: transform;
+            background-size: 14px 14px;
+            filter: blur(1.2px);
+          }
+          .stripes-left {
+            width: 100%;
+            background-image: repeating-linear-gradient(
+              45deg,
+              #ef4444,
+              #ef4444 3.5px,
+              #1e293b 3.5px,
+              #1e293b 7px
+            );
+            background-size: 14px 14px;
+            filter: blur(1.2px);
           }
         `}</style>
-        <div className="absolute top-0 left-0 h-3.5 marching-warning-stripes z-10" />
+        
+        <div className="absolute top-0 left-0 right-0 h-3.5 bg-[#1e293b] dark:bg-slate-950 overflow-hidden z-10 flex items-center justify-center">
+          {/* Left Half */}
+          <div 
+            className="absolute top-0 left-0 w-[calc(50%-8px)] h-full overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 100%)',
+              maskImage: 'linear-gradient(to right, black 50%, transparent 100%)'
+            }}
+          >
+            <div className="absolute top-0 left-0 h-full stripes-left" />
+          </div>
+
+          {/* Right Half */}
+          <div 
+            className="absolute top-0 right-0 w-[calc(50%-8px)] h-full overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to left, black 50%, transparent 100%)',
+              maskImage: 'linear-gradient(to left, black 50%, transparent 100%)'
+            }}
+          >
+            <div className="absolute top-0 left-0 h-full stripes-right" />
+          </div>
+
+          {/* Small Center Circle Anchor */}
+          <div className="w-3.5 h-3.5 bg-slate-900 dark:bg-slate-950 rounded-full border border-slate-800 dark:border-slate-800 z-20 shadow-sm" />
+        </div>
 
         {/* Upper Header Accent */}
         <div className="flex flex-col items-center justify-center mb-6 sm:mb-8 select-none text-center">
@@ -160,6 +193,34 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </div>
           )}
         </button>
+
+        {/* Bottom Warning Stripes */}
+        <div className="absolute bottom-0 left-0 right-0 h-3.5 bg-[#1e293b] dark:bg-slate-950 overflow-hidden z-10 flex items-center justify-center">
+          {/* Left Half */}
+          <div 
+            className="absolute top-0 left-0 w-[calc(50%-8px)] h-full overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 100%)',
+              maskImage: 'linear-gradient(to right, black 50%, transparent 100%)'
+            }}
+          >
+            <div className="absolute top-0 left-0 h-full stripes-left" />
+          </div>
+
+          {/* Right Half */}
+          <div 
+            className="absolute top-0 right-0 w-[calc(50%-8px)] h-full overflow-hidden"
+            style={{
+              WebkitMaskImage: 'linear-gradient(to left, black 50%, transparent 100%)',
+              maskImage: 'linear-gradient(to left, black 50%, transparent 100%)'
+            }}
+          >
+            <div className="absolute top-0 left-0 h-full stripes-right" />
+          </div>
+
+          {/* Small Center Circle Anchor */}
+          <div className="w-3.5 h-3.5 bg-slate-900 dark:bg-slate-950 rounded-full border border-slate-800 dark:border-slate-800 z-20 shadow-sm" />
+        </div>
       </div>
 
       {/* Brand Footer */}

@@ -1984,25 +1984,57 @@ export default function App() {
           <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-sm z-[20003] flex items-center justify-center p-6 text-center" dir="rtl">
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 max-w-sm w-full flex flex-col items-center gap-6 border border-slate-100 dark:border-slate-800 shadow-2xl transition-all relative overflow-hidden pt-10">
               <style>{`
-                @keyframes warning-stripe-march {
-                  from { transform: translate3d(0, 0, 0); }
-                  to { transform: translate3d(-40px, 0, 0); }
-                }
-                .marching-warning-stripes {
-                  width: calc(100% + 40px);
+                .stripes-right {
+                  width: 100%;
                   background-image: repeating-linear-gradient(
                     -45deg,
                     #ef4444,
-                    #ef4444 10px,
-                    #1e293b 10px,
-                    #1e293b 20px
+                    #ef4444 3.5px,
+                    #1e293b 3.5px,
+                    #1e293b 7px
                   );
-                  background-size: 40px 40px;
-                  animation: warning-stripe-march 1s linear infinite;
-                  will-change: transform;
+                  background-size: 14px 14px;
+                  filter: blur(1.2px);
+                }
+                .stripes-left {
+                  width: 100%;
+                  background-image: repeating-linear-gradient(
+                    45deg,
+                    #ef4444,
+                    #ef4444 3.5px,
+                    #1e293b 3.5px,
+                    #1e293b 7px
+                  );
+                  background-size: 14px 14px;
+                  filter: blur(1.2px);
                 }
               `}</style>
-              <div className="absolute top-0 left-0 h-3.5 marching-warning-stripes z-10" />
+              <div className="absolute top-0 left-0 right-0 h-3.5 bg-[#1e293b] dark:bg-slate-950 overflow-hidden z-10 flex items-center justify-center">
+                {/* Left Half */}
+                <div 
+                  className="absolute top-0 left-0 w-[calc(50%-8px)] h-full overflow-hidden"
+                  style={{
+                    WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 100%)',
+                    maskImage: 'linear-gradient(to right, black 50%, transparent 100%)'
+                  }}
+                >
+                  <div className="absolute top-0 left-0 h-full stripes-left" />
+                </div>
+
+                {/* Right Half */}
+                <div 
+                  className="absolute top-0 right-0 w-[calc(50%-8px)] h-full overflow-hidden"
+                  style={{
+                    WebkitMaskImage: 'linear-gradient(to left, black 50%, transparent 100%)',
+                    maskImage: 'linear-gradient(to left, black 50%, transparent 100%)'
+                  }}
+                >
+                  <div className="absolute top-0 left-0 h-full stripes-right" />
+                </div>
+
+                {/* Small Center Circle Anchor */}
+                <div className="w-3.5 h-3.5 bg-slate-900 dark:bg-slate-950 rounded-full border border-slate-800 dark:border-slate-800 z-20 shadow-sm" />
+              </div>
               <div className="space-y-2">
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-sans">تنبيه دخول جديد! ⚠️</h2>
                 <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
