@@ -18,19 +18,9 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
     // Lock body scroll
     document.body.style.overflow = 'hidden';
 
-    // Subscribe to garage activity logs
-    // Using a simple query that doesn't require composite Firestore index
-    const unsub = firestoreService.subscribeToGarageActivityLogs(garage.id, (allLogs) => {
-      // Filter for recharge actions and sort by timestamp descending
-      const rechargeLogs = allLogs
-        .filter((l: any) => l.actionType === 'recharge')
-        .sort((a: any, b: any) => {
-          const tA = a.timestamp?.seconds || 0;
-          const tB = b.timestamp?.seconds || 0;
-          return tB - tA;
-        });
-      
-      setLogs(rechargeLogs as ActivityLog[]);
+    // Subscribe to garage recharge logs
+    const unsub = firestoreService.subscribeToGarageRechargeLogs(garage.id, (rechargeLogs) => {
+      setLogs(rechargeLogs);
       setIsLoading(false);
     });
 
@@ -148,7 +138,13 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
 
                     <div className="flex flex-col items-end shrink-0 text-left">
                       <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono">
-                        {log.amount !== undefined ? `${log.amount} ج.م` : 'مجانية'}
+                        {log.amount !== undefined 
+                          ? `${log.amount} ج.م` 
+                          : (log.details?.revenueAmount !== undefined 
+                              ? `${log.details.revenueAmount} ج.م` 
+                              : (log.plateNumber?.match(/-\s*(\d+)\s*ج/)?.[1] 
+                                  ? `${log.plateNumber.match(/-\s*(\d+)\s*ج/)?.[1]} ج.م` 
+                                  : ''))}
                       </span>
                       <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/10 px-2 py-0.5 rounded-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
@@ -167,13 +163,13 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
                       <span>{formatTime(log.timestamp)} — {formatDate(log.timestamp)}</span>
                     </div>
 
-                    {log.staffName && (
+                    {(log.staffName || log.operatorName) && (
                       <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-full text-2xs md:text-xs">
                         <User className="w-3.5 h-3.5 text-slate-400" />
                         <span className="text-slate-600 dark:text-slate-300 font-bold">
-                          {log.staffName.includes('مدير النظام') || log.staffName.toLowerCase().includes('admin')
+                          {((log.staffName || log.operatorName) || '').includes('مدير النظام') || ((log.staffName || log.operatorName) || '').toLowerCase().includes('admin')
                             ? 'مدير النظام'
-                            : `المسؤول: ${log.staffName}`}
+                            : `المسؤول: ${log.staffName || log.operatorName}`}
                         </span>
                       </div>
                     )}

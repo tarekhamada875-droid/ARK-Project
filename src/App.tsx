@@ -835,7 +835,7 @@ export default function App() {
         }
       }
 
-      await fetchServerTimeOffset();
+      const currentOffset = await fetchServerTimeOffset();
       const loginAction = (async () => {
         // Supervisor check
         const supervisorSnap = await getDocs(query(collection(db, 'supervisors'), where('pin', '==', normalizedInput), limit(1)));
@@ -853,7 +853,7 @@ export default function App() {
           };
 
           // Check if there is an active session on another device
-          if (supervisorData.currentSessionId && supervisorData.currentSessionId !== sessionId && isSessionActive(supervisorData.lastActive, serverTimeOffset)) {
+          if (supervisorData.currentSessionId && supervisorData.currentSessionId !== sessionId && isSessionActive(supervisorData.lastActive, currentOffset)) {
             await initiateSessionRequest('supervisors', supervisorData.id, supervisorData, proceed);
             return 'blocked';
           }
@@ -878,7 +878,7 @@ export default function App() {
           };
 
           // Check if there is an active session on another device
-          if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, serverTimeOffset)) {
+          if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
             await initiateSessionRequest('delegates', delegateData.id, delegateData, proceed);
             return 'blocked';
           }
@@ -913,7 +913,7 @@ export default function App() {
           };
 
           // Check if there is an active session on another device
-          if (staffData.currentSessionId && staffData.currentSessionId !== sessionId && isSessionActive(staffData.lastActive, serverTimeOffset)) {
+          if (staffData.currentSessionId && staffData.currentSessionId !== sessionId && isSessionActive(staffData.lastActive, currentOffset)) {
             await initiateSessionRequest('staff', staffData.id, staffData, proceed);
             return 'blocked';
           }
@@ -942,7 +942,7 @@ export default function App() {
           };
 
           // Check if there is an active session on another device
-          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, serverTimeOffset)) {
+          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
             await initiateSessionRequest('garages', garageData.id, garageData, proceed);
             return 'blocked';
           }
@@ -972,7 +972,7 @@ export default function App() {
           };
 
           // Check if there is an active session on another device
-          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, serverTimeOffset)) {
+          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
             await initiateSessionRequest('garages', garageData.id, garageData, proceed);
             return 'blocked';
           }
@@ -1012,7 +1012,7 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      await fetchServerTimeOffset();
+      const currentOffset = await fetchServerTimeOffset();
       const delegateData = await firestoreService.getDelegateByPhone(normalizedPhone);
       if (!delegateData) {
         showToast('رقم الموبايل غير مسجل كمندوب', 'error');
@@ -1030,7 +1030,7 @@ export default function App() {
         };
 
         // Check if there is an active session on another device
-        if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, serverTimeOffset)) {
+        if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
           await initiateSessionRequest('delegates', delegateData.id, delegateData, proceed);
           setIsLoading(false);
           return;
@@ -1983,58 +1983,6 @@ export default function App() {
         {pendingApprovalRequest && (
           <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-sm z-[20003] flex items-center justify-center p-6 text-center" dir="rtl">
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 max-w-sm w-full flex flex-col items-center gap-6 border border-slate-100 dark:border-slate-800 shadow-2xl transition-all relative overflow-hidden pt-10">
-              <style>{`
-                .stripes-right {
-                  width: 100%;
-                  background-image: repeating-linear-gradient(
-                    -45deg,
-                    #ef4444,
-                    #ef4444 3.5px,
-                    #1e293b 3.5px,
-                    #1e293b 7px
-                  );
-                  background-size: 14px 14px;
-                  filter: blur(1.2px);
-                }
-                .stripes-left {
-                  width: 100%;
-                  background-image: repeating-linear-gradient(
-                    45deg,
-                    #ef4444,
-                    #ef4444 3.5px,
-                    #1e293b 3.5px,
-                    #1e293b 7px
-                  );
-                  background-size: 14px 14px;
-                  filter: blur(1.2px);
-                }
-              `}</style>
-              <div className="absolute top-0 left-0 right-0 h-3.5 bg-[#1e293b] dark:bg-slate-950 overflow-hidden z-10 flex items-center justify-center">
-                {/* Left Half */}
-                <div 
-                  className="absolute top-0 left-0 w-[calc(50%-8px)] h-full overflow-hidden"
-                  style={{
-                    WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 100%)',
-                    maskImage: 'linear-gradient(to right, black 50%, transparent 100%)'
-                  }}
-                >
-                  <div className="absolute top-0 left-0 h-full stripes-left" />
-                </div>
-
-                {/* Right Half */}
-                <div 
-                  className="absolute top-0 right-0 w-[calc(50%-8px)] h-full overflow-hidden"
-                  style={{
-                    WebkitMaskImage: 'linear-gradient(to left, black 50%, transparent 100%)',
-                    maskImage: 'linear-gradient(to left, black 50%, transparent 100%)'
-                  }}
-                >
-                  <div className="absolute top-0 left-0 h-full stripes-right" />
-                </div>
-
-                {/* Small Center Circle Anchor */}
-                <div className="w-3.5 h-3.5 bg-slate-900 dark:bg-slate-950 rounded-full border border-slate-800 dark:border-slate-800 z-20 shadow-sm" />
-              </div>
               <div className="space-y-2">
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-sans">تنبيه دخول جديد! ⚠️</h2>
                 <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">

@@ -103,6 +103,14 @@ export interface ActivityLog {
   amount?: number;
   packageId?: string;
   garageName?: string;
+  operatorId?: string;
+  operatorName?: string;
+  details?: {
+    packageName?: string;
+    carsCount?: number;
+    revenueAmount?: number;
+    requestId?: string;
+  };
 }
 
 export interface Subscriber {

@@ -144,15 +144,7 @@ export const GarageDashboardView = memo(({
 
   React.useEffect(() => {
     if (!isAuthResolved) return;
-    const unsub = firestoreService.subscribeToGarageActivityLogs(garage.id, (allLogs) => {
-      const recharges = allLogs
-        .filter((l: any) => l.actionType === 'recharge')
-        .sort((a: any, b: any) => {
-          const tA = a.timestamp?.seconds || 0;
-          const tB = b.timestamp?.seconds || 0;
-          return tB - tA;
-        });
-      
+    const unsub = firestoreService.subscribeToGarageRechargeLogs(garage.id, (recharges) => {
       if (recharges.length > 0) {
         const latestId = recharges[0].id;
         const acknowledgedId = localStorage.getItem(`acknowledged_recharge_${garage.id}`);
@@ -587,67 +579,18 @@ export const GarageDashboardView = memo(({
               <div className="bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-[2rem] overflow-hidden flex flex-col items-center pt-4 md:pt-10 transition-colors w-full shadow-sm">
                 <div 
                   onClick={() => setCurrentView('active_vehicles')}
-                  className="mb-4 md:mb-10 scale-100 md:scale-110"
+                  className="mb-4 md:mb-10 scale-100 md:scale-110 cursor-pointer"
                 >
                   <FlipNumber value={vehicles.length} size="lg" />
                 </div>
                 
                 <button 
                   onClick={() => setCurrentView('active_vehicles')}
-                  className="w-full h-6 md:h-7 relative overflow-hidden group outline-none select-none flex items-center justify-center shrink-0 bg-[#1e293b] dark:bg-slate-950 transition-colors"
+                  className="w-full h-6 md:h-7 relative overflow-hidden group outline-none select-none flex items-center justify-center shrink-0 bg-emerald-600 dark:bg-emerald-800 transition-colors"
                 >
-                  <style>{`
-                    .stripes-right {
-                      width: 100%;
-                      background-image: repeating-linear-gradient(
-                        -45deg,
-                        #ef4444,
-                        #ef4444 3.5px,
-                        #1e293b 3.5px,
-                        #1e293b 7px
-                      );
-                      background-size: 14px 14px;
-                      filter: blur(1.2px);
-                    }
-                    .stripes-left {
-                      width: 100%;
-                      background-image: repeating-linear-gradient(
-                        45deg,
-                        #ef4444,
-                        #ef4444 3.5px,
-                        #1e293b 3.5px,
-                        #1e293b 7px
-                      );
-                      background-size: 14px 14px;
-                      filter: blur(1.2px);
-                    }
-                  `}</style>
-                  
-                  {/* Left Half (flowing left-to-right) */}
-                  <div 
-                    className="absolute top-0 left-0 w-[calc(50%-16px)] h-full overflow-hidden"
-                    style={{
-                      WebkitMaskImage: 'linear-gradient(to right, black 50%, transparent 100%)',
-                      maskImage: 'linear-gradient(to right, black 50%, transparent 100%)'
-                    }}
-                  >
-                    <div className="absolute top-0 left-0 h-full stripes-left" />
-                  </div>
-
-                  {/* Right Half (flowing right-to-left) */}
-                  <div 
-                    className="absolute top-0 right-0 w-[calc(50%-16px)] h-full overflow-hidden"
-                    style={{
-                      WebkitMaskImage: 'linear-gradient(to left, black 50%, transparent 100%)',
-                      maskImage: 'linear-gradient(to left, black 50%, transparent 100%)'
-                    }}
-                  >
-                    <div className="absolute top-0 left-0 h-full stripes-right" />
-                  </div>
-
                   {/* Dark Center Chevron Badge */}
                   <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                    <div className="w-7 h-7 md:w-8 h-8 bg-slate-900 dark:bg-slate-950 text-white rounded-full flex items-center justify-center border-2 border-slate-800 dark:border-slate-800 shadow-md group-hover:scale-110 transition-all">
+                    <div className="w-7 h-7 md:w-8 h-8 bg-emerald-600 dark:bg-emerald-800 text-white rounded-full flex items-center justify-center border-2 border-emerald-400 dark:border-emerald-600 shadow-md group-hover:scale-110 transition-all">
                       <ChevronDown className="w-3.5 h-3.5 md:w-4 md:h-4 text-white group-active:translate-y-0.5 transition-transform" />
                     </div>
                   </div>

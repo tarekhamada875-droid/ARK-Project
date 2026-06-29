@@ -920,5 +920,23 @@ export const firestoreService = {
       });
       callback(data.slice(0, limitCount));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'activity_logs'));
+  },
+
+  subscribeToGarageRechargeLogs: (garageId: string, callback: (logs: ActivityLog[]) => void, limitCount = 100) => {
+    const q = query(
+      collection(db, 'activity_logs'),
+      where('garageId', '==', garageId),
+      where('actionType', '==', 'recharge')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+      // Sort descending by timestamp
+      data.sort((a, b) => {
+        const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : (a.timestamp ? new Date(a.timestamp).getTime() : 0));
+        const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : (b.timestamp ? new Date(b.timestamp).getTime() : 0));
+        return timeB - timeA;
+      });
+      callback(data.slice(0, limitCount));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'activity_logs'));
   }
 };
