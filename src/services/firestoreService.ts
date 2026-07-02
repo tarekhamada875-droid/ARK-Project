@@ -26,7 +26,6 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor } from '../types';
-import { formatPlateNumber } from '../utils';
 import { ADMIN_PIN } from '../constants';
 
 export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor };
@@ -309,6 +308,23 @@ export const firestoreService = {
   },
 
   // Vehicles
+  subscribeToActiveVehicles: (garageId: string, callback: (vehicles: Vehicle[]) => void) => {
+    const q = query(
+      collection(db, `garages/${garageId}/vehicles`),
+      where('status', '==', 'inside')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
+      // Sort descending by entryTime in-memory to avoid needing a composite index
+      data.sort((a, b) => {
+        const timeA = a.entryTime?.toMillis ? a.entryTime.toMillis() : (a.entryTime?.seconds ? a.entryTime.seconds * 1000 : (a.entryTime ? new Date(a.entryTime).getTime() : 0));
+        const timeB = b.entryTime?.toMillis ? b.entryTime.toMillis() : (b.entryTime?.seconds ? b.entryTime.seconds * 1000 : (b.entryTime ? new Date(b.entryTime).getTime() : 0));
+        return timeB - timeA;
+      });
+      callback(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, `garages/${garageId}/vehicles`));
+  },
+
   subscribeToTodayTransactions: (garageId: string, callback: (vehicles: Vehicle[]) => void) => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -344,36 +360,26 @@ export const firestoreService = {
         
         if (!garageDoc.exists()) throw new Error('GARAGE_NOT_FOUND');
         
-        const garageData = garageDoc.data() as Garage;
         const plateRaw = vehicleData.plateNumberRaw;
         
-        // Final guard inside transaction to prevent duplicates
-        if (garageData.activePlates && garageData.activePlates[plateRaw]) {
+        // Final guard inside transaction using deterministic active vehicle ID in the subcollection
+        const vehicleRef = doc(db, `garages/${garageId}/vehicles`, plateRaw);
+        const vehicleDoc = await transaction.get(vehicleRef);
+        
+        if (vehicleDoc.exists() && vehicleDoc.data()?.status === 'inside') {
           throw new Error('ALREADY_INSIDE');
         }
 
-        const vehiclesCol = collection(db, `garages/${garageId}/vehicles`);
-        const vehicleRef = doc(vehiclesCol);
-        
-        // 1. Create history record
+        // 1. Create/Update vehicle record using plateRaw as the deterministic active ID
         transaction.set(vehicleRef, {
           ...vehicleData,
-          id: vehicleRef.id,
+          id: plateRaw,
           entryTime: serverTimestamp()
         });
 
-        // 2. Update garage balance AND add to activePlates map
+        // 2. Update garage balance (completely free of the activePlates map update)
         transaction.update(garageRef, {
-          balance: increment(-commission),
-          [`activePlates.${plateRaw}`]: {
-            id: vehicleRef.id,
-            plateNumber: vehicleData.plateNumber,
-            plateNumberRaw: plateRaw,
-            entryTime: Date.now(),
-            type: vehicleData.type,
-            staffName: vehicleData.staffName,
-            isSubscriber: vehicleData.isSubscriber || false
-          }
+          balance: increment(-commission)
         });
       });
     } catch (error) {
@@ -397,49 +403,26 @@ export const firestoreService = {
         garageData = { id: garageDoc.id, ...garageDoc.data() } as Garage;
       }
       
-      // Find plateRaw by checking activePlates
-      let plateRaw = null;
-      if (garageData.activePlates) {
-        const entry = Object.entries(garageData.activePlates).find(([_, data]: [string, any]) => data.id === vehicleId);
-        if (entry) plateRaw = entry[0];
-      }
-
-      const activeVehicle = plateRaw ? garageData.activePlates[plateRaw] : null;
-
       const batch = writeBatch(db);
       
-      // 1. Delete vehicle record
-      batch.delete(vehicleRef);
-
-      // 2. Prepare recent exits list
-      let recentExits = garageData.recentExits || [];
-      const exitSummary = {
-        id: vehicleId,
-        plateNumber: activeVehicle?.plateNumber || (plateRaw ? formatPlateNumber(plateRaw) : 'رقم غير معروف'),
-        plateNumberRaw: plateRaw,
-        entryTime: activeVehicle?.entryTime || Date.now(),
-        exitTime: Date.now(),
-        totalCost: cost,
-        type: activeVehicle?.type || 'hourly',
-        staffName: activeVehicle?.staffName || 'غير معروف'
-      };
-      recentExits = [exitSummary, ...recentExits].slice(0, 50);
+      // 1. Update vehicle record status to outside, set exitTime and totalCost
+      batch.update(vehicleRef, {
+        status: 'outside',
+        exitTime: serverTimestamp(),
+        totalCost: cost
+      });
 
       const isNewDay = garageData.lastTransactionDate !== today;
 
-      // 3. Update garage
+      // 2. Update garage stats and remove the deprecated recentExits array
       const updateData: any = {
         totalRevenue: increment(cost),
         totalVehiclesOut: increment(1),
         todayRevenue: isNewDay ? cost : increment(cost),
         todayCount: isNewDay ? 1 : increment(1),
         lastTransactionDate: today,
-        recentExits: recentExits
+        recentExits: deleteField() // Completely free the garage document from the list limit
       };
-
-      if (plateRaw) {
-        updateData[`activePlates.${plateRaw}`] = deleteField();
-      }
 
       batch.update(garageRef, updateData);
       await batch.commit();
@@ -463,8 +446,6 @@ export const firestoreService = {
         
         if (!vehicleDoc.exists() || !garageDoc.exists()) return false; 
         
-        const vData = vehicleDoc.data() as Vehicle;
-        
         // 1. Delete the record
         transaction.delete(vehicleRef);
 
@@ -476,10 +457,6 @@ export const firestoreService = {
           dailyRefundCount: isSameDay ? increment(1) : 1,
           lastRefundDate: todayYMD
         };
-
-        if (vData.status === 'inside') {
-          updates[`activePlates.${vData.plateNumberRaw}`] = deleteField();
-        }
 
         transaction.update(garageRef, updates);
         return true;

@@ -158,32 +158,29 @@ export default function App() {
   const [rechargeRequests, setRechargeRequests] = useState<RechargeRequest[]>([]);
   const [delegateRequests, setDelegateRequests] = useState<RechargeRequest[]>([]);
 
-  // Sync vehicles and transactions from garage doc (Super Efficient: 1 doc read = all data)
+  // Subscribe to active vehicles directly from subcollection (Solution 5: Scalable Active Plates)
   useEffect(() => {
-    if (garage) {
-      if (garage.activePlates) {
-        const list = Object.entries(garage.activePlates).map(([raw, data]: [string, any]) => ({
-          ...data,
-          plateNumberRaw: raw,
-          plateNumber: data.plateNumber || formatPlateNumber(raw),
-          status: 'inside'
-        })).sort((a: any, b: any) => (b.entryTime || 0) - (a.entryTime || 0));
-        
-        setVehicles(list as Vehicle[]);
-      } else {
-        setVehicles([]);
-      }
-      
-      if (garage.recentExits) {
-        setTodayTransactions(garage.recentExits.map(v => ({ ...v, status: 'outside' })) as Vehicle[]);
-      } else {
-        setTodayTransactions([]);
-      }
-    } else {
+    if (!garage?.id) {
       setVehicles([]);
-      setTodayTransactions([]);
+      return;
     }
-  }, [garage]);
+    const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
+      setVehicles(activeVehicles);
+    });
+    return () => unsub();
+  }, [garage?.id]);
+
+  // Subscribe to today's completed transactions directly from subcollection (Solution 4: Scalable Completed Transactions)
+  useEffect(() => {
+    if (!garage?.id) {
+      setTodayTransactions([]);
+      return;
+    }
+    const unsub = firestoreService.subscribeToTodayTransactions(garage.id, (completedTransactions) => {
+      setTodayTransactions(completedTransactions);
+    });
+    return () => unsub();
+  }, [garage?.id]);
 
   const loadGarageData = useCallback(async (garageId: string) => {
     try {
