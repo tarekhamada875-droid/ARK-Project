@@ -35,6 +35,36 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
   const [showLargeButton, setShowLargeButton] = React.useState(false);
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
+  const [isGenerating, setIsGenerating] = React.useState(true);
+  const [generationProgress, setGenerationProgress] = React.useState(0);
+
+  const loadingStatus = React.useMemo(() => {
+    if (generationProgress < 50) return 'جاري الحساب...';
+    return 'جاري الإصدار...';
+  }, [generationProgress]);
+
+  React.useEffect(() => {
+    let startTimestamp: number | null = null;
+    const duration = 2000; // 2 seconds
+    
+    const animate = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const elapsed = timestamp - startTimestamp;
+      const progress = Math.min(100, (elapsed / duration) * 100);
+      
+      setGenerationProgress(Math.floor(progress));
+      
+      if (elapsed < duration) {
+        requestAnimationFrame(animate);
+      } else {
+        setIsGenerating(false);
+      }
+    };
+    
+    const animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
+
   const [isLargeScreen, setIsLargeScreen] = React.useState(false);
   React.useEffect(() => {
     const media = window.matchMedia('(min-width: 640px)');
@@ -66,13 +96,16 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
   }, []);
 
   const modalHeight = React.useMemo(() => {
+    if (isGenerating) {
+      return isLargeScreen ? 380 : 320;
+    }
     if (isLargeScreen) {
       if (confirmingSide) return 520;
       return isInitialMinute ? 720 : 774;
     }
     if (confirmingSide) return 360;
     return isInitialMinute ? 480 : 520;
-  }, [confirmingSide, isInitialMinute, isLargeScreen]);
+  }, [isGenerating, confirmingSide, isInitialMinute, isLargeScreen]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -136,7 +169,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
         {/* Action Buttons Layer */}
         <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
           <AnimatePresence>
-            {!confirmingSide ? (
+            {!confirmingSide && !isGenerating ? (
               <>
                 {/* Left Button */}
                 {!isInitialMinute && (
@@ -145,14 +178,14 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: -100, opacity: 0, rotate: -30, scale: 0.7 }}
                     transition={{ duration: 0 }}
-                    className="absolute top-12 sm:top-24 left-3 sm:left-12 pointer-events-auto"
+                    className="absolute top-12 sm:top-14 md:top-18 lg:top-24 xl:top-28 left-3 sm:left-6 md:left-8 lg:left-12 xl:left-16 pointer-events-auto"
                   >
                     <button 
                       onClick={() => handleButtonClick('left')}
                       disabled={isLoading}
-                      className="w-16 h-20 sm:w-36 sm:h-44 rounded-2xl sm:rounded-[3.5rem] bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-500/15"
+                      className="w-16 h-20 sm:w-20 sm:h-24 md:w-24 md:h-32 lg:w-32 lg:h-40 xl:w-36 xl:h-44 rounded-2xl sm:rounded-[1.75rem] md:rounded-[2.25rem] lg:rounded-[3rem] xl:rounded-[3.5rem] bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-500/15"
                     >
-                      <LogOut className="w-5 h-5 sm:w-12 sm:h-12 rotate-180 stroke-[3] text-white" />
+                      <LogOut className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 xl:w-12 xl:h-12 rotate-180 stroke-[3] text-white" />
                     </button>
                   </motion.div>
                 )}
@@ -164,14 +197,14 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: 100, opacity: 0, rotate: 30, scale: 0.7 }}
                     transition={{ duration: 0 }}
-                    className="absolute top-12 sm:top-24 right-3 sm:right-12 pointer-events-auto"
+                    className="absolute top-12 sm:top-14 md:top-18 lg:top-24 xl:top-28 right-3 sm:right-6 md:right-8 lg:right-12 xl:right-16 pointer-events-auto"
                   >
                     <button 
                       onClick={() => handleButtonClick('right')}
                       disabled={isLoading}
-                      className="w-16 h-20 sm:w-36 sm:h-44 rounded-2xl sm:rounded-[3.5rem] bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-500/15"
+                      className="w-16 h-20 sm:w-20 sm:h-24 md:w-24 md:h-32 lg:w-32 lg:h-40 xl:w-36 xl:h-44 rounded-2xl sm:rounded-[1.75rem] md:rounded-[2.25rem] lg:rounded-[3rem] xl:rounded-[3.5rem] bg-red-500 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-500/15"
                     >
-                      <LogOut className="w-5 h-5 sm:w-12 sm:h-12 stroke-[3] text-white" />
+                      <LogOut className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 xl:w-12 xl:h-12 stroke-[3] text-white" />
                     </button>
                   </motion.div>
                 )}
@@ -213,7 +246,52 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
               }}
               className="flex-1 flex flex-col items-center overflow-y-auto scrollbar-hide max-h-[calc(92dvh-90px)] w-full px-1"
             >
-              {!selectedVehicle.isSubscriber && diffMs < 300000 ? null : (
+              {isGenerating ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 w-full">
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center mb-6">
+                    {/* SVG circular loader */}
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      {/* Underlay */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        className="stroke-slate-100 dark:stroke-slate-800/80 fill-none"
+                        strokeWidth="6"
+                      />
+                      {/* Progress Circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        className="stroke-red-500 dark:stroke-red-500 fill-none transition-all duration-75"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeDasharray={2 * Math.PI * 42}
+                        strokeDashoffset={2 * Math.PI * 42 * (1 - generationProgress / 100)}
+                      />
+                    </svg>
+                    {/* Centered Percentage */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 font-mono">
+                        {generationProgress}%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Status Texts */}
+                  <div className="text-center px-4">
+                    <h3 className="text-lg sm:text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight transition-all">
+                      {loadingStatus}
+                    </h3>
+                    <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 font-bold mt-1.5 uppercase tracking-wider">
+                      يرجى الانتظار أثناء حساب الفاتورة
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {!selectedVehicle.isSubscriber && diffMs < 300000 ? null : (
                 <div className="flex flex-col items-center justify-center mt-2 sm:mt-4 md:mt-6 h-20 sm:h-32 md:h-36 mb-2 sm:mb-4 shrink-0">
                   {selectedVehicle.isSubscriber ? (
                     <div className="flex flex-col items-center">
@@ -365,6 +443,8 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                   )}
                   {isLoading && loadingType === 'delete' ? 'جاري حذف السيارة...' : 'حذف السيارة (خطأ إدخال)'}
                 </button>
+              )}
+                </>
               )}
             </motion.div>
           )}

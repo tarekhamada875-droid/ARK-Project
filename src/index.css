@@ -219,10 +219,51 @@ input[type="number"]::-webkit-outer-spin-button {
   border-color: transparent !important;
 }
 
-/* High-performance GPU-accelerated Brand Shimmer/Shine Animation (Exactly 20s period with zero idle CPU impact) */
+/* High-performance GPU-accelerated Brand Shimmer/Shine Animation */
+@keyframes brand-shimmer {
+  0% {
+    background-position: 0% center;
+  }
+  2.2% {
+    background-position: 100% center;
+  }
+  2.5% {
+    background-position: 0% center;
+  }
+  4.7% {
+    background-position: 100% center;
+  }
+  100% {
+    background-position: 100% center;
+  }
+}
+
 .brand-shimmer-text {
   display: inline-block;
-  color: inherit !important;
+  background: linear-gradient(
+    120deg,
+    #94a3b8 35%,
+    #ffffff 50%,
+    #94a3b8 65%
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: brand-shimmer 60s linear infinite;
+  color: #94a3b8; /* Fallback */
+}
+
+.dark .brand-shimmer-text {
+  background: linear-gradient(
+    120deg,
+    #64748b 35%,
+    #f8fafc 50%,
+    #64748b 65%
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #64748b; /* Fallback */
 }
 
 
