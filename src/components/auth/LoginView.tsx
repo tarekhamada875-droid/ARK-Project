@@ -63,7 +63,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-3xl pt-10 pb-10 sm:pt-14 sm:pb-14 px-6 sm:px-10 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none overflow-hidden"
+        className="relative bg-white dark:bg-slate-900/60 backdrop-blur-xl w-full max-w-sm sm:max-w-lg md:max-w-xl rounded-xl pt-10 pb-10 sm:pt-14 sm:pb-14 px-6 sm:px-10 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] dark:shadow-none overflow-hidden"
       >
         {/* Upper Header Accent */}
         <div className="flex flex-col items-center justify-center mb-6 sm:mb-8 select-none text-center">

@@ -73,7 +73,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl bg-[#faf9f6] dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center border border-slate-100 dark:border-slate-800 relative z-10 shadow-xl"
+        className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl bg-[#faf9f6] dark:bg-slate-900 rounded-2xl sm:rounded-xl p-8 sm:p-12 text-center border border-slate-100 dark:border-slate-800 relative z-10 shadow-xl"
       >
         <div className="space-y-8">
           {/* PIN Display */}
@@ -81,7 +81,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
             {Array.from({ length: Math.max(4, adminPin.length) }).map((_, i) => (
               <div 
                 key={i}
-                className={`${getBoxSize()} rounded-2xl md:rounded-3xl border-2 flex items-center justify-center font-black transition-all shrink-0 relative overflow-hidden ${
+                className={`${getBoxSize()} rounded-2xl md:rounded-xl border-2 flex items-center justify-center font-black transition-all shrink-0 relative overflow-hidden ${
                   adminPin[i] 
                     ? 'border-amber-500 bg-amber-500 text-white' 
                     : 'border-slate-300 dark:border-slate-700 text-transparent bg-[#faf9f6] dark:bg-slate-800'
@@ -104,7 +104,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
             <button 
               onClick={handleLogin}
               disabled={isLoading || !adminPin}
-              className="bg-slate-900 dark:bg-slate-700 text-white py-5 sm:py-6 md:py-8 rounded-2xl md:rounded-3xl font-black text-xl sm:text-2xl hover:bg-slate-800 dark:hover:bg-slate-600 transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale outline-none shadow-md"
+              className="bg-slate-900 dark:bg-slate-700 text-white py-5 sm:py-6 md:py-8 rounded-2xl md:rounded-xl font-black text-xl sm:text-2xl hover:bg-slate-800 dark:hover:bg-slate-600 transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale outline-none shadow-md"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
             <button 
               onClick={() => setView('login')}
               disabled={isLoading}
-              className="bg-[#faf9f6] dark:bg-slate-800 text-slate-400 dark:text-slate-300 py-5 sm:py-6 md:py-8 rounded-2xl md:rounded-3xl font-black text-xl sm:text-2xl hover:bg-slate-50 dark:hover:bg-slate-700 border-2 border-slate-100 dark:border-slate-700 transition-all outline-none shadow-sm disabled:opacity-50"
+              className="bg-[#faf9f6] dark:bg-slate-800 text-slate-400 dark:text-slate-300 py-5 sm:py-6 md:py-8 rounded-2xl md:rounded-xl font-black text-xl sm:text-2xl hover:bg-slate-50 dark:hover:bg-slate-700 border-2 border-slate-100 dark:border-slate-700 transition-all outline-none shadow-sm disabled:opacity-50"
             >
               رجوع
             </button>

@@ -56,7 +56,7 @@ export const DelegateLoginView: React.FC<DelegateLoginViewProps> = ({ onLogin, i
 
   return (
     <div className="h-screen overflow-y-auto bg-[#faf9f6] dark:bg-slate-950 flex items-center justify-center p-4 sm:p-10 md:p-16 relative transition-colors" dir="rtl">
-      <div className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-8 sm:p-12 border border-slate-100 dark:border-slate-800 transition-colors shadow-xl">
+      <div className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl bg-white dark:bg-slate-900 rounded-2xl sm:rounded-xl p-8 sm:p-12 border border-slate-100 dark:border-slate-800 transition-colors shadow-xl">
         <div className="space-y-4 sm:space-y-6">
           {/* Phone Field */}
           <div 

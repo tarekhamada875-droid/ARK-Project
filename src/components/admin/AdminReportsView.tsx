@@ -106,7 +106,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
       {/* Grid: High-Impact Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Card 1: Admin Net Revenue */}
-        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-amber-400/10 to-transparent rounded-full -mr-5 -mt-5" />
           <div className="flex justify-between items-start gap-4">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{t('إجمالي شحن السيستم')}</span>
@@ -123,7 +123,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
         </div>
 
         {/* Card 4: Parked Cars Right Now */}
-        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-blue-400/10 to-transparent rounded-full -mr-5 -mt-5" />
           <div className="flex justify-between items-start gap-4">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{t('سيارات داخل الجراجات الآن')}</span>
@@ -140,7 +140,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
         </div>
 
         {/* Card 5: Garages Breakdown */}
-        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
+        <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-xl relative overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all">
           <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-rose-400/5 to-transparent rounded-full -mr-5 -mt-5" />
           <div className="flex justify-between items-start gap-4">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{t('حالة الجراجات')}</span>
@@ -165,7 +165,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         
         {/* Left Column: Comparative Performance list of Garages */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-colors">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-colors">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -241,7 +241,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
         </section>
 
         {/* Right Column: Delegate Performance */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-colors">
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-colors">
           <div className="p-6 border-b border-slate-100 dark:border-slate-800">
             <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-500" />

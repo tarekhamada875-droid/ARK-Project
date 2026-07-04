@@ -15,8 +15,4 @@
   2. **Second Confirmation:** After Tarek approves or adjusts the first step, present the finalized implementation plan or a draft, and explicitly ask for a second final confirmation (التأكيد الثاني / الضوء الأخضر) before writing or changing any code.
   3. Never proceed with code changes until both confirmations are explicitly granted.
 
-## Pending Updates
-- **Enterprise Plan (خطة المؤسسة):** When requested to execute this update:
-  1. Remind Tarek of the full plan we discussed (Organization management, sub-garages with passcode login, organization credit/balance, private subscriptions, and custom enterprise credit distribution).
-  2. Explain the exact step-by-step execution plan.
-  3. Wait explicitly for a green light before writing/changing code.
+

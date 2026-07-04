@@ -122,7 +122,7 @@ export const RegistrationCard = memo(({
                 dir="rtl"
               />
               
-              <div className={`absolute inset-0 w-full h-full bg-white dark:bg-slate-200 border-slate-900 rounded-3xl overflow-hidden flex flex-col z-10 ${
+              <div className={`absolute inset-0 w-full h-full bg-white dark:bg-slate-200 border-slate-900 rounded-xl overflow-hidden flex flex-col z-10 ${
                 isInputFocused ? 'border-[4px]' : 'border-2 md:border-[3px]'
               }`} dir="ltr">
                 {/* Plate Header */}

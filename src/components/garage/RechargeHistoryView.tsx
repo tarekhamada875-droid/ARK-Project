@@ -90,9 +90,9 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
             <button 
               type="button"
               onClick={onClose}
-              className="relative w-11 h-11 bg-red-500 hover:bg-red-600 text-white border border-red-600 rounded-2xl flex items-center justify-center transition-all outline-none active:scale-95"
+              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
             >
-              <X className="w-6 h-6 stroke-[3]" />
+              <X className="w-6 h-6" />
             </button>
           </div>
         </div>
@@ -111,7 +111,7 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
               <p className="text-sm font-bold text-slate-400">جاري تحميل سجل الشحن...</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-850">
+            <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-xl p-12 text-center border border-slate-200 dark:border-slate-850">
               <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 dark:border-slate-800">
                 <Zap className="w-8 h-8 text-slate-300 dark:text-slate-700" />
               </div>

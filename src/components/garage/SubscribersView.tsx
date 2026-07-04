@@ -383,9 +383,9 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
             <button 
               type="button"
               onClick={onClose}
-              className="relative w-11 h-11 bg-red-500 hover:bg-red-600 text-white border border-red-600 rounded-2xl flex items-center justify-center transition-all outline-none active:scale-95"
+              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
             >
-              <X className="w-6 h-6 stroke-[3]" />
+              <X className="w-6 h-6" />
             </button>
           </div>
         </div>
@@ -774,7 +774,7 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
       {showRenewModal && activeSubscriberForRenew && (
         <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="absolute inset-0" onClick={() => { setShowRenewModal(false); setActiveSubscriberForRenew(null); }} />
-          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-3xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl animate-slideUp" dir="rtl">
+          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl animate-slideUp" dir="rtl">
             
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">

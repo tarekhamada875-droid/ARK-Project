@@ -121,9 +121,9 @@ export const GarageReportsView = ({
 
         <button 
           onClick={onClose}
-          className="w-9 h-9 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-xl flex shrink-0 items-center justify-center transition-all outline-none cursor-pointer shadow-md shadow-red-500/10"
+          className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
         >
-          <X className="w-5 h-5 stroke-[2.5]" />
+          <X className="w-6 h-6" />
         </button>
       </div>
 

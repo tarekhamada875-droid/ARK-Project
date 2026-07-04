@@ -20,7 +20,7 @@ export const NumericKeypad: React.FC<NumericKeypadProps> = ({
   ];
 
   return (
-    <div className={`w-full max-w-sm sm:max-w-md md:max-w-xl mx-auto p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl md:rounded-3xl border border-slate-100 dark:border-slate-800 ${className}`} dir="ltr">
+    <div className={`w-full max-w-sm sm:max-w-md md:max-w-xl mx-auto p-4 bg-slate-50/50 dark:bg-slate-800/50 rounded-2xl md:rounded-xl border border-slate-100 dark:border-slate-800 ${className}`} dir="ltr">
       <div className="grid grid-cols-3 gap-3 md:gap-5">
         {rows.flat().map((key, idx) => {
           if (key === null) return <div key={`empty-${idx}`} />;

@@ -37,12 +37,11 @@ import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { generateSafePin } from '../../utils';
+import { useLocalStorageState } from '../../hooks/useLocalStorage';
 import { AdminReportsView } from './AdminReportsView';
 
 interface AdminDashboardProps {
   allGarages: Garage[];
-  adminSearch: string;
-  setAdminSearch: (search: string) => void;
   isLoading: boolean;
   createNewGarage: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   setView: (view: any) => void;
@@ -54,24 +53,9 @@ interface AdminDashboardProps {
   onLogout: () => void;
   rechargeRequests: RechargeRequest[];
   showToast: (message: string, type?: 'success' | 'error') => void;
-  // Lifted states for persistence
-  activeTab: 'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'wallet' | 'admin-pin';
-  setActiveTab: (tab: 'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'wallet' | 'admin-pin') => void;
-  showPlansModal: boolean;
-  setShowPlansModal: (show: boolean) => void;
-  showOverview: boolean;
-  setShowOverview: (show: boolean) => void;
-  pinInput: string;
-  setPinInput: (pin: string) => void;
-  delegateForm: { name: string; phone: string; pin: string; canCreateGarage: boolean };
-  setDelegateForm: (form: any) => void;
-  garageForm: { name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string };
-  setGarageForm: (form: any) => void;
   // Supervisor addition
   currentSupervisor?: Supervisor | null;
   supervisors?: Supervisor[];
-  adminSupervisorForm?: { name: string; phone: string; pin: string };
-  setAdminSupervisorForm?: (form: any) => void;
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
@@ -79,8 +63,6 @@ interface AdminDashboardProps {
 
 export const AdminDashboard = memo(({
   allGarages,
-  adminSearch,
-  setAdminSearch,
   isLoading,
   createNewGarage,
   setView,
@@ -92,26 +74,37 @@ export const AdminDashboard = memo(({
   onLogout,
   rechargeRequests,
   showToast,
-  activeTab,
-  setActiveTab,
-  showPlansModal,
-  setShowPlansModal,
-  showOverview,
-  setShowOverview,
-  pinInput,
-  setPinInput,
-  delegateForm,
-  setDelegateForm,
-  garageForm,
-  setGarageForm,
   currentSupervisor = null,
   supervisors = [],
-  adminSupervisorForm = { name: '', phone: '', pin: '' },
-  setAdminSupervisorForm,
   currentAdminPin,
   currentWalletNumber,
   onUpdateWalletNumber
 }: AdminDashboardProps) => {
+
+  // Localized states to encapsulate admin view and prevent global App re-renders
+  const [adminSearch, setAdminSearch] = React.useState<string>('');
+  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'wallet' | 'admin-pin'>('app_admin_tab', 'menu');
+  const [showPlansModal, setShowPlansModal] = useLocalStorageState<boolean>('app_admin_plans_modal', false);
+  const [showOverview, setShowOverview] = useLocalStorageState<boolean>('app_admin_overview', false);
+  const [pinInput, setPinInput] = React.useState<string>('');
+  const [delegateForm, setDelegateForm] = React.useState<{ name: string; phone: string; pin: string; canCreateGarage: boolean }>({ 
+    name: '', 
+    phone: '', 
+    pin: '', 
+    canCreateGarage: false 
+  });
+  const [adminSupervisorForm, setAdminSupervisorForm] = React.useState<{ name: string; phone: string; pin: string }>({
+    name: '',
+    phone: '',
+    pin: ''
+  });
+  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string }>({
+    name: '',
+    hourlyRate: '',
+    overnightRate: '',
+    phone: '',
+    initialPackageId: ''
+  });
 
   const [editingSupervisorPinId, setEditingSupervisorPinId] = React.useState<string | null>(null);
   const [editingSupervisorPinValue, setEditingSupervisorPinValue] = React.useState<string>('');
@@ -610,7 +603,7 @@ export const AdminDashboard = memo(({
           {activeTab === 'menu' ? (
             <div className="flex flex-col gap-10 md:gap-14 pt-4 md:pt-6 pb-8">
               {/* Premium Quranic Verse Manuscript Section */}
-              <div className="w-full text-center px-6 py-10 md:py-14 bg-[#fdfbf7] dark:bg-[#0c0d0e] border-2 border-double border-amber-600/30 dark:border-amber-400/15 rounded-3xl relative overflow-hidden transition-all shadow-sm">
+              <div className="w-full text-center px-6 py-10 md:py-14 bg-[#fdfbf7] dark:bg-[#0c0d0e] border-2 border-double border-amber-600/30 dark:border-amber-400/15 rounded-xl relative overflow-hidden transition-all shadow-sm">
                 {/* Spiritual Glowing/Pattern Accents */}
                 <div className="absolute inset-0 bg-radial-gradient from-amber-500/5 dark:from-emerald-500/5 via-transparent to-transparent opacity-80 pointer-events-none" />
                 
@@ -1589,7 +1582,7 @@ export const AdminDashboard = memo(({
 
             return (
               <div className="max-w-2xl mx-auto font-sans">
-                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
                   
                   {/* Description Header */}
@@ -1674,7 +1667,7 @@ export const AdminDashboard = memo(({
           })()
         ) : activeTab === 'admin-pin' ? (
           <div className="max-w-2xl mx-auto font-sans">
-            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
               
               {!isAdminPinVerified ? (

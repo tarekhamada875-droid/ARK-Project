@@ -216,7 +216,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                   animate={{ scale: 1.15, opacity: 1, y: 0 }}
                   exit={{ scale: 0.9, opacity: 0, y: 50 }}
                   transition={{ duration: 0 }}
-                  className="snake-border-wrapper w-60 h-28 sm:w-96 sm:h-52 rounded-2xl sm:rounded-[2.5rem] p-[6px] pointer-events-auto shadow-xl"
+                  className="snake-border-wrapper w-60 h-28 sm:w-96 sm:h-52 rounded-2xl sm:rounded-2xl p-[6px] pointer-events-auto shadow-xl"
                 >
                   <button 
                     onClick={() => onConfirm()}
@@ -320,7 +320,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
               </div>
 
               {/* Ticket Card Container */}
-              <div className="w-full bg-slate-50/50 dark:bg-slate-950/20 border-2 md:border-[3px] border-slate-900 dark:border-black rounded-3xl p-3 sm:p-4 mb-2 sm:mb-4 shadow-sm overflow-hidden shrink-0">
+              <div className="w-full bg-slate-50/50 dark:bg-slate-950/20 border-2 md:border-[3px] border-slate-900 dark:border-black rounded-xl p-3 sm:p-4 mb-2 sm:mb-4 shadow-sm overflow-hidden shrink-0">
                 
                 {/* Grid / Bento layout for 4 items without icons to maximize text size */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">

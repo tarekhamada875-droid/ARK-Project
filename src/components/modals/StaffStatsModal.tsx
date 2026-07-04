@@ -42,7 +42,7 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
           </div>
           <button 
             onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex shrink-0 items-center justify-center hover:bg-red-600 transition-colors outline-none"
+            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
           >
             <X className="w-6 h-6" />
           </button>

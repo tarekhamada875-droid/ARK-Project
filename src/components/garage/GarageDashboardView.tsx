@@ -753,7 +753,7 @@ export const GarageDashboardView = memo(({
           onClick={handleCloseRechargePopup}
         >
           <div
-            className="w-full max-w-md bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-850 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            className="w-full max-w-md bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-850 rounded-xl p-6 shadow-2xl relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             dir="rtl"
           >
@@ -763,9 +763,9 @@ export const GarageDashboardView = memo(({
             {/* Close Button inside modal as fallback */}
             <button
               onClick={handleCloseRechargePopup}
-              className="absolute top-4 left-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors bg-slate-55 dark:bg-slate-800/50 p-2 rounded-xl outline-none"
+              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
             >
-              <X className="w-5 h-5 stroke-[2.5]" />
+              <X className="w-6 h-6" />
             </button>
 
             {/* Content */}

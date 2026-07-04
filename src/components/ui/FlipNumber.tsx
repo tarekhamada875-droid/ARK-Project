@@ -22,7 +22,7 @@ const FlipDigit = React.memo(({ digit, size = 'md', color = 'default' }: { digit
   const sizeClasses = {
     sm: 'w-8 h-12 rounded-lg',
     md: 'w-14 h-22 rounded-xl sm:w-18 sm:h-28',
-    lg: 'w-20 h-32 rounded-2xl md:w-32 md:h-48 md:rounded-3xl'
+    lg: 'w-20 h-32 rounded-2xl md:w-32 md:h-48 md:rounded-xl'
   };
 
   const fontClasses = {

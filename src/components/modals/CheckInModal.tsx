@@ -47,7 +47,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
       />
       <div 
-        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl rounded-t-[2.5rem] sm:rounded-3xl p-6 sm:p-12 text-center max-h-[95vh] overflow-y-auto custom-scrollbar-slate stable-scrollbar border border-transparent dark:border-slate-800 shadow-2xl" dir="rtl"
+        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl rounded-t-[2.5rem] sm:rounded-xl p-6 sm:p-12 text-center max-h-[95vh] overflow-y-auto custom-scrollbar-slate stable-scrollbar border border-transparent dark:border-slate-800 shadow-2xl" dir="rtl"
       >
         {isLoading ? (
           <div className="py-16 text-center">
@@ -73,7 +73,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
               <button 
                 onClick={() => onCheckIn('hourly')}
                 disabled={isLoading}
-                className="flex items-center gap-4 sm:gap-6 p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 group disabled:opacity-50 transition-all outline-none"
+                className="flex items-center gap-4 sm:gap-6 p-5 sm:p-8 rounded-2xl sm:rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 group disabled:opacity-50 transition-all outline-none"
               >
                 <div className="w-14 h-14 sm:w-20 sm:h-20 bg-[#faf9f6] dark:bg-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                   {loadingType === 'hourly' ? <Spinner /> : <Clock className="w-7 h-7 sm:w-10 sm:h-10" />}
@@ -88,7 +88,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                <button 
                 onClick={() => onCheckIn('overnight')}
                 disabled={isLoading}
-                className="flex items-center gap-4 sm:gap-6 p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 group disabled:opacity-50 transition-all outline-none"
+                className="flex items-center gap-4 sm:gap-6 p-5 sm:p-8 rounded-2xl sm:rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 group disabled:opacity-50 transition-all outline-none"
               >
                 <div className="w-14 h-14 sm:w-20 sm:h-20 bg-[#faf9f6] dark:bg-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                   {loadingType === 'overnight' ? <Spinner /> : <Moon className="w-7 h-7 sm:w-10 sm:h-10" />}
