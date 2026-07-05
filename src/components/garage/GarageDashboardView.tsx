@@ -10,10 +10,9 @@ import {
   Users,
   Zap,
   ChevronDown,
-  Moon, 
-  Sun,
   Bell,
-  PieChart
+  PieChart,
+  Sliders
 } from 'lucide-react';
 import { FlipNumber } from '../ui/FlipNumber';
 import { AnimatedCounter } from '../AnimatedCounter';
@@ -26,8 +25,8 @@ import { RechargeHistoryView } from './RechargeHistoryView';
 import { PackagesModal } from '../modals/PackagesModal';
 import { StaffStatsModal } from '../modals/StaffStatsModal';
 import { GarageReportsView } from './GarageReportsView';
+import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { firestoreService } from '../../services/firestoreService';
-import { useTheme } from '../../utils/ThemeContext';
 import { soundManager } from '../../utils/sounds';
 import { auth } from '../../firebase';
 
@@ -59,17 +58,6 @@ interface GarageDashboardViewProps {
   setShowSubscribers: (val: boolean) => void;
   walletNumber?: string;
 }
-
-const SHIMMER_COLORS = [
-  { value: '#10b981', label: 'أخضر زمردي' },
-  { value: '#3b82f6', label: 'أزرق ملكي' },
-  { value: '#a855f7', label: 'أرجواني فاخر' },
-  { value: '#06b6d4', label: 'فيروزي كهربائي' },
-  { value: '#eab308', label: 'ذهبي براق' },
-  { value: '#f97316', label: 'برتقالي ناري' },
-  { value: '#ec4899', label: 'وردي فوسفوري' },
-  { value: '#ef4444', label: 'أحمر قاني' }
-];
 
 export const GarageDashboardView = memo(({
   garage,
@@ -109,6 +97,7 @@ export const GarageDashboardView = memo(({
   const [latestRechargeInfo, setLatestRechargeInfo] = React.useState<any | null>(null);
   const [showRechargePopup, setShowRechargePopup] = React.useState(false);
   const [showGarageReports, setShowGarageReports] = React.useState(false);
+  const [showAppearanceSettings, setShowAppearanceSettings] = React.useState(false);
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -120,28 +109,6 @@ export const GarageDashboardView = memo(({
     });
     return () => unsubscribe();
   }, []);
-
-  const { theme, toggleTheme } = useTheme();
-
-  const [pendingColor, setPendingColor] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!showMenu) {
-      setPendingColor(null);
-    }
-  }, [showMenu]);
-
-  const handleUpdateShimmerColor = async (colorVal: string) => {
-    try {
-      await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
-      soundManager.play('setting');
-      showToast('تم تحديث لون إضاءة الكارت بنجاح', 'success');
-      setPendingColor(null);
-    } catch (err) {
-      console.error('Failed to update shimmer color:', err);
-      showToast('حدث خطأ أثناء تحديث اللون', 'error');
-    }
-  };
 
   const currentBalance = React.useMemo(() => garage.balance || 0, [garage.balance]);
   const commission = React.useMemo(() => garage.commissionPerVehicle || 1, [garage.commissionPerVehicle]);
@@ -467,118 +434,17 @@ export const GarageDashboardView = memo(({
                           </div>
                         </button>
                       )}
-                    </div>
-
-                    {/* Quick Setting / Theme Group */}
-                    <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/40">
-                      <div className="flex flex-col gap-1.5">
-                        <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none">وضع الشاشة:</span>
-                        <div className="flex gap-2">
-                          {/* النهارى (Light Mode) Button */}
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              if (theme !== 'light') toggleTheme();
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border transition-all outline-none font-bold text-sm ${
-                              theme === 'light'
-                                ? 'text-white scale-[1.01]'
-                                : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800'
-                            }`}
-                            style={theme === 'light' ? { backgroundColor: garage?.shimmerColor || '#10b981', borderColor: garage?.shimmerColor || '#10b981' } : {}}
-                          >
-                            <Sun className={`w-3.5 h-3.5 ${theme === 'light' ? 'stroke-[2.5px]' : ''}`} />
-                            <span>النهاري</span>
-                          </button>
-
-                          {/* الليلى (Dark Mode) Button */}
-                           <button 
-                            type="button"
-                            onClick={() => {
-                              if (theme !== 'dark') toggleTheme();
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border transition-all outline-none font-bold text-sm ${
-                              theme === 'dark'
-                                ? 'text-white scale-[1.01]'
-                                : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800'
-                            }`}
-                            style={theme === 'dark' ? { backgroundColor: garage?.shimmerColor || '#10b981', borderColor: garage?.shimmerColor || '#10b981' } : {}}
-                          >
-                            <Moon className={`w-3.5 h-3.5 ${theme === 'dark' ? 'stroke-[2.5px]' : ''}`} />
-                            <span>الليلي</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {!currentStaff && (
-                        <div className="flex flex-col gap-1.5 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/40">
-                          <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none">لون إضاءة الكارت:</span>
-                          <div className="grid grid-cols-4 gap-2 pt-1">
-                            {SHIMMER_COLORS.map((item) => {
-                              const currentPreviewColor = pendingColor !== null ? pendingColor : (garage?.shimmerColor || '#10b981');
-                              const isSelected = currentPreviewColor === item.value;
-                              return (
-                                <button
-                                  key={item.value}
-                                  onClick={() => {
-                                    if (item.value === (garage?.shimmerColor || '#10b981')) {
-                                      setPendingColor(null);
-                                    } else {
-                                      setPendingColor(item.value);
-                                    }
-                                  }}
-                                  title={item.label}
-                                  className={`h-8 rounded-lg border transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.98] flex items-center justify-center relative ${
-                                    isSelected 
-                                      ? 'border-slate-800 dark:border-white scale-[1.02] shadow-sm ring-1 ring-emerald-500/10' 
-                                      : 'border-slate-200 dark:border-slate-700'
-                                  }`}
-                                  style={{ backgroundColor: item.value }}
-                                >
-                                  {isSelected && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-white ring-1 ring-black/40" />
-                                  )}
-                                </button>
-                              );
-                            })}
+                      <button 
+                        onClick={() => { setShowMenu(false); setShowAppearanceSettings(true); }}
+                        className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
+                            <Sliders className="w-4 h-4 text-indigo-500" />
                           </div>
-
-                          <AnimatePresence>
-                            {pendingColor !== null && pendingColor !== (garage?.shimmerColor || '#10b981') && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                                animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
-                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                                transition={{ type: 'spring', damping: 20, stiffness: 150 }}
-                                className="overflow-hidden"
-                              >
-                                <div className="flex flex-col gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800/30">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">تطبيق لون الإضاءة الجديد؟</span>
-                                    <div className="flex gap-2">
-                                      <button
-                                        onClick={() => setPendingColor(null)}
-                                        className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors cursor-pointer"
-                                      >
-                                        تراجع
-                                      </button>
-                                      <button
-                                        onClick={() => handleUpdateShimmerColor(pendingColor)}
-                                        className="px-3.5 py-1 text-xs font-bold text-white rounded-lg transition-transform hover:scale-[1.03] active:scale-[0.97] cursor-pointer shadow-sm"
-                                        style={{ backgroundColor: pendingColor }}
-                                      >
-                                        تأكيد الحفظ
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                          <span className="font-bold text-sm">إعدادات المظهر</span>
                         </div>
-                      )}
+                      </button>
                     </div>
 
                   </div>
@@ -855,6 +721,15 @@ export const GarageDashboardView = memo(({
           todayExitedVehicles={todayTransactions}
           staffList={staffList}
           onClose={() => setShowGarageReports(false)}
+        />
+      )}
+
+      {showAppearanceSettings && (
+        <AppearanceSettingsModal
+          garage={garage}
+          currentStaff={currentStaff}
+          onClose={() => setShowAppearanceSettings(false)}
+          showToast={showToast}
         />
       )}
 
