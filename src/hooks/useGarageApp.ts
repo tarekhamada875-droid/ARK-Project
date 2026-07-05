@@ -523,7 +523,8 @@ export function useGarageApp() {
     };
   }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, sessionId]);
 
-  // Fast typing auto-checkout trigger
+  // Fast typing auto-checkout trigger disabled to prevent unexpected checkout modal popups on incomplete/colliding plate prefixes
+  /*
   useEffect(() => {
     if (!garage || !newPlateNumber || view !== 'garage' || showCheckOutModal || isLoading) return;
     
@@ -545,6 +546,7 @@ export function useGarageApp() {
       }
     }
   }, [newPlateNumber, vehicles, garage, view, showCheckOutModal]);
+  */
 
   const initiateSessionRequest = useCallback(async (
     collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors',

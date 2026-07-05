@@ -3,6 +3,7 @@ import { Delete } from 'lucide-react';
 import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, formatPlateLetters } from '../../utils';
 import { Garage, Vehicle } from '../../types';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
+import { BorderShimmer } from './BorderShimmer';
 
 interface RegistrationCardProps {
   newPlateNumber: string;
@@ -16,6 +17,7 @@ interface RegistrationCardProps {
   onCheckOut: (vehicle: Vehicle) => void;
   closeKeyboard: () => void;
   inputRef: React.RefObject<HTMLDivElement>;
+  shimmerActive?: boolean;
 }
 
 export const RegistrationCard = memo(({
@@ -29,8 +31,10 @@ export const RegistrationCard = memo(({
   handleCheckIn,
   onCheckOut,
   closeKeyboard,
-  inputRef
+  inputRef,
+  shimmerActive = false
 }: RegistrationCardProps) => {
+
   // Force input value to stay in sync with state
   // even when getCleanPlate results in no state change (e.g. typing a space)
   React.useEffect(() => {
@@ -73,7 +77,9 @@ export const RegistrationCard = memo(({
           : 'border-slate-200 dark:border-slate-800'
       }`}
     >
-        <div className="relative">
+      <BorderShimmer isActive={shimmerActive} rx={32} ry={32} color={garage?.shimmerColor || '#10b981'} />
+      <div className="relative">
+
           <div className="flex flex-col gap-3 relative z-10">
             {newPlateNumber && (
               <button 
@@ -175,7 +181,11 @@ export const RegistrationCard = memo(({
               const isValid = isPlateValid(newPlateNumber);
  
               if (isInputFocused || (newPlateNumber && isValid)) {
-                const existing = vehicles.find(v => getRawPlate(v.plateNumberRaw) === raw && v.status === 'inside');
+                // Only find existing inside-vehicle if plate number is valid (has at least 1 letter and 1 number) and raw is not empty.
+                // This prevents empty or incomplete entries from accidentally matching empty/corrupt DB records.
+                const existing = (isValid && raw)
+                  ? vehicles.find(v => getRawPlate(v.plateNumberRaw) === raw && v.status === 'inside')
+                  : undefined;
                 
                 return (
                   <div className="overflow-hidden">

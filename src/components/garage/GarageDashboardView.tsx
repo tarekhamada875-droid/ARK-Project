@@ -60,6 +60,17 @@ interface GarageDashboardViewProps {
   walletNumber?: string;
 }
 
+const SHIMMER_COLORS = [
+  { value: '#10b981', label: 'أخضر زمردي' },
+  { value: '#3b82f6', label: 'أزرق ملكي' },
+  { value: '#a855f7', label: 'أرجواني فاخر' },
+  { value: '#06b6d4', label: 'فيروزي كهربائي' },
+  { value: '#eab308', label: 'ذهبي براق' },
+  { value: '#f97316', label: 'برتقالي ناري' },
+  { value: '#ec4899', label: 'وردي فوسفوري' },
+  { value: '#ef4444', label: 'أحمر قاني' }
+];
+
 export const GarageDashboardView = memo(({
   garage,
   currentStaff,
@@ -111,6 +122,26 @@ export const GarageDashboardView = memo(({
   }, []);
 
   const { theme, toggleTheme } = useTheme();
+
+  const [pendingColor, setPendingColor] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!showMenu) {
+      setPendingColor(null);
+    }
+  }, [showMenu]);
+
+  const handleUpdateShimmerColor = async (colorVal: string) => {
+    try {
+      await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
+      soundManager.play('setting');
+      showToast('تم تحديث لون إضاءة الكارت بنجاح', 'success');
+      setPendingColor(null);
+    } catch (err) {
+      console.error('Failed to update shimmer color:', err);
+      showToast('حدث خطأ أثناء تحديث اللون', 'error');
+    }
+  };
 
   const currentBalance = React.useMemo(() => garage.balance || 0, [garage.balance]);
   const commission = React.useMemo(() => garage.commissionPerVehicle || 1, [garage.commissionPerVehicle]);
@@ -329,7 +360,10 @@ export const GarageDashboardView = memo(({
                   <div className="p-4 pb-3 border-b border-slate-100 dark:border-slate-800/60">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-600 dark:bg-emerald-600 flex items-center justify-center text-white font-extrabold shrink-0">
+                        <div 
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0"
+                          style={{ backgroundColor: garage?.shimmerColor || '#10b981' }}
+                        >
                           <Shield className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col min-w-0">
@@ -449,16 +483,17 @@ export const GarageDashboardView = memo(({
                             }}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border transition-all outline-none font-bold text-sm ${
                               theme === 'light'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.01]'
+                                ? 'text-white scale-[1.01]'
                                 : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800'
                             }`}
+                            style={theme === 'light' ? { backgroundColor: garage?.shimmerColor || '#10b981', borderColor: garage?.shimmerColor || '#10b981' } : {}}
                           >
                             <Sun className={`w-3.5 h-3.5 ${theme === 'light' ? 'stroke-[2.5px]' : ''}`} />
                             <span>النهاري</span>
                           </button>
 
                           {/* الليلى (Dark Mode) Button */}
-                          <button 
+                           <button 
                             type="button"
                             onClick={() => {
                               if (theme !== 'dark') toggleTheme();
@@ -466,15 +501,84 @@ export const GarageDashboardView = memo(({
                             }}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border transition-all outline-none font-bold text-sm ${
                               theme === 'dark'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.01]'
+                                ? 'text-white scale-[1.01]'
                                 : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800'
                             }`}
+                            style={theme === 'dark' ? { backgroundColor: garage?.shimmerColor || '#10b981', borderColor: garage?.shimmerColor || '#10b981' } : {}}
                           >
                             <Moon className={`w-3.5 h-3.5 ${theme === 'dark' ? 'stroke-[2.5px]' : ''}`} />
                             <span>الليلي</span>
                           </button>
                         </div>
                       </div>
+
+                      {!currentStaff && (
+                        <div className="flex flex-col gap-1.5 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/40">
+                          <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none">لون إضاءة الكارت:</span>
+                          <div className="grid grid-cols-4 gap-2 pt-1">
+                            {SHIMMER_COLORS.map((item) => {
+                              const currentPreviewColor = pendingColor !== null ? pendingColor : (garage?.shimmerColor || '#10b981');
+                              const isSelected = currentPreviewColor === item.value;
+                              return (
+                                <button
+                                  key={item.value}
+                                  onClick={() => {
+                                    if (item.value === (garage?.shimmerColor || '#10b981')) {
+                                      setPendingColor(null);
+                                    } else {
+                                      setPendingColor(item.value);
+                                    }
+                                  }}
+                                  title={item.label}
+                                  className={`h-8 rounded-lg border transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.98] flex items-center justify-center relative ${
+                                    isSelected 
+                                      ? 'border-slate-800 dark:border-white scale-[1.02] shadow-sm ring-1 ring-emerald-500/10' 
+                                      : 'border-slate-200 dark:border-slate-700'
+                                  }`}
+                                  style={{ backgroundColor: item.value }}
+                                >
+                                  {isSelected && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white ring-1 ring-black/40" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <AnimatePresence>
+                            {pendingColor !== null && pendingColor !== (garage?.shimmerColor || '#10b981') && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                transition={{ type: 'spring', damping: 20, stiffness: 150 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="flex flex-col gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800/30">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">تطبيق لون الإضاءة الجديد؟</span>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => setPendingColor(null)}
+                                        className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                                      >
+                                        تراجع
+                                      </button>
+                                      <button
+                                        onClick={() => handleUpdateShimmerColor(pendingColor)}
+                                        className="px-3.5 py-1 text-xs font-bold text-white rounded-lg transition-transform hover:scale-[1.03] active:scale-[0.97] cursor-pointer shadow-sm"
+                                        style={{ backgroundColor: pendingColor }}
+                                      >
+                                        تأكيد الحفظ
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
                     </div>
 
                   </div>
@@ -558,6 +662,7 @@ export const GarageDashboardView = memo(({
                 }}
                 closeKeyboard={closeKeyboard}
                 inputRef={inputRef}
+                shimmerActive={true}
               />
             ) : (
               <div className="bg-[#faf9f6] dark:bg-slate-900 border-2 border-red-100 dark:border-red-900/30 rounded-[2rem] p-8 md:p-12 text-center transition-colors w-full">
@@ -576,7 +681,7 @@ export const GarageDashboardView = memo(({
             )}
 
             {!isInputFocused && (
-              <div className="bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-[2rem] overflow-hidden flex flex-col items-center pt-4 md:pt-10 transition-colors w-full shadow-sm">
+              <div className="bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-[2rem] overflow-hidden flex flex-col items-center pt-4 md:pt-10 transition-colors w-full shadow-sm relative">
                 <div 
                   onClick={() => setCurrentView('active_vehicles')}
                   className="mb-4 md:mb-10 scale-100 md:scale-110 cursor-pointer"
@@ -586,11 +691,18 @@ export const GarageDashboardView = memo(({
                 
                 <button 
                   onClick={() => setCurrentView('active_vehicles')}
-                  className="w-full h-6 md:h-7 relative overflow-hidden group outline-none select-none flex items-center justify-center shrink-0 bg-emerald-600 dark:bg-emerald-800 transition-colors"
+                  className="w-full h-6 md:h-7 relative overflow-hidden group outline-none select-none flex items-center justify-center shrink-0 transition-colors"
+                  style={{ backgroundColor: garage?.shimmerColor || '#10b981' }}
                 >
                   {/* Dark Center Chevron Badge */}
                   <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                    <div className="w-7 h-7 md:w-8 h-8 bg-emerald-600 dark:bg-emerald-800 text-white rounded-full flex items-center justify-center border-2 border-emerald-400 dark:border-emerald-600 shadow-md group-hover:scale-110 transition-all">
+                    <div 
+                      className="w-7 h-7 md:w-8 h-8 text-white rounded-full flex items-center justify-center border-2 shadow-md group-hover:scale-110 transition-all"
+                      style={{ 
+                        backgroundColor: garage?.shimmerColor || '#10b981',
+                        borderColor: `${garage?.shimmerColor || '#10b981'}80`
+                      }}
+                    >
                       <ChevronDown className="w-3.5 h-3.5 md:w-4 md:h-4 text-white group-active:translate-y-0.5 transition-transform" />
                     </div>
                   </div>

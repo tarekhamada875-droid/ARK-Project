@@ -48,6 +48,7 @@ export interface Garage {
   monthlyGiftAmount?: number;
   isMonthlyGiftEnabled?: boolean;
   lastGiftMonth?: string; // YYYY-MM
+  shimmerColor?: string;
   lastGiftAwardedAt?: any; // Timestamp
   activePlates?: Record<string, any>;
   recentExits?: any[];
