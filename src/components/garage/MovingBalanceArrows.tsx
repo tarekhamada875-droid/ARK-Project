@@ -72,6 +72,7 @@ export const MovingBalanceArrows: React.FC<MovingBalanceArrowsProps> = ({ transi
                 delay: col.delay,
               }}
               className={`absolute ${colorClass}`}
+              style={{ willChange: 'transform, opacity' }}
             >
               {isDecrease ? (
                 <svg className="w-8 h-8 sm:w-10 sm:h-10 md:w-[44px] md:h-[44px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

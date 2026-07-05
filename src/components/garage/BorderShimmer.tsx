@@ -14,8 +14,14 @@ export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28,
   const uId = React.useId().replace(/:/g, '');
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-10 rounded-[inherit] overflow-hidden">
-      <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
+    <div 
+      className="absolute inset-0 pointer-events-none z-10 rounded-[inherit] overflow-hidden"
+      style={{ transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden', willChange: 'transform' }}
+    >
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        style={{ overflow: 'visible', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+      >
         <defs>
           <linearGradient 
             id={`shimmerGrad-${uId}`} 
@@ -46,7 +52,7 @@ export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28,
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-        {/* Glow effect behind the border */}
+        {/* Soft, outer ambient glow simulation (No expensive blur filter used for ultimate mobile performance) */}
         <rect
           x="1"
           y="1"
@@ -55,8 +61,20 @@ export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28,
           ry={ry}
           fill="none"
           stroke={`url(#shimmerGrad-${uId})`}
-          strokeWidth="5.5"
-          className="opacity-40 blur-[2px]"
+          strokeWidth="8"
+          className="opacity-15"
+        />
+        {/* Mid-level glow halo */}
+        <rect
+          x="1"
+          y="1"
+          style={{ width: 'calc(100% - 2px)', height: 'calc(100% - 2px)' }}
+          rx={rx}
+          ry={ry}
+          fill="none"
+          stroke={`url(#shimmerGrad-${uId})`}
+          strokeWidth="4.5"
+          className="opacity-35"
         />
         {/* Sharp shining overlay */}
         <rect
