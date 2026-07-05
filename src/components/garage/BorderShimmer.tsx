@@ -28,14 +28,14 @@ export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28,
               attributeName="y1"
               from="-100%"
               to="100%"
-              dur="3.3s"
+              dur="4.0s"
               repeatCount="indefinite"
             />
             <animate
               attributeName="y2"
               from="0%"
               to="200%"
-              dur="3.3s"
+              dur="4.0s"
               repeatCount="indefinite"
             />
             {/* Soft, rich metallic sheen sweep */}
