@@ -1,9 +1,10 @@
 import React, { memo } from 'react';
 import { Delete } from 'lucide-react';
-import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, formatPlateLetters } from '../../utils';
+import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, formatPlateLetters, resolveShimmerColor } from '../../utils';
 import { Garage, Vehicle } from '../../types';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 import { BorderShimmer } from './BorderShimmer';
+import { useTheme } from '../../utils/ThemeContext';
 
 interface RegistrationCardProps {
   newPlateNumber: string;
@@ -34,6 +35,8 @@ export const RegistrationCard = memo(({
   inputRef,
   shimmerActive = false
 }: RegistrationCardProps) => {
+  const { theme } = useTheme();
+  const activeShimmerColor = resolveShimmerColor(garage?.shimmerColor, theme);
 
   // Force input value to stay in sync with state
   // even when getCleanPlate results in no state change (e.g. typing a space)
@@ -77,7 +80,7 @@ export const RegistrationCard = memo(({
           : 'border-slate-200 dark:border-slate-800'
       }`}
     >
-      <BorderShimmer isActive={shimmerActive} rx={32} ry={32} color={garage?.shimmerColor || '#10b981'} />
+      <BorderShimmer isActive={shimmerActive} rx={32} ry={32} color={activeShimmerColor} />
       <div className="relative">
 
           <div className="flex flex-col gap-3 relative z-10">

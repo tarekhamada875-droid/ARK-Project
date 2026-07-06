@@ -93,7 +93,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               key={num}
               disabled={isLoading}
               onClick={() => handleKeyPress(num.toString())}
-              className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-50/40 hover:bg-slate-50 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800/60 text-xl sm:text-2xl md:text-3xl font-bold font-mono text-slate-800 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700 outline-none transition-all active:scale-[0.98] disabled:pointer-events-none flex items-center justify-center hover:shadow-[0_4px_12px_rgba(0,0,0,0.01)] hover:border-amber-500/30 dark:hover:border-amber-400/20"
+              className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-50/40 hover:bg-slate-50 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800/60 text-xl sm:text-2xl md:text-3xl font-bold font-mono text-slate-800 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700 outline-none transition-[background-color,transform] duration-75 active:scale-95 disabled:pointer-events-none flex items-center justify-center hover:shadow-[0_4px_12px_rgba(0,0,0,0.01)] hover:border-amber-500/30 dark:hover:border-amber-400/20 select-none touch-manipulation"
             >
               {num}
             </button>
@@ -101,21 +101,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <button
             disabled={isLoading}
             onClick={handleClearAll}
-            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-[#faf9f6] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs sm:text-sm outline-none uppercase tracking-wider disabled:pointer-events-none flex items-center justify-center transition-all active:scale-[0.98] active:bg-slate-100 dark:active:bg-slate-950"
+            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-[#faf9f6] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs sm:text-sm outline-none uppercase tracking-wider disabled:pointer-events-none flex items-center justify-center transition-[background-color,transform] duration-75 active:scale-95 active:bg-slate-100 dark:active:bg-slate-950 select-none touch-manipulation"
           >
             مسح الكل
           </button>
           <button
             disabled={isLoading}
             onClick={() => handleKeyPress('0')}
-            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-50/40 hover:bg-slate-50 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800/60 text-xl sm:text-2xl md:text-3xl font-bold font-mono text-slate-800 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700 outline-none transition-all active:scale-[0.98] disabled:pointer-events-none flex items-center justify-center hover:shadow-[0_4px_12px_rgba(0,0,0,0.01)] hover:border-amber-500/30 dark:hover:border-amber-400/20"
+            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-50/40 hover:bg-slate-50 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-100 dark:border-slate-800/60 text-xl sm:text-2xl md:text-3xl font-bold font-mono text-slate-800 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700 outline-none transition-[background-color,transform] duration-75 active:scale-95 disabled:pointer-events-none flex items-center justify-center hover:shadow-[0_4px_12px_rgba(0,0,0,0.01)] hover:border-amber-500/30 dark:hover:border-amber-400/20 select-none touch-manipulation"
           >
             0
           </button>
           <button
             disabled={isLoading}
             onClick={handleDelete}
-            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-100/30 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center active:bg-slate-200 dark:active:bg-slate-700 active:scale-[0.98] outline-none disabled:pointer-events-none"
+            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-100/30 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center active:bg-slate-200 dark:active:bg-slate-700 transition-[background-color,transform] duration-75 active:scale-95 outline-none disabled:pointer-events-none select-none touch-manipulation"
           >
             <Delete className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>

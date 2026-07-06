@@ -32,7 +32,7 @@ export const NumericKeypad: React.FC<NumericKeypadProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={onDelete}
-                className="h-14 sm:h-18 md:h-24 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 rounded-xl md:rounded-2xl outline-none hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-red-500 shadow-sm"
+                className="h-14 sm:h-18 md:h-24 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 rounded-xl md:rounded-2xl outline-none hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-red-500 shadow-sm transition-[background-color,transform] duration-75 active:scale-95 touch-manipulation select-none"
               >
                 <Delete className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10" />
               </button>
@@ -45,7 +45,7 @@ export const NumericKeypad: React.FC<NumericKeypadProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onKeyPress(key)}
-              className="h-14 sm:h-18 md:h-24 flex items-center justify-center bg-slate-900 dark:bg-slate-700 text-white dark:text-slate-100 rounded-xl md:rounded-2xl font-bold text-2xl sm:text-3xl md:text-5xl outline-none shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="h-14 sm:h-18 md:h-24 flex items-center justify-center bg-slate-900 dark:bg-slate-700 text-white dark:text-slate-100 rounded-xl md:rounded-2xl font-bold text-2xl sm:text-3xl md:text-5xl outline-none shadow-sm transition-[background-color,transform] duration-75 active:scale-95 touch-manipulation select-none"
             >
               {key}
             </button>

@@ -29,6 +29,8 @@ import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
 import { auth } from '../../firebase';
+import { useTheme } from '../../utils/ThemeContext';
+import { resolveShimmerColor } from '../../utils';
 
 interface GarageDashboardViewProps {
   garage: Garage;
@@ -88,6 +90,8 @@ export const GarageDashboardView = memo(({
   walletNumber = "015 - 524 - 113 - 23"
 }: GarageDashboardViewProps) => {
   const [showMenu, setShowMenu] = React.useState(false);
+  const { theme } = useTheme();
+  const activeShimmerColor = resolveShimmerColor(garage?.shimmerColor, theme);
   const [currentView, setCurrentView] = React.useState<'main' | 'active_vehicles'>('main');
   
   const [visibleCount, setVisibleCount] = React.useState(15);
@@ -313,6 +317,7 @@ export const GarageDashboardView = memo(({
                   exit={{ opacity: 0 }}
                   onClick={() => setShowMenu(false)}
                   className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm z-50 pointer-events-auto"
+                  style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
                 />
                 
                 <motion.div 
@@ -321,6 +326,7 @@ export const GarageDashboardView = memo(({
                   exit={{ x: '-100%', opacity: 0 }}
                   transition={{ type: 'spring', damping: 26, stiffness: 220 }}
                   className="fixed top-3 bottom-3 left-3 w-[220px] xs:w-[245px] bg-[#faf9f6] dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800/80 z-50 flex flex-col overflow-hidden pointer-events-auto"
+                  style={{ willChange: 'transform, opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
                   dir="rtl"
                 >
                   {/* Drawer Header - Clean Profile Box */}
@@ -329,16 +335,16 @@ export const GarageDashboardView = memo(({
                       <div className="flex items-center gap-2">
                         <div 
                           className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0"
-                          style={{ backgroundColor: garage?.shimmerColor || '#10b981' }}
+                          style={{ backgroundColor: activeShimmerColor }}
                         >
                           <Shield className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col min-w-0">
                           <span className="text-xs font-black text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
-                            {currentStaff ? currentStaff.name : 'المدير'}
+                            {currentStaff ? currentStaff.name : 'مدير الجراج'}
                           </span>
                           <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
-                            {currentStaff ? 'موظف وردية' : 'مسؤول النظام'}
+                            {currentStaff ? 'موظف وردية' : 'إدارة الجراج'}
                           </span>
                         </div>
                       </div>
@@ -558,15 +564,15 @@ export const GarageDashboardView = memo(({
                 <button 
                   onClick={() => setCurrentView('active_vehicles')}
                   className="w-full h-6 md:h-7 relative overflow-hidden group outline-none select-none flex items-center justify-center shrink-0 transition-colors"
-                  style={{ backgroundColor: garage?.shimmerColor || '#10b981' }}
+                  style={{ backgroundColor: activeShimmerColor }}
                 >
                   {/* Dark Center Chevron Badge */}
                   <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                     <div 
                       className="w-7 h-7 md:w-8 h-8 text-white rounded-full flex items-center justify-center border-2 shadow-md group-hover:scale-110 transition-all"
                       style={{ 
-                        backgroundColor: garage?.shimmerColor || '#10b981',
-                        borderColor: `${garage?.shimmerColor || '#10b981'}80`
+                        backgroundColor: activeShimmerColor,
+                        borderColor: `${activeShimmerColor}80`
                       }}
                     >
                       <ChevronDown className="w-3.5 h-3.5 md:w-4 md:h-4 text-white group-active:translate-y-0.5 transition-transform" />

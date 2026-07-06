@@ -45,9 +45,12 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       <div 
         onClick={() => !isLoading && onCancel()}
         className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+        style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
       />
       <div 
-        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl rounded-t-[2.5rem] sm:rounded-xl p-6 sm:p-12 text-center max-h-[95vh] overflow-y-auto custom-scrollbar-slate stable-scrollbar border border-transparent dark:border-slate-800 shadow-2xl" dir="rtl"
+        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl rounded-t-[2.5rem] sm:rounded-xl p-6 sm:p-12 text-center max-h-[95vh] overflow-y-auto custom-scrollbar-slate stable-scrollbar border border-transparent dark:border-slate-800 shadow-2xl" 
+        style={{ willChange: 'transform, opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+        dir="rtl"
       >
         {isLoading ? (
           <div className="py-16 text-center">

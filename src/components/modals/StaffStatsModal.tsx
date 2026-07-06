@@ -57,8 +57,8 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
                   م
                 </div>
                 <div>
-                  <h3 className="font-black text-white text-sm">المدير</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">مسؤول النظام</p>
+                  <h3 className="font-black text-white text-sm">مدير الجراج</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">إدارة الجراج</p>
                 </div>
              </div>
              <div className="flex flex-col items-end">

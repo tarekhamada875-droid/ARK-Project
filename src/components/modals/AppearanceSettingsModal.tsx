@@ -20,7 +20,7 @@ const SHIMMER_COLORS = [
   { value: '#06b6d4', label: 'فيروزي كهربائي' },
   { value: '#eab308', label: 'ذهبي براق' },
   { value: '#f97316', label: 'برتقالي ناري' },
-  { value: '#ec4899', label: 'وردي فوسفوري' },
+  { value: '#ec4899', label: 'رمادي / أوف وايت' },
   { value: '#ef4444', label: 'أحمر قاني' }
 ];
 
@@ -35,6 +35,14 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
   const [isSaving, setIsSaving] = useState(false);
 
   const activeColor = pendingColor !== null ? pendingColor : (garage?.shimmerColor || '#10b981');
+  
+  const resolvedActiveColor = activeColor === '#ec4899' 
+    ? (theme === 'dark' ? '#faf9f6' : '#64748b') 
+    : activeColor;
+
+  const resolvedPendingColor = pendingColor !== null
+    ? (pendingColor === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : pendingColor)
+    : null;
 
   const handleUpdateShimmerColor = async (colorVal: string) => {
     setIsSaving(true);
@@ -56,7 +64,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
       {/* Header */}
       <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-900 flex items-center justify-between bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: activeColor }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: resolvedActiveColor }}>
             <Sliders className="w-5 h-5" />
           </div>
           <div>
@@ -132,7 +140,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                   className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
                     theme === 'dark' ? 'text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                   }`}
-                  style={theme === 'dark' ? { backgroundColor: activeColor } : {}}
+                  style={theme === 'dark' ? { backgroundColor: resolvedActiveColor } : {}}
                 >
                   <Moon className="w-6 h-6 stroke-[2.5px]" />
                 </div>
@@ -140,7 +148,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                   <span className={`block font-black text-sm ${theme === 'dark' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>الوضع الليلي</span>
                 </div>
                 {theme === 'dark' && (
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: activeColor }}>
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: resolvedActiveColor }}>
                     <Check className="w-3.5 h-3.5 stroke-[3px]" />
                   </div>
                 )}
@@ -159,6 +167,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
               <div className="grid grid-cols-4 gap-3 pt-2">
                 {SHIMMER_COLORS.map((item) => {
                   const isSelected = activeColor === item.value;
+                  const itemColorResolved = item.value === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : item.value;
                   return (
                     <button
                       key={item.value}
@@ -176,7 +185,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                           ? 'border-slate-800 dark:border-white scale-[1.03] shadow-md ring-2 ring-slate-800/10' 
                           : 'border-slate-200 dark:border-slate-800'
                       }`}
-                      style={{ backgroundColor: item.value }}
+                      style={{ backgroundColor: itemColorResolved }}
                     >
                       {isSelected && (
                         <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-sm">
@@ -216,7 +225,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                           disabled={isSaving}
                           onClick={() => handleUpdateShimmerColor(pendingColor)}
                           className="px-4 py-1.5 text-xs font-black text-white rounded-xl transition-all hover:scale-[1.03] active:scale-[0.97] cursor-pointer shadow-sm disabled:opacity-50"
-                          style={{ backgroundColor: pendingColor }}
+                          style={{ backgroundColor: resolvedPendingColor || '#10b981' }}
                         >
                           {isSaving ? 'جاري الحفظ...' : 'تأكيد وحفظ'}
                         </button>
@@ -229,7 +238,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
           ) : (
             <div className="pt-6 border-t border-slate-100 dark:border-slate-900 text-center">
               <p className="text-xs font-bold text-slate-400 dark:text-slate-500 leading-relaxed">
-                تغيير هوية لون إضاءة الكارت متاح فقط لمسؤول النظام (المدير).
+                تغيير هوية لون إضاءة الكارت متاح فقط لمدير الجراج.
               </p>
             </div>
           )}

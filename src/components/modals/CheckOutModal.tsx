@@ -141,6 +141,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
         exit={{ opacity: 1 }}
         onClick={() => !isLoading && onCancel()}
         className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+        style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
         transition={{ duration: 0 }}
       />
       
@@ -155,6 +156,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
           duration: 0
         }}
         className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl rounded-t-[3.5rem] sm:rounded-[3.5rem] md:rounded-[4rem] p-6 sm:p-8 md:p-10 lg:p-12 pt-12 text-center border-t sm:border border-x border-slate-200 dark:border-slate-800 flex flex-col max-h-[92dvh] overflow-hidden shadow-2xl" 
+        style={{ willChange: 'transform, height, opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
         dir="rtl"
       >
         {/* Handle Bar Area */}
