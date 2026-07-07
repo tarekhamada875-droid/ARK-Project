@@ -25,10 +25,10 @@ import {
   increment
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor } from '../types';
+import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../types';
 import { ADMIN_PIN } from '../constants';
 
-export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor };
+export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager };
 
 export const firestoreService = {
   // Garages
@@ -170,16 +170,16 @@ export const firestoreService = {
     }
   },
 
-  updateSession: async (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors', id: string, sessionId: string | null) => {
+  updateSession: async (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers', id: string, sessionId: string | null) => {
     try {
       await updateDoc(doc(db, collectionName, id), { 
-        currentSessionId: sessionId,
-        lastActive: sessionId ? serverTimestamp() : null
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${id}`);
-    }
-  },
+          currentSessionId: sessionId,
+          lastActive: sessionId ? serverTimestamp() : null
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${id}`);
+      }
+    },
 
   // Legacy wrappers for compatibility
   updateGarageSession: async (garageId: string, sessionId: string | null) => {
@@ -198,7 +198,11 @@ export const firestoreService = {
     return firestoreService.updateSession('supervisors', supervisorId, sessionId);
   },
 
-  subscribeToSession: (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors', id: string, callback: (sessionId: string | undefined) => void) => {
+  updateGeneralManagerSession: async (generalManagerId: string, sessionId: string | null) => {
+    return firestoreService.updateSession('general_managers', generalManagerId, sessionId);
+  },
+
+  subscribeToSession: (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers', id: string, callback: (sessionId: string | undefined) => void) => {
     return onSnapshot(doc(db, collectionName, id), (snapshot) => {
       if (snapshot.exists()) {
         callback(snapshot.data().currentSessionId);
@@ -379,7 +383,8 @@ export const firestoreService = {
 
         // 2. Update garage balance (completely free of the activePlates map update)
         transaction.update(garageRef, {
-          balance: increment(-commission)
+          balance: increment(-commission),
+          carsInside: increment(1)
         });
       });
     } catch (error) {
@@ -421,6 +426,7 @@ export const firestoreService = {
         todayRevenue: isNewDay ? cost : increment(cost),
         todayCount: isNewDay ? 1 : increment(1),
         lastTransactionDate: today,
+        carsInside: increment(-1),
         recentExits: deleteField() // Completely free the garage document from the list limit
       };
 
@@ -455,7 +461,8 @@ export const firestoreService = {
           balance: increment(refundAmount),
           isLocked: false,
           dailyRefundCount: isSameDay ? increment(1) : 1,
-          lastRefundDate: todayYMD
+          lastRefundDate: todayYMD,
+          carsInside: increment(-1)
         };
 
         transaction.update(garageRef, updates);
@@ -516,6 +523,45 @@ export const firestoreService = {
       handleFirestoreError(error, OperationType.UPDATE, `supervisors/${id}`);
       throw error;
     }
+  },
+
+  // General Managers
+  addGeneralManager: async (data: Omit<GeneralManager, 'id'>) => {
+    try {
+      return await addDoc(collection(db, 'general_managers'), {
+        ...data,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'general_managers');
+      throw error;
+    }
+  },
+
+  removeGeneralManager: async (id: string) => {
+    try {
+      return await deleteDoc(doc(db, 'general_managers', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `general_managers/${id}`);
+      throw error;
+    }
+  },
+
+  updateGeneralManager: async (id: string, data: Partial<GeneralManager>) => {
+    try {
+      return await updateDoc(doc(db, 'general_managers', id), data);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `general_managers/${id}`);
+      throw error;
+    }
+  },
+
+  subscribeToGeneralManagers: (callback: (generalManagers: GeneralManager[]) => void) => {
+    const q = query(collection(db, 'general_managers'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneralManager));
+      callback(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'general_managers'));
   },
 
   // Delegates

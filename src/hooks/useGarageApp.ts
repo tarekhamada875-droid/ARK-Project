@@ -4,7 +4,7 @@ import { onAuthStateChanged, User, signOut, signInAnonymously } from 'firebase/a
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { APP_TEXT, ADMIN_PIN } from '../constants';
 import { firestoreService } from '../services/firestoreService';
-import { Garage, Vehicle, Package, Staff, RechargeRequest, Supervisor } from '../types';
+import { Garage, Vehicle, Package, Staff, RechargeRequest, Supervisor, GeneralManager } from '../types';
 import { 
   safeDate, 
   getRawPlate, 
@@ -62,7 +62,7 @@ export function useGarageApp() {
   }, []);
 
   // Persisted state fields
-  const [view, setView] = useLocalStorageState<'login' | 'garage' | 'admin_login' | 'admin_dashboard' | 'admin_garage_details' | 'admin_delegate_details' | 'delegate_login' | 'delegate_dashboard' | 'packages' | 'staff_stats'>('app_view', 'login');
+  const [view, setView] = useLocalStorageState<'login' | 'garage' | 'admin_login' | 'admin_dashboard' | 'admin_garage_details' | 'admin_delegate_details' | 'delegate_login' | 'delegate_dashboard' | 'packages' | 'staff_stats' | 'general_manager_dashboard'>('app_view', 'login');
   const [garage, setGarage] = useLocalStorageState<Garage | null>('app_garage', null);
   const [delegate, setDelegate] = useLocalStorageState<any | null>('app_delegate', null);
   const [delegates, setDelegates] = useState<any[]>([]);
@@ -93,6 +93,8 @@ export function useGarageApp() {
   
   const [currentSupervisor, setCurrentSupervisor] = useLocalStorageState<Supervisor | null>('app_supervisor', null);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [currentGeneralManager, setCurrentGeneralManager] = useLocalStorageState<GeneralManager | null>('app_general_manager', null);
+  const [generalManagers, setGeneralManagers] = useState<GeneralManager[]>([]);
 
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [staffList, setStaffList] = useState<Staff[]>([]);
@@ -118,7 +120,7 @@ export function useGarageApp() {
   const [isWaitingForApproval, setIsWaitingForApproval] = useState<boolean>(false);
   const [pendingApprovalRequest, setPendingApprovalRequest] = useState<{
     id: string;
-    collection: 'garages' | 'staff' | 'delegates' | 'supervisors';
+    collection: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers';
     pendingSessionId: string;
     name: string;
   } | null>(null);
@@ -136,9 +138,14 @@ export function useGarageApp() {
     }
     const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
       setVehicles(activeVehicles);
+      if (garage && (typeof garage.carsInside !== 'number' || garage.carsInside !== activeVehicles.length)) {
+        firestoreService.updateGarage(garage.id, { carsInside: activeVehicles.length }).catch((err) => {
+          console.warn('Failed to heal carsInside:', err);
+        });
+      }
     });
     return () => unsub();
-  }, [garage?.id]);
+  }, [garage?.id, garage?.carsInside]);
 
   // Subscribe to completed transactions
   useEffect(() => {
@@ -219,6 +226,7 @@ export function useGarageApp() {
         await Promise.all([
           deleteDoc(doc(db, 'admin_sessions', myUid)),
           deleteDoc(doc(db, 'supervisor_sessions', myUid)),
+          deleteDoc(doc(db, 'general_manager_sessions', myUid)),
           deleteDoc(doc(db, 'delegate_sessions', myUid)),
           deleteDoc(doc(db, 'garage_sessions', myUid)),
           deleteDoc(doc(db, 'staff_sessions', myUid)),
@@ -228,6 +236,7 @@ export function useGarageApp() {
       if (currentStaff) firestoreService.updateSession('staff', currentStaff.id, null);
       if (delegate) firestoreService.updateSession('delegates', delegate.id, null);
       if (currentSupervisor) firestoreService.updateSession('supervisors', currentSupervisor.id, null);
+      if (currentGeneralManager) firestoreService.updateSession('general_managers', currentGeneralManager.id, null);
       await signOut(auth);
     } catch (e) {
       console.error('Logout error:', e);
@@ -241,6 +250,7 @@ export function useGarageApp() {
       setDelegate(null);
       setCurrentStaff(null);
       setCurrentSupervisor(null);
+      setCurrentGeneralManager(null);
       setVehicles([]);
       setTodayTransactions([]);
       setStaffList([]);
@@ -249,7 +259,7 @@ export function useGarageApp() {
       setView('login');
       setShowLogoutConfirm(false);
     }
-  }, [garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id]);
+  }, [garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, currentGeneralManager?.id]);
 
   const handleInitiateLogout = useCallback(() => {
     const lockoutUntilStr = localStorage.getItem('logout_lockout_until');
@@ -338,6 +348,8 @@ export function useGarageApp() {
           }
         } else if (view.startsWith('admin_') && currentSupervisor) {
           await setDoc(doc(db, 'supervisor_sessions', user.uid), { supervisorId: currentSupervisor.id, pin: currentSupervisor.pin, createdAt: serverTimestamp() });
+        } else if (view === 'general_manager_dashboard' && currentGeneralManager) {
+          await setDoc(doc(db, 'general_manager_sessions', user.uid), { generalManagerId: currentGeneralManager.id, pin: currentGeneralManager.pin, createdAt: serverTimestamp() });
         } else if (view === 'delegate_dashboard' && delegate) {
           await setDoc(doc(db, 'delegate_sessions', user.uid), { delegateId: delegate.id, pin: delegate.pin, createdAt: serverTimestamp() });
         } else if (view === 'garage') {
@@ -356,13 +368,13 @@ export function useGarageApp() {
     };
 
     syncSecuritySession();
-  }, [isAuthReady, user, view, adminPin, activeAdminPin, delegate, garage, currentStaff, currentSupervisor, showToast]);
+  }, [isAuthReady, user, view, adminPin, activeAdminPin, delegate, garage, currentStaff, currentSupervisor, currentGeneralManager, showToast]);
 
   // Sync global collections
   useEffect(() => {
-    if (!isAuthReady || !user || (view !== 'admin_dashboard' && view !== 'admin_garage_details' && view !== 'admin_delegate_details' && view !== 'garage' && view !== 'delegate_dashboard')) return;
+    if (!isAuthReady || !user || (view !== 'admin_dashboard' && view !== 'admin_garage_details' && view !== 'admin_delegate_details' && view !== 'garage' && view !== 'delegate_dashboard' && view !== 'general_manager_dashboard')) return;
 
-    const unsubGarages = (view === 'admin_dashboard' || view === 'admin_garage_details' || view === 'delegate_dashboard') 
+    const unsubGarages = (view === 'admin_dashboard' || view === 'admin_garage_details' || view === 'delegate_dashboard' || view === 'general_manager_dashboard') 
       ? firestoreService.subscribeToGarages(setAllGarages)
       : () => {};
     
@@ -374,12 +386,17 @@ export function useGarageApp() {
       ? firestoreService.subscribeToSupervisors(setSupervisors)
       : () => {};
 
+    const unsubGeneralManagers = (view === 'admin_dashboard')
+      ? firestoreService.subscribeToGeneralManagers(setGeneralManagers)
+      : () => {};
+
     const unsubPackages = firestoreService.subscribeToPackages(setPackages);
     
     return () => {
       unsubGarages();
       unsubDelegates();
       unsubSupervisors();
+      unsubGeneralManagers();
       unsubPackages();
     };
   }, [isAuthReady, user, view, isOnline]);
@@ -549,7 +566,7 @@ export function useGarageApp() {
   */
 
   const initiateSessionRequest = useCallback(async (
-    collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors',
+    collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers',
     id: string,
     _targetData: any,
     onSuccess: () => Promise<void> | void
@@ -703,6 +720,30 @@ export function useGarageApp() {
 
       const currentOffset = await fetchServerTimeOffset();
       const loginAction = (async () => {
+        // General Manager check
+        const gmSnap = await getDocs(query(collection(db, 'general_managers'), where('pin', '==', normalizedInput), limit(1)));
+        if (!gmSnap.empty) {
+          const gmData = { id: gmSnap.docs[0].id, ...gmSnap.docs[0].data() } as GeneralManager;
+
+          const proceed = async () => {
+            if (auth.currentUser) {
+              await setDoc(doc(db, 'general_manager_sessions', auth.currentUser.uid), { generalManagerId: gmData.id, pin: gmData.pin, createdAt: serverTimestamp() });
+            }
+            await firestoreService.updateGeneralManagerSession(gmData.id, sessionId);
+            setCurrentGeneralManager(gmData);
+            setView('general_manager_dashboard');
+            showToast(`مرحباً بك يا ${gmData.name} (المدير العام)`);
+          };
+
+          if (gmData.currentSessionId && gmData.currentSessionId !== sessionId && isSessionActive(gmData.lastActive, currentOffset)) {
+            await initiateSessionRequest('general_managers', gmData.id, gmData, proceed);
+            return 'blocked';
+          }
+
+          await proceed();
+          return true;
+        }
+
         // Supervisor check
         const supervisorSnap = await getDocs(query(collection(db, 'supervisors'), where('pin', '==', normalizedInput), limit(1)));
         if (!supervisorSnap.empty) {
@@ -1387,6 +1428,10 @@ export function useGarageApp() {
     setShowSubscribers,
     currentSupervisor,
     supervisors,
+    currentGeneralManager,
+    setCurrentGeneralManager,
+    generalManagers,
+    setGeneralManagers,
     isInputFocused,
     setIsInputFocused,
     staffList,

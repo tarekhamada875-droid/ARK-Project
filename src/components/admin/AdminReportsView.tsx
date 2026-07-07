@@ -63,18 +63,26 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
     
     // Total cars currently inside ALL garages combined
     const currentCarsInside = localGarages.reduce((sum, g) => {
-      return sum + (g.activePlates ? Object.keys(g.activePlates).length : 0);
+      const activeCarsCount = typeof g.carsInside === 'number' ? Math.max(0, g.carsInside) : (g.activePlates ? Object.keys(g.activePlates).length : 0);
+      return sum + activeCarsCount;
     }, 0);
 
     // Total vehicle exits
+    const today = new Date().toISOString().split('T')[0];
     const totalExitsCount = localGarages.reduce((sum, g) => sum + (g.totalVehiclesOut || 0), 0);
-    const todayExitsCount = localGarages.reduce((sum, g) => sum + (g.todayCount || 0), 0);
+    const todayExitsCount = localGarages.reduce((sum, g) => {
+      const isToday = g.lastTransactionDate === today;
+      return sum + (isToday ? (g.todayCount || 0) : 0);
+    }, 0);
 
     // Total finance metrics
     const totalGaragesBalance = localGarages.reduce((sum, g) => sum + (g.balance || 0), 0);
     const totalAdminRevenue = localGarages.reduce((sum, g) => sum + (g.totalAdminRevenue || 0), 0);
     const totalRechargedVehicles = localGarages.reduce((sum, g) => sum + (g.totalRechargedCars || 0), 0);
-    const todayRevenue = localGarages.reduce((sum, g) => sum + (g.todayRevenue || 0), 0);
+    const todayRevenue = localGarages.reduce((sum, g) => {
+      const isToday = g.lastTransactionDate === today;
+      return sum + (isToday ? (g.todayRevenue || 0) : 0);
+    }, 0);
     const totalGaragesRevenue = localGarages.reduce((sum, g) => sum + (g.totalRevenue || 0), 0);
 
     return {
@@ -205,7 +213,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
             {filteredGarageStats.map((g, index) => {
               const checkedOutCount = g.totalVehiclesOut || 0;
               const remainingBalance = g.balance || 0;
-              const activeCarsCount = g.activePlates ? Object.keys(g.activePlates).length : 0;
+              const activeCarsCount = typeof g.carsInside === 'number' ? Math.max(0, g.carsInside) : (g.activePlates ? Object.keys(g.activePlates).length : 0);
               
               return (
                 <div key={g.id} className="p-4 hover:bg-slate-50/40 dark:hover:bg-slate-800/10 flex items-center justify-between transition-all">

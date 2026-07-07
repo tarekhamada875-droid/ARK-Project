@@ -16,6 +16,7 @@ import { OfflineView } from './components/layout/OfflineView';
 import { CloudSyncLoadingView } from './components/layout/CloudSyncLoadingView';
 
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { GeneralManagerDashboard } from './components/general_manager/GeneralManagerDashboard';
 import { LoginView } from './components/auth/LoginView';
 import { AdminLoginView } from './components/auth/AdminLoginView';
 import { DelegateLoginView } from './components/auth/DelegateLoginView';
@@ -82,6 +83,8 @@ export default function App() {
     setShowSubscribers,
     currentSupervisor,
     supervisors,
+    currentGeneralManager,
+    generalManagers,
     isInputFocused,
     setIsInputFocused,
     staffList,
@@ -224,14 +227,25 @@ export default function App() {
           delegates={delegates}
           addDelegate={addDelegate}
           packages={sortedPackages}
-          onLogout={handleLogout}
+          onLogout={handleInitiateLogout}
           rechargeRequests={rechargeRequests}
           showToast={showToast}
           currentSupervisor={currentSupervisor}
           supervisors={supervisors}
+          generalManagers={generalManagers}
           currentAdminPin={activeAdminPin}
           currentWalletNumber={walletNumber}
           onUpdateWalletNumber={firestoreService.updateWalletNumber}
+        />
+      );
+    }
+
+    if (view === 'general_manager_dashboard' && currentGeneralManager) {
+      return (
+        <GeneralManagerDashboard 
+          currentGeneralManager={currentGeneralManager}
+          allGarages={allGarages}
+          onLogout={handleInitiateLogout}
         />
       );
     }

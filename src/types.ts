@@ -51,6 +51,7 @@ export interface Garage {
   shimmerColor?: string;
   lastGiftAwardedAt?: any; // Timestamp
   activePlates?: Record<string, any>;
+  carsInside?: number;
   recentExits?: any[];
   createdByDelegateId?: string | null;
   createdByDelegateName?: string | null;
@@ -88,6 +89,18 @@ export interface Supervisor {
   phone: string;
   pin: string;
   role: 'supervisor';
+  currentSessionId?: string | null;
+  lastActive?: any; // Timestamp
+  createdAt: any;
+}
+
+export interface GeneralManager {
+  id: string;
+  name: string;
+  phone: string;
+  pin: string;
+  garageIds: string[];
+  role: 'general_manager';
   currentSessionId?: string | null;
   lastActive?: any; // Timestamp
   createdAt: any;

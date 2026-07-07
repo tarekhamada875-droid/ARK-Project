@@ -68,7 +68,9 @@ export const GarageReportsView = ({
     const overnightExited = localTodayExitedVehicles.filter(v => v.type === 'overnight').length;
 
     // Financial calculations
-    const todayRevenue = localGarage.todayRevenue || 0;
+    const today = new Date().toISOString().split('T')[0];
+    const isTodayValid = localGarage.lastTransactionDate === today;
+    const todayRevenue = isTodayValid ? (localGarage.todayRevenue || 0) : 0;
     const totalRevenue = localGarage.totalRevenue || 0;
     const currentBalance = localGarage.balance || 0;
 

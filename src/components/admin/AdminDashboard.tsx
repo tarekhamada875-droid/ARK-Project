@@ -30,7 +30,7 @@ import {
   Wallet,
   LogOut
 } from 'lucide-react';
-import { Garage, Delegate, Package, RechargeRequest, Supervisor } from '../../types';
+import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { Spinner } from '../ui/Spinner';
 import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
@@ -56,6 +56,7 @@ interface AdminDashboardProps {
   // Supervisor addition
   currentSupervisor?: Supervisor | null;
   supervisors?: Supervisor[];
+  generalManagers?: GeneralManager[];
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
@@ -76,6 +77,7 @@ export const AdminDashboard = memo(({
   showToast,
   currentSupervisor = null,
   supervisors = [],
+  generalManagers = [],
   currentAdminPin,
   currentWalletNumber,
   onUpdateWalletNumber
@@ -83,7 +85,7 @@ export const AdminDashboard = memo(({
 
   // Localized states to encapsulate admin view and prevent global App re-renders
   const [adminSearch, setAdminSearch] = React.useState<string>('');
-  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'wallet' | 'admin-pin'>('app_admin_tab', 'menu');
+  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin'>('app_admin_tab', 'menu');
   const [showPlansModal, setShowPlansModal] = useLocalStorageState<boolean>('app_admin_plans_modal', false);
   const [showOverview, setShowOverview] = useLocalStorageState<boolean>('app_admin_overview', false);
   const [pinInput, setPinInput] = React.useState<string>('');
@@ -98,6 +100,16 @@ export const AdminDashboard = memo(({
     phone: '',
     pin: ''
   });
+  const [adminGeneralManagerForm, setAdminGeneralManagerForm] = React.useState<{ name: string; phone: string; pin: string; selectedGarages: string[] }>({
+    name: '',
+    phone: '',
+    pin: '',
+    selectedGarages: []
+  });
+  const [isSubmittingGeneralManager, setIsSubmittingGeneralManager] = React.useState(false);
+  const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
+  const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
+  const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
   const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string }>({
     name: '',
     hourlyRate: '',
@@ -368,6 +380,70 @@ export const AdminDashboard = memo(({
     }
   };
 
+  const handleCreateGeneralManager = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = (adminGeneralManagerForm?.name || '').trim();
+    const cleanPhone = (adminGeneralManagerForm?.phone || '').replace(/\D/g, '');
+    const cleanPin = (adminGeneralManagerForm?.pin || '').replace(/\D/g, '');
+    const cleanGarages = adminGeneralManagerForm?.selectedGarages || [];
+
+    if (!cleanName || !cleanPhone || !cleanPin) {
+      showToast('يرجى إكمال جميع الحقول المطلوبة بشكل صحيح', 'error');
+      return;
+    }
+    
+    if (cleanPhone.length < 10) {
+      showToast('رقم الموبايل يجب أن يكون 10 أرقام على الأقل', 'error');
+      return;
+    }
+
+    if (cleanPin.length < 4) {
+      showToast('رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
+      return;
+    }
+
+    if (cleanGarages.length === 0) {
+      showToast('يرجى اختيار جراج واحد على الأقل للمدير العام', 'error');
+      return;
+    }
+
+    setIsSubmittingGeneralManager(true);
+    try {
+      await firestoreService.addGeneralManager({
+        name: cleanName,
+        phone: cleanPhone,
+        pin: cleanPin,
+        garageIds: cleanGarages,
+        role: 'general_manager',
+        createdAt: new Date(),
+      } as Omit<GeneralManager, 'id'>);
+      
+      setAdminGeneralManagerForm({ 
+        name: '', 
+        phone: '', 
+        pin: '',
+        selectedGarages: []
+      });
+      showToast('تم إضافة المدير العام بنجاح');
+    } catch (error: any) {
+      console.error('Failed to add general manager:', error);
+      const errMsg = error?.message || String(error);
+      showToast('حدث خطأ أثناء إضافة المدير العام: ' + errMsg, 'error');
+    } finally {
+      setIsSubmittingGeneralManager(false);
+    }
+  };
+
+  const toggleGarageSelection = (garageId: string) => {
+    setAdminGeneralManagerForm(prev => {
+      const alreadySelected = prev.selectedGarages.includes(garageId);
+      const updated = alreadySelected
+        ? prev.selectedGarages.filter(id => id !== garageId)
+        : [...prev.selectedGarages, garageId];
+      return { ...prev, selectedGarages: updated };
+    });
+  };
+
   const handleAddGarage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     await createNewGarage(e);
@@ -430,6 +506,7 @@ export const AdminDashboard = memo(({
                 activeTab === 'requests' ? t('الطلبات والمراجعات') :
                 activeTab === 'reports' ? t('التقارير الذكية') :
                 activeTab === 'supervisors' ? t('المشرفين') :
+                activeTab === 'general_managers' ? t('المدراء العموم') :
                 activeTab === 'wallet' ? t('رقم المحفظة') :
                 activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') : t('لوحة تحكم النظام')
               )}
@@ -724,6 +801,21 @@ export const AdminDashboard = memo(({
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المشرفين')}</h3>
                   <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                     {supervisors.length} {t('مشرف')}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Card 6.5: General Managers (المدراء العموم) - Only for Super Admin */}
+            {!currentSupervisor && (
+              <div 
+                onClick={() => setActiveTab('general_managers')}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
+              >
+                <div className="flex items-center justify-between relative z-10">
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المدراء العموم')}</h3>
+                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                    {generalManagers.length} {t('مدير عام')}
                   </span>
                 </div>
               </div>
@@ -1208,6 +1300,254 @@ export const AdminDashboard = memo(({
                       <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
                         <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
                         {t('لا يوجد مشرفين منشئين حالياً')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : activeTab === 'general_managers' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <section className="lg:col-span-1">
+              <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
+                    <Plus className="w-5 h-5 text-white dark:text-white" />
+                  </div>
+                  {t('إضافة مدير عام جديد')}
+                </h2>
+                <form onSubmit={handleCreateGeneralManager} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المدير العام')}</label>
+                    <input 
+                      value={adminGeneralManagerForm?.name || ''}
+                      onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, name: e.target.value})}
+                      placeholder={t('الاسم الثلاثي...')} 
+                      required 
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رقم الموبايل')}</label>
+                    <input 
+                      value={adminGeneralManagerForm?.phone || ''}
+                      onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, phone: e.target.value})}
+                      placeholder="01xxxxxxxxx" 
+                      required 
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رمز الدخول (PIN من 4-6 أرقام)')}</label>
+                    <div className="relative">
+                      <input 
+                        type="tel"
+                        inputMode="numeric"
+                        value={adminGeneralManagerForm?.pin || ''}
+                        onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, pin: e.target.value.replace(/\D/g, '')})}
+                        placeholder="••••" 
+                        maxLength={6}
+                        required 
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold text-center tracking-[0.5em] transition-all px-14" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminGeneralManagerForm({...adminGeneralManagerForm, pin: Math.floor(1000 + Math.random() * 9000).toString()});
+                        }}
+                        className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-400/20 transition-colors"
+                        title={t('توليد رقم سري عشوائي')}
+                      >
+                        <RefreshCw className="w-5 h-5 mx-auto" strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة للمدير العام')}</label>
+                    <div className="max-h-48 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-2.5">
+                      {approvedGarages.map(g => (
+                        <div 
+                          key={g.id}
+                          onClick={() => toggleGarageSelection(g.id)}
+                          className="flex items-center gap-3 cursor-pointer select-none"
+                        >
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                            adminGeneralManagerForm.selectedGarages.includes(g.id)
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-slate-300 dark:border-slate-600'
+                          }`}>
+                            {adminGeneralManagerForm.selectedGarages.includes(g.id) && <Check className="w-3.5 h-3.5 stroke-[3.5]" />}
+                          </div>
+                          <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">{g.name}</span>
+                        </div>
+                      ))}
+                      {approvedGarages.length === 0 && (
+                        <span className="text-slate-400 text-xs font-bold block text-center">{t('لا يوجد جراجات معتمدة حالياً')}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={isSubmittingGeneralManager}
+                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-3 mt-4 transition-all outline-none"
+                  >
+                    {isSubmittingGeneralManager ? <Spinner /> : (
+                      <>
+                        <Plus className="w-6 h-6" />
+                        <span>{t('إضافة مدير عام')}</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </section>
+
+            <section className="lg:col-span-2">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
+                <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
+                      <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
+                    </div>
+                    {t('قائمة المدراء العموم بالمنصة')}
+                    <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({generalManagers.length})</span>
+                  </h2>
+                </div>
+                <div className="p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {generalManagers.map((gm) => (
+                      <div 
+                        key={gm.id} 
+                        className="p-5 bg-slate-50 dark:bg-slate-800/20 border-2 border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between h-44 transition-all hover:border-slate-300 dark:hover:border-slate-700 relative group"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black text-sm">
+                              {gm.name.charAt(0)}
+                            </div>
+                            <div className="space-y-0.5">
+                              <h4 className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm truncate max-w-[140px] leading-snug">{gm.name}</h4>
+                              <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[9px]">
+                                <Phone className="w-2.5 h-2.5" />
+                                <span>{gm.phone}</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1.5 max-h-[44px] overflow-y-auto">
+                                {(gm.garageIds || []).map(gid => {
+                                  const grg = allGarages.find(g => g.id === gid);
+                                  return (
+                                    <span key={gid} className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/45 text-emerald-600 dark:text-emerald-400 border border-emerald-100/40 dark:border-emerald-800/30">
+                                      {grg ? grg.name : gid}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmDialog({
+                                isOpen: true,
+                                title: t('حذف المدير العام'),
+                                message: adminLang === 'en' ? `Are you sure you want to delete general manager "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف المدير العام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+                                confirmText: t('نعم، احذف'),
+                                cancelText: t('إلغاء'),
+                                type: 'danger',
+                                onConfirm: async () => {
+                                  try {
+                                    await firestoreService.removeGeneralManager(gm.id);
+                                    showToast(t('تم حذف المدير العام بنجاح'));
+                                  } catch (error) {
+                                    console.error(error);
+                                    showToast(t('فشل حذف المدير العام'), 'error');
+                                  } finally {
+                                    setConfirmDialog(p => ({ ...p, isOpen: false }));
+                                  }
+                                }
+                              });
+                            }}
+                            className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+                            title={t('إلغاء صلاحيات المدير العام')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
+                          {editingGeneralManagerPinId === gm.id ? (
+                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+                              <input
+                                type="tel"
+                                inputMode="numeric"
+                                value={editingGeneralManagerPinValue}
+                                maxLength={6}
+                                onChange={(e) => setEditingGeneralManagerPinValue(e.target.value.replace(/\D/g, ''))}
+                                className="w-12 bg-transparent text-slate-800 dark:text-slate-200 text-[10px] font-black text-center focus:outline-none focus:ring-0 border-0 p-0 font-mono"
+                                placeholder="••••"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (editingGeneralManagerPinValue.length < 4) {
+                                    showToast(t('رمز الدخول يجب أن يكون 4 أرقام على الأقل'), 'error');
+                                    return;
+                                  }
+                                  setIsUpdatingGeneralManagerPin(true);
+                                  try {
+                                    await firestoreService.updateGeneralManager(gm.id, { pin: editingGeneralManagerPinValue });
+                                    gm.pin = editingGeneralManagerPinValue;
+                                    setEditingGeneralManagerPinId(null);
+                                    showToast(t('تم تحديث الرمز بنجاح'));
+                                  } catch (err) {
+                                    showToast(t('فشل تحديث الرمز'), 'error');
+                                  } finally {
+                                    setIsUpdatingGeneralManagerPin(false);
+                                  }
+                                }}
+                                disabled={isUpdatingGeneralManagerPin}
+                                className="w-4 h-4 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 transition-colors cursor-pointer"
+                              >
+                                {isUpdatingGeneralManagerPin ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingGeneralManagerPinId(null)}
+                                className="text-[9px] font-bold text-slate-400 px-0.5 hover:underline"
+                              >
+                                {t('إلغاء')}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                              <Key className="w-3.5 h-3.5" />
+                              <span className="text-[11px] font-black font-mono tracking-widest">{gm.pin}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingGeneralManagerPinId(gm.id);
+                                  setEditingGeneralManagerPinValue(gm.pin || '');
+                                }}
+                                className="text-[9px] text-emerald-500 font-bold hover:underline"
+                              >
+                                {t('تعديل')}
+                              </button>
+                            </div>
+                          )}
+                          <span className="text-[8px] font-black px-2.5 py-1 bg-purple-550/10 rounded-md text-purple-650 dark:text-purple-400">
+                            {t('مدير عام لجراج أو أكثر')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {generalManagers.length === 0 && (
+                      <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
+                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        {t('لا يوجد مدراء عموم منشئين حالياً')}
                       </div>
                     )}
                   </div>
