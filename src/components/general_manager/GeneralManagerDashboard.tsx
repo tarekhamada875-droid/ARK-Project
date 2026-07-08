@@ -43,23 +43,35 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
       <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white dark:bg-slate-900 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
-          {/* Manager Info */}
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center font-black text-lg border border-purple-100 dark:border-purple-900/30">
-              {currentGeneralManager.name.charAt(0)}
+          {/* Manager Info or Back Button */}
+          {selectedGarage ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedGarageId(null)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-all font-bold text-xs sm:text-sm shadow-sm outline-none cursor-pointer"
+              >
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                <span>العودة لقائمة الجراجات</span>
+              </button>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-none">
-                  {currentGeneralManager.name}
-                </h1>
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-100/50 dark:border-purple-900/20">
-                  المدير العام
-                </span>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center font-black text-lg border border-purple-100 dark:border-purple-900/30">
+                {currentGeneralManager.name.charAt(0)}
               </div>
-              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider">شاشة الإحصائيات الحية</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-none">
+                    {currentGeneralManager.name}
+                  </h1>
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-100/50 dark:border-purple-900/20">
+                    المدير العام
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider">شاشة الإحصائيات الحية</p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
@@ -169,25 +181,12 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
         ) : (
           /* Detailed Garage Statistics Display */
           <div className="space-y-6">
-            {/* Back Button and Page Header */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setSelectedGarageId(null)}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-all font-bold text-xs sm:text-sm shadow-sm outline-none cursor-pointer"
-              >
-                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-                <span>العودة لقائمة الجراجات</span>
-              </button>
-
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500">تفاصيل الجراج الحالية</span>
-            </div>
-
             <div className="space-y-8">
               
               {/* Active Indicator Header Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 p-6 sm:p-8 rounded-[2rem] flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-sm shadow-slate-200/5">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 p-6 sm:p-8 rounded-[2rem] flex justify-between items-center gap-6 shadow-sm shadow-slate-200/5">
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <h2 className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white leading-none">
                       {selectedGarage.name}
                     </h2>
@@ -208,11 +207,11 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3 self-stretch md:self-auto border-t md:border-t-0 border-slate-100 dark:border-slate-800 pt-4 md:pt-0">
-                  <div className="text-right">
-                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">موبايل الجراج</p>
-                    <p className="text-sm font-black text-slate-900 dark:text-white mt-1.5 font-mono" dir="ltr">{selectedGarage.phone}</p>
-                  </div>
+                <div className="text-left shrink-0">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">الرصيد الحالي</p>
+                  <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                    {selectedGarage.balance || 0} <span className="text-[11px] font-bold text-slate-500">ج.م</span>
+                  </p>
                 </div>
               </div>
 
