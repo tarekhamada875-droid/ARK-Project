@@ -547,7 +547,7 @@ export const AdminDashboard = memo(({
                         </div>
                         <div className={`flex flex-col ${adminLang === 'en' ? 'text-left' : 'text-right'}`}>
                           <span className="text-sm font-black text-slate-900 dark:text-slate-100 truncate max-w-[150px]">
-                            {currentSupervisor ? currentSupervisor.name : t('المدير العام')}
+                            {currentSupervisor ? currentSupervisor.name : t('مالك النظام')}
                           </span>
                           <span className="text-[10px] font-black text-slate-400 dark:text-slate-550 uppercase tracking-wider">
                             {currentSupervisor ? t('مشرف نظام') : t('مسؤول النظام')}

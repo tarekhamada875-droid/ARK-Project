@@ -732,7 +732,7 @@ export function useGarageApp() {
             await firestoreService.updateGeneralManagerSession(gmData.id, sessionId);
             setCurrentGeneralManager(gmData);
             setView('general_manager_dashboard');
-            showToast(`مرحباً بك يا ${gmData.name} (المدير العام)`);
+            showToast(`مرحباً بك يا ${gmData.name} (مالك النظام)`);
           };
 
           if (gmData.currentSessionId && gmData.currentSessionId !== sessionId && isSessionActive(gmData.lastActive, currentOffset)) {

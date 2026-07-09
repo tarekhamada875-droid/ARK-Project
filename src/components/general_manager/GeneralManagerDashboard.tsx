@@ -93,7 +93,7 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
                     {currentGeneralManager.name}
                   </h1>
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-100/50 dark:border-purple-900/20">
-                    المدير العام
+                    مالك النظام
                   </span>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider">شاشة الإحصائيات الحية</p>

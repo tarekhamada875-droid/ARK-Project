@@ -8,6 +8,7 @@ export type AdminLang = 'ar' | 'en';
 const dictionary: Record<string, string> = {
   // Shared & Roles
   'المدير العام': 'Super Admin',
+  'مالك النظام': 'System Owner',
   'مسؤول النظام': 'System Administrator',
   'لوحة تحكم النظام': 'System Control Panel',
   'وضع الشاشة:': 'Screen Mode:',
