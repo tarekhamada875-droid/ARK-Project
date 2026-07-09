@@ -961,5 +961,25 @@ export const firestoreService = {
       });
       callback(data.slice(0, limitCount));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'activity_logs'));
+  },
+
+  recalculateCarsInside: async (garageId: string): Promise<number> => {
+    try {
+      const q = query(
+        collection(db, `garages/${garageId}/vehicles`),
+        where('status', '==', 'inside')
+      );
+      const snapshot = await getDocs(q);
+      const actualCount = snapshot.size;
+
+      await updateDoc(doc(db, 'garages', garageId), {
+        carsInside: actualCount
+      });
+
+      return actualCount;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/recalculateCarsInside`);
+      throw error;
+    }
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LogOut, 
   Moon, 
@@ -7,10 +7,14 @@ import {
   Calendar,
   AlertCircle,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { Garage, GeneralManager } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
+import { firestoreService } from '../../services/firestoreService';
 
 interface GeneralManagerDashboardProps {
   currentGeneralManager: GeneralManager;
@@ -34,6 +38,30 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
 
   // Keep track of currently selected garage id
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+
+  // Background auto-sync when a garage is selected
+  useEffect(() => {
+    if (selectedGarageId) {
+      firestoreService.recalculateCarsInside(selectedGarageId).catch(console.error);
+    }
+  }, [selectedGarageId]);
+
+  const handleManualSync = async () => {
+    if (!selectedGarageId || isSyncing) return;
+    setIsSyncing(true);
+    setSyncSuccess(false);
+    try {
+      await firestoreService.recalculateCarsInside(selectedGarageId);
+      setSyncSuccess(true);
+      setTimeout(() => setSyncSuccess(false), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const selectedGarage = selectedGarageId ? assignedGarages.find(g => g.id === selectedGarageId) : null;
 
@@ -231,7 +259,23 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
 
                 {/* Card 2: Cars Currently Inside */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 p-5 rounded-3xl flex items-center justify-between shadow-sm">
-                  <p className="text-sm font-black text-slate-700 dark:text-slate-300">السيارات بالداخل حالياً</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black text-slate-700 dark:text-slate-300">السيارات بالداخل حالياً</p>
+                    <button
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      className="p-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 transition-all outline-none cursor-pointer"
+                      title="مزامنة العداد الفعلي"
+                    >
+                      {isSyncing ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                      ) : syncSuccess ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                   <div className="flex items-baseline gap-1 bg-indigo-50 dark:bg-indigo-950/30 px-4 py-2 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/30">
                     <span className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
                       {typeof selectedGarage.carsInside === 'number' ? Math.max(0, selectedGarage.carsInside) : (selectedGarage.activePlates ? Object.keys(selectedGarage.activePlates).length : 0)}

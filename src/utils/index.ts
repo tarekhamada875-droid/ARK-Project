@@ -60,6 +60,20 @@ export const normalizeLetters = (val: string): string => {
             .replace(/[ى]/g, 'ي');
 };
 
+/**
+ * Normalizes Arabic text for flexible and resilient searching.
+ * Treats Alef variations as identical, Heh/Teh Marbuta as identical, and Yeh/Alef Maksura as identical.
+ */
+export const normalizeArabicSearch = (text: string): string => {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/[ةه]/g, 'ه')
+    .replace(/[ىي]/g, 'ي')
+    .trim();
+};
+
 export const getCleanPlate = (val: string): string => {
   if (!val) return '';
   const letters: string[] = [];

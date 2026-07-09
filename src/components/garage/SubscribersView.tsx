@@ -5,7 +5,7 @@ import { auth } from '../../firebase';
 import { AnimatedCounter } from '../AnimatedCounter';
 import { MovingBalanceArrows } from './MovingBalanceArrows';
 import { Subscriber } from '../../types';
-import { getCleanPlate, getRawPlate, formatPlateNumber } from '../../utils';
+import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch } from '../../utils';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 
@@ -169,8 +169,14 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
   }, [garage.id, isAuthResolved]);
 
   const filteredSubscribers = subscribers.filter(s => {
-    const q = searchQuery.toLowerCase();
-    return s.plateNumber.includes(q) || s.ownerName.toLowerCase().includes(q) || s.phone.includes(q);
+    const q = normalizeArabicSearch(searchQuery);
+    if (!q) return true;
+    
+    const normalizedPlate = normalizeArabicSearch(s.plateNumber);
+    const normalizedName = normalizeArabicSearch(s.ownerName);
+    const normalizedPhone = normalizeArabicSearch(s.phone);
+    
+    return normalizedPlate.includes(q) || normalizedName.includes(q) || normalizedPhone.includes(q);
   });
 
   const getStatus = (endStr: string) => {

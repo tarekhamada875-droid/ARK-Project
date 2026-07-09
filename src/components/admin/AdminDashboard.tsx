@@ -36,7 +36,7 @@ import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
-import { generateSafePin } from '../../utils';
+import { generateSafePin, normalizeArabicSearch } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
 import { AdminReportsView } from './AdminReportsView';
 
@@ -461,10 +461,13 @@ export const AdminDashboard = memo(({
   }, [allGarages]);
 
   const filteredGarages = React.useMemo(() => {
-    return approvedGarages.filter(g => 
-      g.name.toLowerCase().includes(adminSearch.toLowerCase()) || 
-      (g.phone || '').includes(adminSearch)
-    );
+    const q = normalizeArabicSearch(adminSearch);
+    if (!q) return approvedGarages;
+    return approvedGarages.filter(g => {
+      const normalizedName = normalizeArabicSearch(g.name);
+      const phoneMatch = (g.phone || '').includes(adminSearch);
+      return normalizedName.includes(q) || phoneMatch;
+    });
   }, [approvedGarages, adminSearch]);
 
   const totalAdminRevenue = React.useMemo(() => {
