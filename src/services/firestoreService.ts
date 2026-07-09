@@ -394,45 +394,49 @@ export const firestoreService = {
   },
 
 
-  checkOutVehicle: async (garageId: string, vehicleId: string, cost: number, currentGarage?: Garage) => {
+  checkOutVehicle: async (garageId: string, vehicleId: string, cost: number) => {
     try {
-      const garageRef = doc(db, 'garages', garageId);
-      const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
-      const today = new Date().toISOString().split('T')[0];
+      return await runTransaction(db, async (transaction) => {
+        const garageRef = doc(db, 'garages', garageId);
+        const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
+        const today = new Date().toISOString().split('T')[0];
 
-      // Use provided garage data or fetch it (fallback)
-      let garageData = currentGarage;
-      if (!garageData) {
-        const garageDoc = await getDoc(garageRef);
-        if (!garageDoc.exists()) throw new Error('Garage not found');
-        garageData = { id: garageDoc.id, ...garageDoc.data() } as Garage;
-      }
-      
-      const batch = writeBatch(db);
-      
-      // 1. Update vehicle record status to outside, set exitTime and totalCost
-      batch.update(vehicleRef, {
-        status: 'outside',
-        exitTime: serverTimestamp(),
-        totalCost: cost
+        const [vehicleDoc, garageDoc] = await Promise.all([
+          transaction.get(vehicleRef),
+          transaction.get(garageRef)
+        ]);
+
+        if (!vehicleDoc.exists()) throw new Error('VEHICLE_NOT_FOUND');
+        if (!garageDoc.exists()) throw new Error('GARAGE_NOT_FOUND');
+
+        const vehicleData = vehicleDoc.data();
+        if (vehicleData.status === 'outside') {
+          throw new Error('ALREADY_OUTSIDE');
+        }
+
+        // 1. Update vehicle record status to outside, set exitTime and totalCost
+        transaction.update(vehicleRef, {
+          status: 'outside',
+          exitTime: serverTimestamp(),
+          totalCost: cost
+        });
+
+        const garageDocData = garageDoc.data();
+        const isNewDay = garageDocData.lastTransactionDate !== today;
+
+        // 2. Update garage stats and remove the deprecated recentExits array
+        const updateData: any = {
+          totalRevenue: increment(cost),
+          totalVehiclesOut: increment(1),
+          todayRevenue: isNewDay ? cost : increment(cost),
+          todayCount: isNewDay ? 1 : increment(1),
+          lastTransactionDate: today,
+          carsInside: increment(-1),
+          recentExits: deleteField() // Completely free the garage document from the list limit
+        };
+
+        transaction.update(garageRef, updateData);
       });
-
-      const isNewDay = garageData.lastTransactionDate !== today;
-
-      // 2. Update garage stats and remove the deprecated recentExits array
-      const updateData: any = {
-        totalRevenue: increment(cost),
-        totalVehiclesOut: increment(1),
-        todayRevenue: isNewDay ? cost : increment(cost),
-        todayCount: isNewDay ? 1 : increment(1),
-        lastTransactionDate: today,
-        carsInside: increment(-1),
-        recentExits: deleteField() // Completely free the garage document from the list limit
-      };
-
-      batch.update(garageRef, updateData);
-      await batch.commit();
-
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/vehicles/${vehicleId}/checkout`);
       throw error;

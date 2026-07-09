@@ -130,6 +130,11 @@ export function useGarageApp() {
   
   const inputRef = useRef<HTMLDivElement>(null);
 
+  const garageRef = useRef<Garage | null>(null);
+  useEffect(() => {
+    garageRef.current = garage;
+  }, [garage]);
+
   // Subscribe to Active Vehicles
   useEffect(() => {
     if (!garage?.id) {
@@ -138,14 +143,15 @@ export function useGarageApp() {
     }
     const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
       setVehicles(activeVehicles);
-      if (garage && (typeof garage.carsInside !== 'number' || garage.carsInside !== activeVehicles.length)) {
-        firestoreService.updateGarage(garage.id, { carsInside: activeVehicles.length }).catch((err) => {
+      const currentGarage = garageRef.current;
+      if (currentGarage && (typeof currentGarage.carsInside !== 'number' || currentGarage.carsInside !== activeVehicles.length)) {
+        firestoreService.updateGarage(currentGarage.id, { carsInside: activeVehicles.length }).catch((err) => {
           console.warn('Failed to heal carsInside:', err);
         });
       }
     });
     return () => unsub();
-  }, [garage?.id, garage?.carsInside]);
+  }, [garage?.id]);
 
   // Subscribe to completed transactions
   useEffect(() => {
@@ -399,7 +405,7 @@ export function useGarageApp() {
       unsubGeneralManagers();
       unsubPackages();
     };
-  }, [isAuthReady, user, view, isOnline]);
+  }, [isAuthReady, user, view]);
 
   // Load Admin specific garage details once
   useEffect(() => {
@@ -420,7 +426,7 @@ export function useGarageApp() {
     };
 
     fetchSpecificData();
-  }, [isAuthReady, user, view, selectedGarageForDetails?.id, isOnline]);
+  }, [isAuthReady, user, view, selectedGarageForDetails?.id]);
 
   // Real-time garage context listener for the active garage
   useEffect(() => {
@@ -458,7 +464,7 @@ export function useGarageApp() {
         return () => unsubGarage();
       }
     }
-  }, [user?.uid, isAuthReady, garage?.id, selectedGarageForDetails?.id, view, delegate?.id, isOnline, loadGarageData]);
+  }, [user?.uid, isAuthReady, garage?.id, selectedGarageForDetails?.id, view, delegate?.id, loadGarageData]);
 
   // Cooperative session collision checker
   useEffect(() => {
@@ -1120,7 +1126,7 @@ export function useGarageApp() {
     try {
       const cost = calculateCost(selectedVehicle, garage, now);
 
-      await firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost, garage);
+      await firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost);
       
       await firestoreService.addActivityLog({
         garageId: garage.id,
@@ -1136,10 +1142,30 @@ export function useGarageApp() {
       setNewPlateNumber('');
     } catch (error: any) {
       console.error('CheckOut Error:', error);
-      const errorMsg = error?.message?.includes('{') 
-        ? 'مشكلة في البيانات، حاول مرة أخرى' 
-        : (error?.message || 'حدث خطأ أثناء الخروج');
-      showToast(errorMsg === 'Vehicle not found' ? 'لم يتم العثور على بيانات السيارة' : errorMsg, 'error');
+      let errMsg = 'حدث خطأ أثناء الخروج';
+      
+      try {
+        const message = error?.message || '';
+        if (message.startsWith('{') && message.endsWith('}')) {
+          const parsed = JSON.parse(message);
+          const rawErr = parsed.error;
+          if (rawErr === 'ALREADY_OUTSIDE') {
+            errMsg = 'هذه السيارة تم تسجيل خروجها بالفعل (من جهاز آخر)';
+          } else if (rawErr === 'VEHICLE_NOT_FOUND') {
+            errMsg = 'لم يتم العثور على بيانات السيارة';
+          } else if (rawErr === 'GARAGE_NOT_FOUND') {
+            errMsg = 'لم يتم العثور على الجراج';
+          } else {
+            errMsg = rawErr || 'مشكلة في البيانات، حاول مرة أخرى';
+          }
+        } else {
+          errMsg = message || 'حدث خطأ أثناء الخروج';
+        }
+      } catch (e) {
+        errMsg = error?.message || 'حدث خطأ أثناء الخروج';
+      }
+      
+      showToast(errMsg, 'error');
     } finally {
       setIsLoading(false);
       setLoadingType(null);
