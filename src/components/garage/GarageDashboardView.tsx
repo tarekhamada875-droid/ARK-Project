@@ -276,6 +276,16 @@ export const GarageDashboardView = memo(({
 
     return () => observer.disconnect();
   }, [vehicles.length, visibleCount, currentView]);
+
+  const navigateTo = (viewName: 'subscribers' | 'reports' | 'packages' | 'history' | 'staff' | 'appearance') => {
+    setShowMenu(false);
+    setShowSubscribers(viewName === 'subscribers');
+    setShowGarageReports(viewName === 'reports');
+    setShowPackages(viewName === 'packages');
+    setShowRechargeHistory(viewName === 'history');
+    setShowStaffStats(viewName === 'staff');
+    setShowAppearanceSettings(viewName === 'appearance');
+  };
   
   return (
     <div className="h-[100dvh] bg-[#faf9f6] dark:bg-slate-950 font-sans w-full flex flex-col items-center overflow-hidden relative" dir="rtl">
@@ -306,171 +316,171 @@ export const GarageDashboardView = memo(({
               </button>
             </div>
           </div>
-          
-          {/* Dropdown Menu Overlay - Upgraded to Floating Side Sheet Drawer */}
-          <AnimatePresence>
-            {showMenu && (
-              <>
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setShowMenu(false)}
-                  className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm z-50 pointer-events-auto"
-                  style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
-                />
-                
-                <motion.div 
-                  initial={{ x: '-100%', opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: '-100%', opacity: 0 }}
-                  transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-                  className="fixed top-3 bottom-3 left-3 w-[220px] xs:w-[245px] bg-[#faf9f6] dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800/80 z-50 flex flex-col overflow-hidden pointer-events-auto"
-                  style={{ willChange: 'transform, opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
-                  dir="rtl"
-                >
-                  {/* Drawer Header - Clean Profile Box */}
-                  <div className="p-4 pb-3 border-b border-slate-100 dark:border-slate-800/60">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0"
-                          style={{ backgroundColor: activeShimmerColor }}
-                        >
-                          <Shield className="w-5 h-5" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-xs font-black text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
-                            {currentStaff ? currentStaff.name : 'مدير الجراج'}
-                          </span>
-                          <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
-                            {currentStaff ? 'موظف وردية' : 'إدارة الجراج'}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        type="button"
-                        onClick={() => setShowMenu(false)}
-                        className="w-8 h-8 bg-red-500 dark:bg-red-600 text-white rounded-lg flex items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition-colors outline-none shrink-0"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Drawer Content Area */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar-slate">
-                    
-                    {/* Menu Options Group */}
-                    <div className="space-y-2">
-                      {!currentStaff && (
-                        <button 
-                          onClick={() => { setShowMenu(false); setShowSubscribers(true); }}
-                          className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-400/10 text-blue-500 flex items-center justify-center">
-                              <Users className="w-4 h-4" />
-                            </div>
-                            <span className="font-bold text-sm">الأشتراكات</span>
-                          </div>
-                          {subscribersCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-red-600 text-white dark:bg-red-500 dark:text-slate-950 text-xs font-black">
-                              {subscribersCount}
-                            </span>
-                          )}
-                        </button>
-                      )}
-
-                      {!currentStaff && (
-                        <button 
-                          onClick={() => { setShowMenu(false); setShowGarageReports(true); }}
-                          className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none animate-fade-in"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-400/10 text-purple-500 flex items-center justify-center">
-                              <PieChart className="w-4 h-4 text-purple-500" />
-                            </div>
-                            <span className="font-bold text-sm">التقارير الذكية</span>
-                          </div>
-                        </button>
-                      )}
-                      
-                      <button 
-                        onClick={() => { setShowMenu(false); setShowPackages(true); }}
-                        className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-400/10 text-amber-500 flex items-center justify-center">
-                            <Zap className="w-4 h-4 fill-current text-amber-500" />
-                          </div>
-                          <span className="font-bold text-sm">باقات الشحن</span>
-                        </div>
-                      </button>
-
-                      <button 
-                        onClick={() => { setShowMenu(false); setShowRechargeHistory(true); }}
-                        className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-400/10 text-rose-500 flex items-center justify-center">
-                            <Bell className="w-4 h-4 text-rose-500" />
-                          </div>
-                          <span className="font-bold text-sm">تاريخ الشحن</span>
-                        </div>
-                        {hasNewRecharge && (
-                          <span className="px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 text-xs font-black flex items-center gap-1">
-                            <span className="w-1 h-1 bg-rose-500 rounded-full" />
-                            شحن جديد
-                          </span>
-                        )}
-                      </button>
-
-                      {!currentStaff && (
-                        <button 
-                          onClick={() => { setShowMenu(false); setShowStaffStats(true); }}
-                          className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-400/10 text-teal-500 flex items-center justify-center">
-                              <Users className="w-4 h-4" />
-                            </div>
-                            <span className="font-bold text-sm">موظفي الوردية</span>
-                          </div>
-                        </button>
-                      )}
-                      <button 
-                        onClick={() => { setShowMenu(false); setShowAppearanceSettings(true); }}
-                        className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
-                            <Sliders className="w-4 h-4 text-indigo-500" />
-                          </div>
-                          <span className="font-bold text-sm">إعدادات المظهر</span>
-                        </div>
-                      </button>
-                    </div>
-
-                  </div>
-
-                  {/* Drawer Footer */}
-                  <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-900/40">
-                    <button 
-                      onClick={() => { setShowMenu(false); onLogout(); }}
-                      className="w-full flex items-center justify-center gap-2.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all font-black text-sm outline-none"
-                    >
-                      <LogOut className="w-5 h-5 rotate-180" />
-                      <span>تسجيل الخروج</span>
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
         </header>
       )}
+      
+      {/* Dropdown Menu Overlay - Upgraded to Floating Side Sheet Drawer */}
+      <AnimatePresence>
+        {showMenu && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMenu(false)}
+              className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm z-[150] pointer-events-auto"
+              style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+            />
+            
+            <motion.div 
+              initial={{ x: '-100%', opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '-100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+              className="fixed top-3 bottom-3 left-3 w-[220px] xs:w-[245px] bg-[#faf9f6] dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800/80 z-[150] flex flex-col overflow-hidden pointer-events-auto"
+              style={{ willChange: 'transform, opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+              dir="rtl"
+            >
+              {/* Drawer Header - Clean Profile Box */}
+              <div className="p-4 pb-3 border-b border-slate-100 dark:border-slate-800/60">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0"
+                      style={{ backgroundColor: activeShimmerColor }}
+                    >
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-black text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
+                        {currentStaff ? currentStaff.name : 'مدير الجراج'}
+                      </span>
+                      <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
+                        {currentStaff ? 'موظف وردية' : 'إدارة الجراج'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    type="button"
+                    onClick={() => setShowMenu(false)}
+                    className="w-8 h-8 bg-red-500 dark:bg-red-600 text-white rounded-lg flex items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition-colors outline-none shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Content Area */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar-slate">
+                
+                {/* Menu Options Group */}
+                <div className="space-y-2">
+                  {!currentStaff && (
+                    <button 
+                      onClick={() => navigateTo('subscribers')}
+                      className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-400/10 text-blue-500 flex items-center justify-center">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span className="font-bold text-sm">الأشتراكات</span>
+                      </div>
+                      {subscribersCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-red-600 text-white dark:bg-red-500 dark:text-slate-950 text-xs font-black">
+                          {subscribersCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
+
+                  {!currentStaff && (
+                    <button 
+                      onClick={() => navigateTo('reports')}
+                      className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none animate-fade-in"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-400/10 text-purple-500 flex items-center justify-center">
+                          <PieChart className="w-4 h-4 text-purple-500" />
+                        </div>
+                        <span className="font-bold text-sm">التقارير الذكية</span>
+                      </div>
+                    </button>
+                  )}
+                  
+                  <button 
+                    onClick={() => navigateTo('packages')}
+                    className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-400/10 text-amber-500 flex items-center justify-center">
+                        <Zap className="w-4 h-4 fill-current text-amber-500" />
+                      </div>
+                      <span className="font-bold text-sm">باقات الشحن</span>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => navigateTo('history')}
+                    className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-400/10 text-rose-500 flex items-center justify-center">
+                        <Bell className="w-4 h-4 text-rose-500" />
+                      </div>
+                      <span className="font-bold text-sm">تاريخ الشحن</span>
+                    </div>
+                    {hasNewRecharge && (
+                      <span className="px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 text-xs font-black flex items-center gap-1">
+                        <span className="w-1 h-1 bg-rose-500 rounded-full" />
+                        شحن جديد
+                      </span>
+                    )}
+                  </button>
+
+                  {!currentStaff && (
+                    <button 
+                      onClick={() => navigateTo('staff')}
+                      className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-400/10 text-teal-500 flex items-center justify-center">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span className="font-bold text-sm">موظفي الوردية</span>
+                      </div>
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => navigateTo('appearance')}
+                    className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
+                        <Sliders className="w-4 h-4 text-indigo-500" />
+                      </div>
+                      <span className="font-bold text-sm">إعدادات المظهر</span>
+                    </div>
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-900/40">
+                <button 
+                  onClick={() => { setShowMenu(false); onLogout(); }}
+                  className="w-full flex items-center justify-center gap-2.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all font-black text-sm outline-none"
+                >
+                  <LogOut className="w-5 h-5 rotate-180" />
+                  <span>تسجيل الخروج</span>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <main className={`max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto p-4 w-full flex-1 flex flex-col gap-4 md:gap-10 overscroll-contain overflow-y-auto ${isInputFocused ? 'gap-3 pt-3 pb-3' : 'gap-4'}`}>
         {/* Persistent, always mounted Balance Card to prevent unmount navigation glitches */}
@@ -687,6 +697,7 @@ export const GarageDashboardView = memo(({
           garage={garage}
           onClose={() => setShowSubscribers(false)}
           showToast={showToast}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 
@@ -698,6 +709,7 @@ export const GarageDashboardView = memo(({
             setHasNewRecharge(false);
           }}
           showToast={showToast}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 
@@ -707,6 +719,7 @@ export const GarageDashboardView = memo(({
           onClose={() => setShowPackages(false)}
           garageHourlyRate={garage.hourlyRate}
           walletNumber={walletNumber}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 
@@ -717,6 +730,7 @@ export const GarageDashboardView = memo(({
           todayExitedVehicles={todayTransactions}
           onClose={() => setShowStaffStats(false)}
           now={now}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 
@@ -727,6 +741,7 @@ export const GarageDashboardView = memo(({
           todayExitedVehicles={todayTransactions}
           staffList={staffList}
           onClose={() => setShowGarageReports(false)}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 
@@ -736,6 +751,7 @@ export const GarageDashboardView = memo(({
           currentStaff={currentStaff}
           onClose={() => setShowAppearanceSettings(false)}
           showToast={showToast}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
 

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Package } from '../../types';
-import { X } from 'lucide-react';
+import { X, Menu } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
   onClose: () => void;
   garageHourlyRate: number;
   walletNumber?: string;
+  onToggleMenu?: () => void;
 }
 
-export const PackagesModal: React.FC<PackagesModalProps> = ({ packages, onClose, garageHourlyRate, walletNumber = "015 - 524 - 113 - 23" }) => {
+export const PackagesModal: React.FC<PackagesModalProps> = ({ packages, onClose, garageHourlyRate, walletNumber = "015 - 524 - 113 - 23", onToggleMenu }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const formatNumber = (num: number | string) => {
@@ -26,12 +27,23 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({ packages, onClose,
               <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter transition-colors">اختر الباقة المناسبة لشحن جراجك</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={onClose}
+              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            {onToggleMenu && (
+              <button 
+                type="button"
+                onClick={onToggleMenu}
+                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
+              >
+                <Menu className="w-6 h-6 stroke-[3]" />
+              </button>
+            )}
+          </div>
       </div>
 
       {/* Content */}

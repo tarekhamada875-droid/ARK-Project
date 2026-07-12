@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sun, Moon, Palette, Check, Sparkles, Sliders } from 'lucide-react';
+import { X, Sun, Moon, Palette, Check, Sparkles, Sliders, Menu } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
 import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
@@ -11,6 +11,7 @@ interface AppearanceSettingsModalProps {
   currentStaff: Staff | null;
   onClose: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
+  onToggleMenu?: () => void;
 }
 
 const SHIMMER_COLORS = [
@@ -28,7 +29,8 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
   garage,
   currentStaff,
   onClose,
-  showToast
+  showToast,
+  onToggleMenu
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [pendingColor, setPendingColor] = useState<string | null>(null);
@@ -72,12 +74,23 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter transition-colors">تخصيص وضع الشاشة ولون إضاءة لوحات السيارات</p>
           </div>
         </div>
-        <button 
-          onClick={onClose}
-          className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-sm outline-none cursor-pointer"
-        >
-          <X className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-sm outline-none cursor-pointer"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          {onToggleMenu && (
+            <button 
+              type="button"
+              onClick={onToggleMenu}
+              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none cursor-pointer"
+            >
+              <Menu className="w-6 h-6 stroke-[3]" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}

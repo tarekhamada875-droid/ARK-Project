@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw } from 'lucide-react';
+import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, Menu } from 'lucide-react';
 import { firestoreService, Garage } from '../../services/firestoreService';
 import { auth } from '../../firebase';
 import { AnimatedCounter } from '../AnimatedCounter';
@@ -13,9 +13,10 @@ interface SubscribersViewProps {
   garage: Garage;
   onClose: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
+  onToggleMenu?: () => void;
 }
 
-export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewProps) => {
+export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: SubscribersViewProps) => {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -393,6 +394,15 @@ export const SubscribersView = ({ garage, onClose, showToast }: SubscribersViewP
             >
               <X className="w-6 h-6" />
             </button>
+            {onToggleMenu && (
+              <button 
+                type="button"
+                onClick={onToggleMenu}
+                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
+              >
+                <Menu className="w-6 h-6 stroke-[3]" />
+              </button>
+            )}
           </div>
         </div>
       </header>

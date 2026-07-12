@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Zap, Clock, User } from 'lucide-react';
+import { X, Zap, Clock, User, Menu } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { ActivityLog, Garage } from '../../types';
 
@@ -7,9 +7,10 @@ interface RechargeHistoryViewProps {
   garage: Garage;
   onClose: () => void;
   showToast?: (msg: string, type?: 'success' | 'error') => void;
+  onToggleMenu?: () => void;
 }
 
-export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: RechargeHistoryViewProps) => {
+export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast, onToggleMenu }: RechargeHistoryViewProps) => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,6 +95,15 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast }: 
             >
               <X className="w-6 h-6" />
             </button>
+            {onToggleMenu && (
+              <button 
+                type="button"
+                onClick={onToggleMenu}
+                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
+              >
+                <Menu className="w-6 h-6 stroke-[3]" />
+              </button>
+            )}
           </div>
         </div>
       </header>

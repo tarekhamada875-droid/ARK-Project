@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, X, Car } from 'lucide-react';
+import { Users, X, Car, Menu } from 'lucide-react';
 import { Staff, Vehicle } from '../../types';
 import { safeDate } from '../../utils';
 
@@ -9,6 +9,7 @@ interface StaffStatsModalProps {
   todayExitedVehicles: Vehicle[];
   onClose: () => void;
   now: Date;
+  onToggleMenu?: () => void;
 }
 
 export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
@@ -16,7 +17,8 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
   vehiclesInside,
   todayExitedVehicles,
   onClose,
-  now
+  now,
+  onToggleMenu
 }) => {
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
@@ -40,12 +42,23 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
               <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">إحصائيات اليوم</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={onClose}
+              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            {onToggleMenu && (
+              <button 
+                type="button"
+                onClick={onToggleMenu}
+                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
+              >
+                <Menu className="w-6 h-6 stroke-[3]" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}

@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   BarChart2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Menu
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
 
@@ -18,6 +19,7 @@ interface GarageReportsViewProps {
   todayExitedVehicles: Vehicle[];
   staffList: Staff[];
   onClose: () => void;
+  onToggleMenu?: () => void;
 }
 
 export const GarageReportsView = ({
@@ -26,6 +28,7 @@ export const GarageReportsView = ({
   todayExitedVehicles,
   staffList,
   onClose,
+  onToggleMenu,
 }: GarageReportsViewProps) => {
   // Manual toggle state
   const [localVehiclesInside, setLocalVehiclesInside] = useState<Vehicle[]>(() => vehiclesInside);
@@ -121,12 +124,23 @@ export const GarageReportsView = ({
           </div>
         </div>
 
-        <button 
-          onClick={onClose}
-          className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-        >
-          <X className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          {onToggleMenu && (
+            <button 
+              type="button"
+              onClick={onToggleMenu}
+              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
+            >
+              <Menu className="w-6 h-6 stroke-[3]" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Modern, Compact Refresh Bar */}

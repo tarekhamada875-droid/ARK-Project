@@ -403,7 +403,7 @@ export const AdminDashboard = memo(({
     }
 
     if (cleanGarages.length === 0) {
-      showToast('يرجى اختيار جراج واحد على الأقل للمدير العام', 'error');
+      showToast('يرجى اختيار جراج واحد على الأقل لمالك النظام', 'error');
       return;
     }
 
@@ -424,11 +424,11 @@ export const AdminDashboard = memo(({
         pin: '',
         selectedGarages: []
       });
-      showToast('تم إضافة المدير العام بنجاح');
+      showToast('تم إضافة مالك النظام بنجاح');
     } catch (error: any) {
       console.error('Failed to add general manager:', error);
       const errMsg = error?.message || String(error);
-      showToast('حدث خطأ أثناء إضافة المدير العام: ' + errMsg, 'error');
+      showToast('حدث خطأ أثناء إضافة مالك النظام: ' + errMsg, 'error');
     } finally {
       setIsSubmittingGeneralManager(false);
     }
@@ -475,8 +475,8 @@ export const AdminDashboard = memo(({
   }, [approvedGarages]);
 
   return (
-    <div className={`h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-x-hidden ${showPlansModal || showOverview ? 'overflow-y-hidden' : 'overflow-y-auto'}`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 sticky top-0 z-40 transition-colors w-full">
+    <div className={`h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-hidden flex flex-col`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 transition-colors w-full shrink-0">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             {activeTab !== 'menu' && (
@@ -509,7 +509,7 @@ export const AdminDashboard = memo(({
                 activeTab === 'requests' ? t('الطلبات والمراجعات') :
                 activeTab === 'reports' ? t('التقارير الذكية') :
                 activeTab === 'supervisors' ? t('المشرفين') :
-                activeTab === 'general_managers' ? t('المدراء العموم') :
+                activeTab === 'general_managers' ? t('ملاك النظام') :
                 activeTab === 'wallet' ? t('رقم المحفظة') :
                 activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') : t('لوحة تحكم النظام')
               )}
@@ -678,7 +678,7 @@ export const AdminDashboard = memo(({
         {/* Main Workspace Body */}
         <main 
           ref={mainScrollRef} 
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-[calc(100vh-80px)] overflow-y-auto"
+          className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full ${showPlansModal || showOverview ? 'overflow-hidden' : 'overflow-y-auto'}`}
         >
           {activeTab === 'menu' ? (
             <div className="flex flex-col gap-10 md:gap-14 pt-4 md:pt-6 pb-8">
@@ -809,16 +809,16 @@ export const AdminDashboard = memo(({
               </div>
             )}
 
-            {/* Card 6.5: General Managers (المدراء العموم) - Only for Super Admin */}
+            {/* Card 6.5: General Managers (ملاك النظام) - Only for Super Admin */}
             {!currentSupervisor && (
               <div 
                 onClick={() => setActiveTab('general_managers')}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
               >
                 <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المدراء العموم')}</h3>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('ملاك النظام')}</h3>
                   <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {generalManagers.length} {t('مدير عام')}
+                    {generalManagers.length} {t('مالك نظام')}
                   </span>
                 </div>
               </div>
@@ -1318,11 +1318,11 @@ export const AdminDashboard = memo(({
                   <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-white dark:text-white" />
                   </div>
-                  {t('إضافة مدير عام جديد')}
+                  {t('إضافة مالك نظام جديد')}
                 </h2>
                 <form onSubmit={handleCreateGeneralManager} className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المدير العام')}</label>
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم مالك النظام')}</label>
                     <input 
                       value={adminGeneralManagerForm?.name || ''}
                       onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, name: e.target.value})}
@@ -1368,7 +1368,7 @@ export const AdminDashboard = memo(({
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة للمدير العام')}</label>
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة لمالك النظام')}</label>
                     <div className="max-h-48 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-2.5">
                       {approvedGarages.map(g => (
                         <div 
@@ -1400,7 +1400,7 @@ export const AdminDashboard = memo(({
                     {isSubmittingGeneralManager ? <Spinner /> : (
                       <>
                         <Plus className="w-6 h-6" />
-                        <span>{t('إضافة مدير عام')}</span>
+                        <span>{t('إضافة مالك نظام')}</span>
                       </>
                     )}
                   </button>
@@ -1415,7 +1415,7 @@ export const AdminDashboard = memo(({
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
                       <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
                     </div>
-                    {t('قائمة المدراء العموم بالمنصة')}
+                    {t('قائمة ملاك النظام بالمنصة')}
                     <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({generalManagers.length})</span>
                   </h2>
                 </div>
@@ -1455,18 +1455,18 @@ export const AdminDashboard = memo(({
                             onClick={() => {
                               setConfirmDialog({
                                 isOpen: true,
-                                title: t('حذف المدير العام'),
-                                message: adminLang === 'en' ? `Are you sure you want to delete general manager "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف المدير العام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+                                title: t('حذف مالك النظام'),
+                                message: adminLang === 'en' ? `Are you sure you want to delete system owner "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف مالك النظام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
                                 confirmText: t('نعم، احذف'),
                                 cancelText: t('إلغاء'),
                                 type: 'danger',
                                 onConfirm: async () => {
                                   try {
                                     await firestoreService.removeGeneralManager(gm.id);
-                                    showToast(t('تم حذف المدير العام بنجاح'));
+                                    showToast(t('تم حذف مالك النظام بنجاح'));
                                   } catch (error) {
                                     console.error(error);
-                                    showToast(t('فشل حذف المدير العام'), 'error');
+                                    showToast(t('فشل حذف مالك النظام'), 'error');
                                   } finally {
                                     setConfirmDialog(p => ({ ...p, isOpen: false }));
                                   }
@@ -1474,7 +1474,7 @@ export const AdminDashboard = memo(({
                               });
                             }}
                             className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                            title={t('إلغاء صلاحيات المدير العام')}
+                            title={t('إلغاء صلاحيات مالك النظام')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1542,7 +1542,7 @@ export const AdminDashboard = memo(({
                             </div>
                           )}
                           <span className="text-[8px] font-black px-2.5 py-1 bg-purple-550/10 rounded-md text-purple-650 dark:text-purple-400">
-                            {t('مدير عام لجراج أو أكثر')}
+                            {t('مالك نظام لجراج أو أكثر')}
                           </span>
                         </div>
                       </div>
@@ -1550,7 +1550,7 @@ export const AdminDashboard = memo(({
                     {generalManagers.length === 0 && (
                       <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
                         <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        {t('لا يوجد مدراء عموم منشئين حالياً')}
+                        {t('لا يوجد ملاك نظام منشئين حالياً')}
                       </div>
                     )}
                   </div>
