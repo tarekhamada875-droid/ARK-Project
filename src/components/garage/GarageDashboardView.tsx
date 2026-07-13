@@ -548,17 +548,9 @@ export const GarageDashboardView = memo(({
               />
             ) : (
               <div className="bg-[#faf9f6] dark:bg-slate-900 border-2 border-red-100 dark:border-red-900/30 rounded-[2rem] p-8 md:p-12 text-center transition-colors w-full">
-                <p className="text-base md:text-xl font-bold text-slate-900 dark:text-white leading-relaxed mb-6">
+                <p className="text-base md:text-xl font-bold text-slate-900 dark:text-white leading-relaxed">
                   رصيدك خلص اختار باقتك من صفحة الباقات و اشحنها مع المندوب الخاص بيك
                 </p>
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={() => setShowPackages(true)}
-                    className="w-full py-4 md:py-6 bg-slate-900 text-white rounded-2xl font-black text-sm md:text-base uppercase tracking-widest hover:bg-slate-800"
-                  >
-                    فتح صفحة الباقات
-                  </button>
-                </div>
               </div>
             )}
 

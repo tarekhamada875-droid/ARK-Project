@@ -110,6 +110,7 @@ export function useGarageApp() {
     return newId;
   });
   
+  const [isSessionReady, setIsSessionReady] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showRecentExitWarning, setShowRecentExitWarning] = useState(false);
   const [recentVehicle, setRecentVehicle] = useState<Vehicle | null>(null);
@@ -137,7 +138,7 @@ export function useGarageApp() {
 
   // Subscribe to Active Vehicles
   useEffect(() => {
-    if (!garage?.id) {
+    if (!isSessionReady || !garage?.id) {
       setVehicles([]);
       return;
     }
@@ -151,11 +152,11 @@ export function useGarageApp() {
       }
     });
     return () => unsub();
-  }, [garage?.id]);
+  }, [isSessionReady, garage?.id]);
 
   // Subscribe to completed transactions
   useEffect(() => {
-    if (!garage?.id) {
+    if (!isSessionReady || !garage?.id) {
       setTodayTransactions([]);
       return;
     }
@@ -163,7 +164,7 @@ export function useGarageApp() {
       setTodayTransactions(completedTransactions);
     });
     return () => unsub();
-  }, [garage?.id]);
+  }, [isSessionReady, garage?.id]);
 
   const loadGarageData = useCallback(async (garageId: string) => {
     try {
@@ -336,7 +337,14 @@ export function useGarageApp() {
 
   // Synchronize secure temporary auth sessions
   useEffect(() => {
-    if (!isAuthReady || !user) return;
+    if (view === 'login' || view === 'admin_login' || view === 'delegate_login') {
+      setIsSessionReady(true);
+      return;
+    }
+    if (!isAuthReady || !user) {
+      setIsSessionReady(false);
+      return;
+    }
 
     const syncSecuritySession = async () => {
       try {
@@ -365,11 +373,13 @@ export function useGarageApp() {
             await setDoc(doc(db, 'garage_sessions', user.uid), { garageId: garage.id, pin: garage.pin || '', phone: garage.phone || '', createdAt: serverTimestamp() });
           }
         }
+        setIsSessionReady(true);
       } catch (err: any) {
         console.warn('Silent security session recovery deferred:', err);
         if (normalizeDigits(adminPin) === activeAdminPin) {
           showToast('تنبيه أمني: فشل مزامنة جلسة المدير، يرجى إعادة الدخول. التفاصيل: ' + (err?.message || err), 'error');
         }
+        setIsSessionReady(true);
       }
     };
 
@@ -378,7 +388,7 @@ export function useGarageApp() {
 
   // Sync global collections
   useEffect(() => {
-    if (!isAuthReady || !user || (view !== 'admin_dashboard' && view !== 'admin_garage_details' && view !== 'admin_delegate_details' && view !== 'garage' && view !== 'delegate_dashboard' && view !== 'general_manager_dashboard')) return;
+    if (!isSessionReady || !isAuthReady || !user || (view !== 'admin_dashboard' && view !== 'admin_garage_details' && view !== 'admin_delegate_details' && view !== 'garage' && view !== 'delegate_dashboard' && view !== 'general_manager_dashboard')) return;
 
     const unsubGarages = (view === 'admin_dashboard' || view === 'admin_garage_details' || view === 'delegate_dashboard' || view === 'general_manager_dashboard') 
       ? firestoreService.subscribeToGarages(setAllGarages)
@@ -405,7 +415,7 @@ export function useGarageApp() {
       unsubGeneralManagers();
       unsubPackages();
     };
-  }, [isAuthReady, user, view]);
+  }, [isSessionReady, isAuthReady, user, view]);
 
   // Load Admin specific garage details once
   useEffect(() => {

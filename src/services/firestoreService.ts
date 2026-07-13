@@ -89,7 +89,6 @@ export const firestoreService = {
 
   awardMonthlyGift: async (garageId: string, month: string, carsCount: number) => {
     try {
-      const { runTransaction } = await import('firebase/firestore');
       await runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const garageDoc = await transaction.get(garageRef);
@@ -139,20 +138,27 @@ export const firestoreService = {
         fetchSnapSafe(query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(40)))
       ]);
 
-      const batch = writeBatch(db);
+      const refsToDelete: any[] = [];
+      if (vehiclesSnap.docs) vehiclesSnap.forEach(doc => refsToDelete.push(doc.ref));
+      if (dailyStatsSnap.docs) dailyStatsSnap.forEach(doc => refsToDelete.push(doc.ref));
+      if (logsSnap.docs) logsSnap.forEach(doc => refsToDelete.push(doc.ref));
+      if (staffSnap.docs) staffSnap.forEach(doc => refsToDelete.push(doc.ref));
+      if (subscribersSnap.docs) subscribersSnap.forEach(doc => refsToDelete.push(doc.ref));
+      if (topupsSnap.docs) topupsSnap.forEach(doc => refsToDelete.push(doc.ref));
       
-      // 2. Add subcollection deletions to batch
-      if (vehiclesSnap.docs) vehiclesSnap.forEach(doc => batch.delete(doc.ref));
-      if (dailyStatsSnap.docs) dailyStatsSnap.forEach(doc => batch.delete(doc.ref));
-      if (logsSnap.docs) logsSnap.forEach(doc => batch.delete(doc.ref));
-      if (staffSnap.docs) staffSnap.forEach(doc => batch.delete(doc.ref));
-      if (subscribersSnap.docs) subscribersSnap.forEach(doc => batch.delete(doc.ref));
-      if (topupsSnap.docs) topupsSnap.forEach(doc => batch.delete(doc.ref));
+      // Add the main garage document
+      refsToDelete.push(doc(db, 'garages', id));
 
-      // 3. Delete the main garage doc
-      batch.delete(doc(db, 'garages', id));
+      // 2. Commit in chunks of 400 to stay safely below Firestore's 500 limit
+      const chunkSize = 400;
+      for (let i = 0; i < refsToDelete.length; i += chunkSize) {
+        const chunk = refsToDelete.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(ref => batch.delete(ref));
+        await batch.commit();
+      }
 
-      return await batch.commit();
+      return true;
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `garages/${id}`);
       throw error;
