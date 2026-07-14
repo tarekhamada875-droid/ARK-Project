@@ -13,7 +13,8 @@ export const CloudSyncLoadingView: React.FC = () => {
           }
         }
         .liquid-fill {
-          animation: fillUp 3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+          clip-path: inset(100% 0 0 0);
+          animation: fillUp 2s cubic-bezier(0.4, 0, 0.2, 1) 0.8s forwards;
         }
       `}</style>
 
