@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -37,6 +38,15 @@ import { useBackTrapping } from './hooks/useBackTrapping';
 import { firestoreService } from './services/firestoreService';
 
 export default function App() {
+  const [minimumLoadingPassed, setMinimumLoadingPassed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinimumLoadingPassed(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const {
     isAuthReady,
     isLandscapeMobile,
@@ -373,7 +383,7 @@ export default function App() {
     return <OfflineView />;
   }
 
-  if (!isAuthReady) {
+  if (!isAuthReady || !minimumLoadingPassed) {
     return <CloudSyncLoadingView />;
   }
 

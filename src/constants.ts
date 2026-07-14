@@ -4,8 +4,8 @@
  */
 
 export const APP_TEXT = {
-  APP_NAME: "PARQ SYSTEM",
-  SYSTEM_DESCRIPTION: "PARQ SYSTEM الذكي",
+  APP_NAME: "RQ SYSTEM",
+  SYSTEM_DESCRIPTION: "RQ SYSTEM الذكي",
   LOGIN: {
     PHONE_PLACEHOLDER: "رقم الموبايل",
     SUBMIT: "دخول",

@@ -1,6 +1,6 @@
 {
-  "name": "PARQ SYSTEM",
-  "short_name": "PARQ",
+  "name": "RQ SYSTEM",
+  "short_name": "RQ",
   "description": "نظام ذكى لإدارة جراجات السيارات فى مصر",
   "start_url": "/",
   "display": "standalone",

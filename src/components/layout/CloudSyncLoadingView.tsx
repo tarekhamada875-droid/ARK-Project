@@ -2,19 +2,41 @@ import React from 'react';
 
 export const CloudSyncLoadingView: React.FC = () => {
   return (
-    <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-950 gap-5" dir="rtl">
-      <div className="flex flex-col items-center">
-        <div className="w-28 h-28 flex items-center justify-center bg-black rounded-[2rem] p-6 mb-6 shadow-2xl border border-slate-900 transition-all duration-300">
-          <img 
-            src="https://cdn-icons-png.flaticon.com/512/2993/2993685.png" 
-            alt="PARQ Logo" 
-            className="w-16 h-16 object-contain"
-            referrerPolicy="no-referrer"
-          />
+    <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 transition-colors duration-500" dir="rtl">
+      <style>{`
+        @keyframes fillUp {
+          0% {
+            clip-path: inset(100% 0 0 0);
+          }
+          100% {
+            clip-path: inset(0% 0 0 0);
+          }
+        }
+        .liquid-fill {
+          animation: fillUp 3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+      `}</style>
+
+      <div className="flex flex-col items-center justify-center select-none animate-fade-in">
+        {/* Dynamic Filling Text Container */}
+        <div className="relative flex items-center justify-center w-64 h-32 md:w-80 md:h-40">
+          {/* Background Text (Empty/Muted) */}
+          <span className="absolute text-8xl md:text-9xl font-black tracking-wider text-slate-200 dark:text-slate-900 font-mono">
+            RQ
+          </span>
+          
+          {/* Foreground Text (Filling Up) */}
+          <span className="absolute text-8xl md:text-9xl font-black tracking-wider text-emerald-500 dark:text-white font-mono liquid-fill">
+            RQ
+          </span>
         </div>
-        <div className="w-8 h-8 rounded-full border-3 border-slate-800 border-t-emerald-500 animate-spin mb-3" />
-        <p className="text-slate-400 font-bold text-base tracking-wide">جاري الاتصال بالسيرفر السحابي...</p>
+
+        <span className="text-xs md:text-sm font-black text-slate-400 dark:text-slate-600 tracking-[0.25em] uppercase mr-1 mt-2">
+          SYSTEM
+        </span>
       </div>
     </div>
   );
 };
+
+
