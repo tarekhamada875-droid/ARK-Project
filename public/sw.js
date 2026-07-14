@@ -4,7 +4,7 @@ const ASSETS_TO_CACHE = [
   '/index.html',
   '/manifest.json',
   '/egypt_crest.svg',
-  'https://cdn-icons-png.flaticon.com/512/2993/2993685.png'
+  '/icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
