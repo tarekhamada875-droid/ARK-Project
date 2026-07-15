@@ -43,7 +43,7 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setMinimumLoadingPassed(true);
-    }, 3000);
+    }, 1600);
     return () => clearTimeout(timer);
   }, []);
 
