@@ -60,6 +60,8 @@ export const DelegateDashboardView = memo(({
   const [newGaragePin, setNewGaragePin] = useState('');
   const [pinGenerationsRemaining, setPinGenerationsRemaining] = useState(3);
   const [showMenu, setShowMenu] = useState(false);
+  const [delegateBillingModel, setDelegateBillingModel] = useState<'commission' | 'subscription'>('commission');
+  const [delegateSubscriptionType, setDelegateSubscriptionType] = useState<'weekly' | 'monthly'>('weekly');
   const { theme, toggleTheme } = useTheme();
 
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -586,6 +588,38 @@ export const DelegateDashboardView = memo(({
                 </div>
               </div>
 
+              {/* طريقة الحساب */}
+              <div className="space-y-2 text-right">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">طريقة الحساب بالجراج</label>
+                <select 
+                  name="billingModel" 
+                  value={delegateBillingModel}
+                  onChange={(e) => setDelegateBillingModel(e.target.value as any)}
+                  className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none transition-all" 
+                  dir="rtl"
+                >
+                  <option value="commission">بالعمولة (شحن سيارات)</option>
+                  <option value="subscription">بالاشتراك (أسبوعي/شهري)</option>
+                </select>
+              </div>
+
+              {/* Subscription Type (Only if Subscription is selected) */}
+              {delegateBillingModel === 'subscription' && (
+                <div className="space-y-2 text-right animate-in fade-in duration-200">
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">نوع الاشتراك الابتدائي</label>
+                  <select 
+                    name="subscriptionType" 
+                    value={delegateSubscriptionType}
+                    onChange={(e) => setDelegateSubscriptionType(e.target.value as any)}
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none transition-all" 
+                    dir="rtl"
+                  >
+                    <option value="weekly">اشتراك أسبوعي - 800 ج.م</option>
+                    <option value="monthly">اشتراك شهري - 3000 ج.م</option>
+                  </select>
+                </div>
+              )}
+
               {/* Step 4: Contact */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">رقم الموبايل (اختياري)</label>
@@ -690,13 +724,36 @@ export const DelegateDashboardView = memo(({
 
                 {/* Simplified Garage Info */}
                 <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 mb-8 border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">الرصيد المتاح</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    {selectedGarage.billingModel === 'subscription' ? 'الاشتراك المتبقي للجراج' : 'الرصيد المتاح'}
+                  </span>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-5xl font-black text-slate-950 dark:text-white font-mono tracking-tighter">
-                      <AnimatedCounter value={Math.floor((selectedGarage.balance || 0) / (selectedGarage.commissionPerVehicle || 1))} />
+                      {selectedGarage.billingModel === 'subscription' ? (
+                        (() => {
+                          const expiry = selectedGarage.balanceExpiry;
+                          if (!expiry) return 0;
+                          const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                          const diff = expiryDate.getTime() - Date.now();
+                          return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                        })()
+                      ) : (
+                        <AnimatedCounter value={Math.floor((selectedGarage.balance || 0) / (selectedGarage.commissionPerVehicle || 1))} />
+                      )}
                     </span>
-                    <span className="text-xs font-bold text-slate-400">وحدة</span>
+                    <span className="text-xs font-bold text-slate-400">
+                      {selectedGarage.billingModel === 'subscription' ? 'يوم' : 'وحدة'}
+                    </span>
                   </div>
+                  {selectedGarage.billingModel === 'subscription' && selectedGarage.balanceExpiry && (
+                    <span className="text-[10px] font-bold text-slate-400 mt-2">
+                      تاريخ الانتهاء: {(() => {
+                        const expiry = selectedGarage.balanceExpiry;
+                        const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                        return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                      })()}
+                    </span>
+                  )}
                   <div className="flex gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 w-full justify-center">
                     <div className="flex flex-col">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">ساعة</span>
@@ -716,28 +773,43 @@ export const DelegateDashboardView = memo(({
 
                 {/* Package Slider */}
                 <div className="flex overflow-x-auto gap-4 pb-6 snap-x snap-mandatory scrollbar-hide -mx-2 px-2">
-                  {(packages.length > 0 ? packages.slice(0, 6) : []).map((pkg) => (
-                    <button
-                      key={pkg.id}
-                      onClick={() => {
-                        if (isProcessing) return;
-                        setPendingPackage(pkg);
-                      }}
-                      className="flex-none w-[160px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-5 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group"
-                    >
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">باقة {pkg.name.split(' ')[1] || pkg.name}</span>
-                      
-                      <div className="flex flex-col items-center">
-                        <span className="text-4xl font-black text-slate-950 dark:text-white font-mono tracking-tighter leading-none">{pkg.vehiclesCount}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">وحدة</span>
-                      </div>
+                  {(() => {
+                    const isSub = selectedGarage.billingModel === 'subscription';
+                    const subPackages: Package[] = [
+                      { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: 800, vehiclesCount: 7 },
+                      { id: 'monthly_sub', name: 'اشتراك شهري', price: 3000, vehiclesCount: 30 }
+                    ];
+                    const list = isSub ? subPackages : (packages.length > 0 ? packages.slice(0, 6) : []);
+                    
+                    return list.map((pkg) => (
+                      <button
+                        key={pkg.id}
+                        onClick={() => {
+                          if (isProcessing) return;
+                          setPendingPackage(pkg);
+                        }}
+                        className="flex-none w-[160px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-5 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group"
+                      >
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                          {isSub ? pkg.name : `باقة ${pkg.name.split(' ')[1] || pkg.name}`}
+                        </span>
+                        
+                        <div className="flex flex-col items-center">
+                          <span className="text-4xl font-black text-slate-950 dark:text-white font-mono tracking-tighter leading-none">{pkg.vehiclesCount}</span>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                            {isSub ? 'يوم' : 'وحدة'}
+                          </span>
+                        </div>
 
-                      <div className="mt-6 bg-emerald-600 text-white w-full py-2.5 rounded-2xl font-black text-sm font-mono">
-                        {pkg.price} ج.م
-                      </div>
-                    </button>
-                  ))}
-                  {packages.length === 0 && <div className="w-full py-8 text-center text-slate-400 dark:text-slate-600 text-xs font-bold">لا توجد باقات حالية</div>}
+                        <div className="mt-6 bg-emerald-600 text-white w-full py-2.5 rounded-2xl font-black text-sm font-mono">
+                          {pkg.price} ج.م
+                        </div>
+                      </button>
+                    ));
+                  })()}
+                  {packages.length === 0 && selectedGarage.billingModel !== 'subscription' && (
+                    <div className="w-full py-8 text-center text-slate-400 dark:text-slate-600 text-xs font-bold">لا توجد باقات حالية</div>
+                  )}
                 </div>
               </>
             )}
@@ -751,8 +823,14 @@ export const DelegateDashboardView = memo(({
                   <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-400/10 rounded-full flex items-center justify-center mx-auto mb-3">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                   </div>
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white">تأكيد شحن الباقة؟</h3>
-                  <p className="text-xs font-bold text-slate-400 mt-1">أنت على وشك شحن {pendingPackage.vehiclesCount} وحدة للجراج</p>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                    {selectedGarage.billingModel === 'subscription' ? 'تأكيد طلب تجديد الاشتراك؟' : 'تأكيد شحن الباقة؟'}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1">
+                    {selectedGarage.billingModel === 'subscription' 
+                      ? `أنت على وشك طلب تجديد الاشتراك لمدة ${pendingPackage.vehiclesCount} يوم للجراج`
+                      : `أنت على وشك شحن ${pendingPackage.vehiclesCount} وحدة للجراج`}
+                  </p>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 flex justify-between items-center">
@@ -761,8 +839,12 @@ export const DelegateDashboardView = memo(({
                     <p className="text-xl font-black text-slate-900 dark:text-white">{pendingPackage.price} ج.م</p>
                   </div>
                   <div className="text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">عدد العربيات</p>
-                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{pendingPackage.vehiclesCount} وحدة</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      {selectedGarage.billingModel === 'subscription' ? 'المدة' : 'عدد العربيات'}
+                    </p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                      {pendingPackage.vehiclesCount} {selectedGarage.billingModel === 'subscription' ? 'يوم' : 'وحدة'}
+                    </p>
                   </div>
                 </div>
 

@@ -30,7 +30,7 @@ import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
 import { auth } from '../../firebase';
 import { useTheme } from '../../utils/ThemeContext';
-import { resolveShimmerColor } from '../../utils';
+import { resolveShimmerColor, isLightColor } from '../../utils';
 
 interface GarageDashboardViewProps {
   garage: Garage;
@@ -114,12 +114,31 @@ export const GarageDashboardView = memo(({
     return () => unsubscribe();
   }, []);
 
+  const isSubscription = garage.billingModel === 'subscription';
+
+  const remainingDays = React.useMemo(() => {
+    if (!isSubscription || !garage.balanceExpiry) return 0;
+    const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+    const diff = expiryDate.getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }, [isSubscription, garage.balanceExpiry]);
+
   const currentBalance = React.useMemo(() => garage.balance || 0, [garage.balance]);
   const commission = React.useMemo(() => garage.commissionPerVehicle || 1, [garage.commissionPerVehicle]);
-  const availableVehicles = React.useMemo(() => Math.max(0, Math.floor(currentBalance / commission)), [currentBalance, commission]);
+  const availableVehicles = React.useMemo(() => {
+    if (isSubscription) {
+      return remainingDays;
+    }
+    return Math.max(0, Math.floor(currentBalance / commission));
+  }, [isSubscription, remainingDays, currentBalance, commission]);
 
   const [balanceTransition, setBalanceTransition] = React.useState<'increase' | 'decrease' | null>(null);
   const prevVehiclesRef = React.useRef(availableVehicles);
+
+  const showBalanceWarning = isSubscription ? (availableVehicles <= 3) : (availableVehicles < 50);
+  const warningText = isSubscription 
+    ? (availableVehicles <= 0 ? 'انتهى اشتراك الجراج' : 'باقي أيام قليلة على انتهاء الاشتراك')
+    : (availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص');
 
   React.useEffect(() => {
     const diff = availableVehicles - prevVehiclesRef.current;
@@ -309,7 +328,7 @@ export const GarageDashboardView = memo(({
                     : 'bg-slate-900 dark:bg-slate-800 text-white border-slate-900 dark:border-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700'
                 }`}
               >
-                {(subscribersCount > 0 || hasNewRecharge) && !showMenu && (
+                {((subscribersCount > 0 && !isSubscription) || hasNewRecharge) && !showMenu && (
                   <span className={`absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${hasNewRecharge ? 'bg-emerald-500' : 'bg-red-500'}`} />
                 )}
                 {showMenu ? <X className="w-6 h-6 stroke-[3]" /> : <Menu className="w-6 h-6 stroke-[3]" />}
@@ -346,7 +365,9 @@ export const GarageDashboardView = memo(({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0"
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold shrink-0 ${
+                        isLightColor(activeShimmerColor) ? 'text-slate-900' : 'text-white'
+                      }`}
                       style={{ backgroundColor: activeShimmerColor }}
                     >
                       <Shield className="w-5 h-5" />
@@ -376,7 +397,7 @@ export const GarageDashboardView = memo(({
                 
                 {/* Menu Options Group */}
                 <div className="space-y-2">
-                  {!currentStaff && (
+                  {!currentStaff && !isSubscription && (
                     <button 
                       onClick={() => navigateTo('subscribers')}
                       className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
@@ -417,7 +438,7 @@ export const GarageDashboardView = memo(({
                       <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-400/10 text-amber-500 flex items-center justify-center">
                         <Zap className="w-4 h-4 fill-current text-amber-500" />
                       </div>
-                      <span className="font-bold text-sm">باقات الشحن</span>
+                      <span className="font-bold text-sm">{isSubscription ? 'باقات الاشتراكات' : 'باقات الشحن'}</span>
                     </div>
                   </button>
 
@@ -497,19 +518,37 @@ export const GarageDashboardView = memo(({
               <MovingBalanceArrows transitionType={balanceTransition} />
 
               <div className="py-1 flex items-center justify-center overflow-visible z-10">
-                <div className={`text-4xl md:text-7xl font-extrabold font-mono tracking-tight transition-colors duration-300 ${
-                  balanceTransition === 'decrease'
-                    ? 'text-red-600 dark:text-red-400'
-                    : balanceTransition === 'increase'
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : availableVehicles < 50
-                    ? 'text-red-500'
-                    : 'text-slate-900 dark:text-slate-100'
-                }`}>
-                  <AnimatedCounter value={availableVehicles} disableColorChange={true} />
-                </div>
+                {isSubscription ? (
+                  <div className={`text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ${
+                    balanceTransition === 'decrease'
+                      ? 'text-red-600 dark:text-red-400'
+                      : balanceTransition === 'increase'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : showBalanceWarning
+                      ? 'text-red-500'
+                      : 'text-slate-900 dark:text-slate-100'
+                  }`}>
+                    <span>باقي</span>
+                    <span className="text-4xl md:text-7xl font-extrabold font-mono tracking-tight">
+                      <AnimatedCounter value={availableVehicles} disableColorChange={true} />
+                    </span>
+                    <span>{availableVehicles === 1 ? 'يوم' : availableVehicles === 2 ? 'يومين' : availableVehicles >= 3 && availableVehicles <= 10 ? 'أيام' : 'يوم'}</span>
+                  </div>
+                ) : (
+                  <div className={`text-4xl md:text-7xl font-extrabold font-mono tracking-tight transition-colors duration-300 ${
+                    balanceTransition === 'decrease'
+                      ? 'text-red-600 dark:text-red-400'
+                      : balanceTransition === 'increase'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : showBalanceWarning
+                      ? 'text-red-500'
+                      : 'text-slate-900 dark:text-slate-100'
+                  }`}>
+                    <AnimatedCounter value={availableVehicles} disableColorChange={true} />
+                  </div>
+                )}
               </div>
-              {availableVehicles < 50 && (
+              {showBalanceWarning && (
                 <p className={`text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ${
                   balanceTransition === 'decrease'
                     ? 'text-red-600 dark:text-red-400'
@@ -519,7 +558,7 @@ export const GarageDashboardView = memo(({
                     ? 'text-red-500'
                     : 'text-red-400'
                 }`}>
-                  {availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص'}
+                  {warningText}
                 </p>
               )}
             </div>
@@ -549,7 +588,9 @@ export const GarageDashboardView = memo(({
             ) : (
               <div className="bg-[#faf9f6] dark:bg-slate-900 border-2 border-red-100 dark:border-red-900/30 rounded-[2rem] p-8 md:p-12 text-center transition-colors w-full">
                 <p className="text-base md:text-xl font-bold text-slate-900 dark:text-white leading-relaxed">
-                  رصيدك خلص اختار باقتك من صفحة الباقات و اشحنها مع المندوب الخاص بيك
+                  {isSubscription 
+                    ? 'انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.'
+                    : 'رصيدك خلص اختار باقتك من صفحة الباقات و اشحنها مع المندوب الخاص بيك'}
                 </p>
               </div>
             )}
@@ -571,13 +612,17 @@ export const GarageDashboardView = memo(({
                   {/* Dark Center Chevron Badge */}
                   <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                     <div 
-                      className="w-7 h-7 md:w-8 h-8 text-white rounded-full flex items-center justify-center border-2 shadow-md group-hover:scale-110 transition-all"
+                      className={`w-7 h-7 md:w-8 h-8 rounded-full flex items-center justify-center border-2 shadow-md group-hover:scale-110 transition-all ${
+                        isLightColor(activeShimmerColor) ? 'text-slate-900' : 'text-white'
+                      }`}
                       style={{ 
                         backgroundColor: activeShimmerColor,
                         borderColor: `${activeShimmerColor}80`
                       }}
                     >
-                      <ChevronDown className="w-3.5 h-3.5 md:w-4 md:h-4 text-white group-active:translate-y-0.5 transition-transform" />
+                      <ChevronDown className={`w-3.5 h-3.5 md:w-4 md:h-4 group-active:translate-y-0.5 transition-transform ${
+                        isLightColor(activeShimmerColor) ? 'text-slate-900' : 'text-white'
+                      }`} />
                     </div>
                   </div>
                 </button>
@@ -712,6 +757,7 @@ export const GarageDashboardView = memo(({
           garageHourlyRate={garage.hourlyRate}
           walletNumber={walletNumber}
           onToggleMenu={() => setShowMenu(!showMenu)}
+          billingModel={garage.billingModel}
         />
       )}
 

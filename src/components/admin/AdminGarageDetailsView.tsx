@@ -22,7 +22,7 @@ import {
   Check
 } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
-import { serverTimestamp } from 'firebase/firestore';
+import { serverTimestamp, Timestamp } from 'firebase/firestore';
 import { normalizeDigits } from '../../utils';
 import { Garage, Staff, Package } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
@@ -155,15 +155,36 @@ export const AdminGarageDetailsView = memo(({
   const handleRechargeSubmit = async (pkg: Package) => {
     setIsLoading(true);
     try {
+      const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
       const commission = selectedGarageForDetails.commissionPerVehicle || 1;
-      const balanceValue = pkg.vehiclesCount * commission;
-      const newBalance = Number(((selectedGarageForDetails.balance || 0) + balanceValue).toFixed(2));
-      await firestoreService.updateGarage(selectedGarageForDetails.id, { 
-        balance: newBalance, 
-        isLocked: false,
+      
+      const updateData: any = {
         totalAdminRevenue: Number(((selectedGarageForDetails.totalAdminRevenue || 0) + pkg.price).toFixed(2)),
-        totalRechargedCars: (selectedGarageForDetails.totalRechargedCars || 0) + pkg.vehiclesCount
-      });
+        isLocked: false,
+        lastRechargeDate: serverTimestamp()
+      };
+
+      if (isSubscriptionGarage) {
+        let baseDate = new Date();
+        const currentExpiry = selectedGarageForDetails.balanceExpiry;
+        if (currentExpiry) {
+          const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+          if (currentExpiryDate > baseDate) {
+            baseDate = currentExpiryDate;
+          }
+        }
+        const days = pkg.id === 'weekly_sub' ? 7 : 30;
+        baseDate.setDate(baseDate.getDate() + days);
+        
+        updateData.balanceExpiry = Timestamp.fromDate(baseDate);
+        updateData.billingModel = 'subscription';
+      } else {
+        const balanceValue = pkg.vehiclesCount * commission;
+        updateData.balance = Number(((selectedGarageForDetails.balance || 0) + balanceValue).toFixed(2));
+        updateData.totalRechargedCars = (selectedGarageForDetails.totalRechargedCars || 0) + pkg.vehiclesCount;
+      }
+
+      await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
 
       await firestoreService.addActivityLog({
         garageId: selectedGarageForDetails.id,
@@ -171,12 +192,16 @@ export const AdminGarageDetailsView = memo(({
         staffId: 'admin',
         staffName: adminLang === 'en' ? 'System Administrator (Admin)' : 'مدير النظام (Admin)',
         actionType: 'recharge',
-        plateNumber: adminLang === 'en' ? `Recharge package ${pkg.name} (${pkg.vehiclesCount} Cars) - ${pkg.price} EGP` : `شحن باقة ${pkg.name} (${pkg.vehiclesCount} سيارة) - ${pkg.price} ج`,
+        plateNumber: isSubscriptionGarage
+          ? (adminLang === 'en' ? `Recharge Subscription: ${pkg.name} (${pkg.vehiclesCount} Days) - ${pkg.price} EGP` : `تجديد اشتراك: ${pkg.name} (${pkg.vehiclesCount} يوم) - ${pkg.price} ج`)
+          : (adminLang === 'en' ? `Recharge package ${pkg.name} (${pkg.vehiclesCount} Cars) - ${pkg.price} EGP` : `شحن باقة ${pkg.name} (${pkg.vehiclesCount} سيارة) - ${pkg.price} ج`),
         timestamp: serverTimestamp() as any,
         amount: pkg.price,
         packageId: pkg.id
       });
-      showToast(adminLang === 'en' ? `Successfully recharged ${pkg.vehiclesCount} cars` : `تم شحن ${pkg.vehiclesCount} سيارة`);
+      showToast(isSubscriptionGarage 
+        ? (adminLang === 'en' ? `Subscription extended by ${pkg.vehiclesCount} days` : `تم تمديد الاشتراك بـ ${pkg.vehiclesCount} يوم`)
+        : (adminLang === 'en' ? `Successfully recharged ${pkg.vehiclesCount} cars` : `تم شحن ${pkg.vehiclesCount} سيارة`));
       setPendingPackage(null);
     } catch (e) { 
       showToast(t('فشل'), 'error'); 
@@ -674,16 +699,52 @@ export const AdminGarageDetailsView = memo(({
             <div className="bg-slate-900 dark:bg-slate-950 rounded-2xl overflow-visible relative transition-colors border border-slate-800 dark:border-amber-400/20">
               <div className="relative z-10 p-10 flex flex-col md:flex-row justify-between items-center gap-12">
                 <div className="text-center md:text-right">
-                  <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.5em] mb-4">{t('رصيد التشغيل الحالي')}</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.5em] mb-4">
+                    {selectedGarageForDetails.billingModel === 'subscription' ? t('الاشتراك المتبقي للجراج') : t('رصيد التشغيل الحالي')}
+                  </p>
                   <div className="flex items-end gap-3 justify-center md:justify-start">
-                    <span className={`text-8xl font-black tracking-tighter transition-colors ${ (selectedGarageForDetails.balance || 0) <= 0 ? 'text-red-400' : 'text-white'}`}>
-                      {Math.floor((selectedGarageForDetails.balance || 0) / (selectedGarageForDetails.commissionPerVehicle || 1))}
-                    </span>
-                    <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('وحدة')}</span>
+                    {selectedGarageForDetails.billingModel === 'subscription' ? (
+                      <>
+                        <span className={`text-8xl font-black tracking-tighter transition-colors ${ (() => {
+                          const expiry = selectedGarageForDetails.balanceExpiry;
+                          const expiryDate = expiry?.toDate ? expiry.toDate() : new Date(expiry || '');
+                          return expiryDate < new Date() ? 'text-red-400' : 'text-white';
+                        })()}`}>
+                          {(() => {
+                            const expiry = selectedGarageForDetails.balanceExpiry;
+                            if (!expiry) return 0;
+                            const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                            const diff = expiryDate.getTime() - Date.now();
+                            return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                          })()}
+                        </span>
+                        <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('يوم')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={`text-8xl font-black tracking-tighter transition-colors ${ (selectedGarageForDetails.balance || 0) <= 0 ? 'text-red-400' : 'text-white'}`}>
+                          {Math.floor((selectedGarageForDetails.balance || 0) / (selectedGarageForDetails.commissionPerVehicle || 1))}
+                        </span>
+                        <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('وحدة')}</span>
+                      </>
+                    )}
                   </div>
                   <div className="mt-4 flex items-center justify-center md:justify-start">
                     <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/5 transition-colors">
-                      <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 tracking-wider">{t('الرصيد المالي:')} {Number(selectedGarageForDetails.balance || 0).toFixed(2)} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                      <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 tracking-wider">
+                        {selectedGarageForDetails.billingModel === 'subscription' ? (
+                          <>
+                            {t('تاريخ انتهاء الاشتراك:')} {(() => {
+                              const expiry = selectedGarageForDetails.balanceExpiry;
+                              if (!expiry) return '-';
+                              const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                              return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                            })()}
+                          </>
+                        ) : (
+                          <>{t('الرصيد المالي:')} {Number(selectedGarageForDetails.balance || 0).toFixed(2)} {adminLang === 'en' ? 'EGP' : 'ج.م'}</>
+                        )}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -738,41 +799,52 @@ export const AdminGarageDetailsView = memo(({
                             <span className="text-[9px] font-bold text-slate-300 dark:text-slate-700 uppercase tracking-widest shrink-0 mr-4">{t('شحن تلقائي فوري')}</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {(packages.length > 0 ? packages : []).map((pkg) => {
-                                const isPremium = pkg.price >= 4000;
-                                const isMid = pkg.price >= 1500 && pkg.price < 4000;
+                            {(() => {
+                                const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
+                                const subPackages: Package[] = [
+                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: 800, vehiclesCount: 7 },
+                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: 3000, vehiclesCount: 30 }
+                                ];
+                                const displayPackages = isSubscriptionGarage ? subPackages : (packages.length > 0 ? packages : []);
                                 
-                                return (
-                                    <button
-                                        key={pkg.id}
-                                        onClick={() => setPendingPackage(pkg)}
-                                        className={`group relative rounded-2xl border-2 flex flex-col items-center overflow-hidden transition-all outline-none cursor-pointer ${
-                                            isPremium 
-                                            ? 'bg-slate-900 dark:bg-slate-950 border-slate-900 dark:border-slate-800 text-white' 
-                                            : isMid 
-                                            ? 'bg-amber-50 dark:bg-amber-400/5 border-amber-400 dark:border-amber-400/30 text-slate-900 dark:text-amber-400' 
-                                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-slate-100'
-                                        }`}
-                                    >
-                                        <div className="w-full bg-slate-950 dark:bg-slate-900 py-2 px-3 flex items-center justify-center border-b border-white/5 dark:border-slate-800 transition-colors">
-                                          <span className="text-[10px] font-black text-white dark:text-slate-400 uppercase tracking-[0.15em]">
-                                            {pkg.name || t('باقة شحن')}
-                                          </span>
-                                        </div>
-                                        
-                                        <div className="flex flex-col items-center py-5 px-4 w-full">
-                                            <span className="text-5xl font-black font-mono tracking-tighter leading-none">
-                                              {pkg.vehiclesCount}
-                                            </span>
-                                            <span className={`text-[10px] font-bold uppercase tracking-widest mt-2 transition-colors ${isPremium || (document.documentElement.classList.contains('dark')) ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500'}`}>{t('وحدة رصيد')}</span>
- 
-                                            <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105">
-                                                {pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}
+                                return displayPackages.map((pkg) => {
+                                    const isPremium = pkg.price >= 4000;
+                                    const isMid = pkg.price >= 1500 && pkg.price < 4000;
+                                    
+                                    return (
+                                        <button
+                                            key={pkg.id}
+                                            onClick={() => setPendingPackage(pkg)}
+                                            className={`group relative rounded-2xl border-2 flex flex-col items-center overflow-hidden transition-all outline-none cursor-pointer ${
+                                                isPremium 
+                                                ? 'bg-slate-900 dark:bg-slate-950 border-slate-900 dark:border-slate-800 text-white' 
+                                                : isMid 
+                                                ? 'bg-amber-50 dark:bg-amber-400/5 border-amber-400 dark:border-amber-400/30 text-slate-900 dark:text-amber-400' 
+                                                : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-slate-100'
+                                            }`}
+                                        >
+                                            <div className="w-full bg-slate-950 dark:bg-slate-900 py-2 px-3 flex items-center justify-center border-b border-white/5 dark:border-slate-800 transition-colors">
+                                              <span className="text-[10px] font-black text-white dark:text-slate-400 uppercase tracking-[0.15em]">
+                                                {pkg.name || t('باقة شحن')}
+                                              </span>
                                             </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
+                                            
+                                            <div className="flex flex-col items-center py-5 px-4 w-full">
+                                                <span className="text-5xl font-black font-mono tracking-tighter leading-none">
+                                                  {pkg.vehiclesCount}
+                                                </span>
+                                                <span className={`text-[10px] font-bold uppercase tracking-widest mt-2 transition-colors ${isPremium || (document.documentElement.classList.contains('dark')) ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500'}`}>
+                                                  {isSubscriptionGarage ? t('يوم') : t('وحدة رصيد')}
+                                                </span>
+      
+                                                <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105">
+                                                    {pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                });
+                            })()}
                             {packages.length === 0 && (
                                 <div className="col-span-full py-12 bg-slate-50 dark:bg-slate-800/50 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl text-center transition-colors">
                                     <p className="text-xs font-bold text-slate-400 dark:text-slate-600">{t('لا يوجد باقات حالية متوفرة')}</p>
@@ -864,8 +936,14 @@ export const AdminGarageDetailsView = memo(({
               <div className="w-12 h-12 bg-amber-50 dark:bg-amber-400/10 rounded-full flex items-center justify-center mx-auto mb-3 transition-colors">
                 <CheckCircle2 className="w-6 h-6 text-amber-500" />
               </div>
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">{t('تأكيد شحن الباقة؟')}</h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">{t('أنت على وشك شحن')} {pendingPackage.vehiclesCount} {t('وحدة للجراج')}</p>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                {selectedGarageForDetails.billingModel === 'subscription' ? t('تأكيد تجديد الاشتراك؟') : t('تأكيد شحن الباقة؟')}
+              </h3>
+              <p className="text-xs font-bold text-slate-400 mt-1">
+                {selectedGarageForDetails.billingModel === 'subscription' 
+                  ? `${t('أنت على وشك تجديد الاشتراك لمدة')} ${pendingPackage.vehiclesCount} ${t('يوم للجراج')}`
+                  : `${t('أنت على وشك شحن')} ${pendingPackage.vehiclesCount} ${t('وحدة للجراج')}`}
+              </p>
             </div>
  
             <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 flex justify-between items-center transition-colors">
@@ -874,8 +952,12 @@ export const AdminGarageDetailsView = memo(({
                 <p className="text-xl font-black text-slate-900 dark:text-white">{pendingPackage.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}</p>
               </div>
               <div className="text-left">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('عدد العربات')}</p>
-                <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{pendingPackage.vehiclesCount} {t('وحدة')}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {selectedGarageForDetails.billingModel === 'subscription' ? t('المدة') : t('عدد العربات')}
+                </p>
+                <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                  {pendingPackage.vehiclesCount} {selectedGarageForDetails.billingModel === 'subscription' ? t('يوم') : t('وحدة')}
+                </p>
               </div>
             </div>
  
@@ -885,7 +967,7 @@ export const AdminGarageDetailsView = memo(({
                 onClick={() => handleRechargeSubmit(pendingPackage)}
                 className="flex-1 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 outline-none cursor-pointer"
               >
-                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{t('تأكيد الشحن')}</span>}
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{selectedGarageForDetails.billingModel === 'subscription' ? t('تأكيد التجديد') : t('تأكيد الشحن')}</span>}
               </button>
               <button
                 disabled={isLoading}

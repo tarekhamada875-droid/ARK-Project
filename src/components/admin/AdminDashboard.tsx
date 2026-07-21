@@ -18,8 +18,6 @@ import {
   X,
   RotateCcw,
   RefreshCw,
-  Sun,
-  Moon,
   MoreVertical,
   ClipboardList,
   Check,
@@ -28,11 +26,13 @@ import {
   Loader2,
   Building2,
   Wallet,
-  LogOut
+  LogOut,
+  Sliders
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { Spinner } from '../ui/Spinner';
 import { firestoreService } from '../../services/firestoreService';
+import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -110,12 +110,14 @@ export const AdminDashboard = memo(({
   const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
   const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
   const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
-  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string }>({
+  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'monthly' }>({
     name: '',
     hourlyRate: '',
     overnightRate: '',
     phone: '',
-    initialPackageId: ''
+    initialPackageId: '',
+    billingModel: 'commission',
+    subscriptionType: 'weekly'
   });
 
   const [editingSupervisorPinId, setEditingSupervisorPinId] = React.useState<string | null>(null);
@@ -124,6 +126,8 @@ export const AdminDashboard = memo(({
 
   const [isSubmittingDelegate, setIsSubmittingDelegate] = React.useState(false);
   const [showMenu, setShowMenu] = React.useState(false);
+  const [showAppearanceSettings, setShowAppearanceSettings] = React.useState(false);
+  const [adminColor, setAdminColor] = useLocalStorageState<string>('app_admin_color', '#10b981');
   
   const [isSavingAdminPin, setIsSavingAdminPin] = React.useState(false);
   const [isAdminPinVerified, setIsAdminPinVerified] = React.useState(false);
@@ -158,7 +162,7 @@ export const AdminDashboard = memo(({
     message: '',
     onConfirm: () => {},
   });
-  const { theme, toggleTheme, adminLang, setAdminLang } = useTheme();
+  const { adminLang, setAdminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
 
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -403,7 +407,7 @@ export const AdminDashboard = memo(({
     }
 
     if (cleanGarages.length === 0) {
-      showToast('يرجى اختيار جراج واحد على الأقل لمالك النظام', 'error');
+      showToast('يرجى اختيار جراج واحد على الأقل للمدير العام', 'error');
       return;
     }
 
@@ -424,11 +428,11 @@ export const AdminDashboard = memo(({
         pin: '',
         selectedGarages: []
       });
-      showToast('تم إضافة مالك النظام بنجاح');
+      showToast('تم إضافة المدير العام بنجاح');
     } catch (error: any) {
       console.error('Failed to add general manager:', error);
       const errMsg = error?.message || String(error);
-      showToast('حدث خطأ أثناء إضافة مالك النظام: ' + errMsg, 'error');
+      showToast('حدث خطأ أثناء إضافة المدير العام: ' + errMsg, 'error');
     } finally {
       setIsSubmittingGeneralManager(false);
     }
@@ -475,7 +479,82 @@ export const AdminDashboard = memo(({
   }, [approvedGarages]);
 
   return (
-    <div className={`h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-hidden flex flex-col`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+    <div className={`admin-custom-theme h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-hidden flex flex-col`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+      <style>{`
+        .admin-custom-theme .text-emerald-500,
+        .admin-custom-theme .text-emerald-550,
+        .admin-custom-theme .text-emerald-600,
+        .admin-custom-theme .text-emerald-700,
+        .admin-custom-theme .dark\\:text-emerald-400,
+        .admin-custom-theme .text-emerald-450 {
+          color: ${adminColor} !important;
+        }
+        .admin-custom-theme .bg-emerald-600,
+        .admin-custom-theme .bg-emerald-500,
+        .admin-custom-theme .dark\\:bg-emerald-600,
+        .admin-custom-theme .dark\\:bg-emerald-500 {
+          background-color: ${adminColor} !important;
+        }
+        .admin-custom-theme .hover\\:bg-emerald-700:hover,
+        .admin-custom-theme .bg-emerald-600:hover,
+        .admin-custom-theme .bg-emerald-500:hover,
+        .admin-custom-theme .dark\\:bg-emerald-600:hover,
+        .admin-custom-theme .dark\\:bg-emerald-500:hover {
+          background-color: ${adminColor}e6 !important;
+          opacity: 0.95;
+        }
+        .admin-custom-theme .bg-emerald-50,
+        .admin-custom-theme .bg-emerald-50\\/30,
+        .admin-custom-theme .bg-emerald-50\\/50,
+        .admin-custom-theme .bg-emerald-100,
+        .admin-custom-theme .dark\\:bg-emerald-950\\/40,
+        .admin-custom-theme .dark\\:bg-emerald-950\\/45,
+        .admin-custom-theme .dark\\:bg-emerald-950\\/10 {
+          background-color: ${adminColor}15 !important;
+        }
+        .admin-custom-theme .bg-emerald-400\\/10,
+        .admin-custom-theme .dark\\:bg-emerald-400\\/5,
+        .admin-custom-theme .bg-emerald-50\\/50 {
+          background-color: ${adminColor}1a !important;
+        }
+        .admin-custom-theme .border-emerald-500,
+        .admin-custom-theme .border-emerald-600,
+        .admin-custom-theme .border-emerald-400,
+        .admin-custom-theme .border-emerald-300,
+        .admin-custom-theme .border-emerald-100,
+        .admin-custom-theme .dark\\:border-emerald-700\\/80,
+        .admin-custom-theme .dark\\:border-emerald-900\\/50 {
+          border-color: ${adminColor}80 !important;
+        }
+        .admin-custom-theme .border-emerald-500\\/20,
+        .admin-custom-theme .border-emerald-400\\/10 {
+          border-color: ${adminColor}20 !important;
+        }
+        .admin-custom-theme .focus\\:border-emerald-500:focus,
+        .admin-custom-theme .focus\\:border-emerald-400:focus {
+          border-color: ${adminColor} !important;
+        }
+        .admin-custom-theme .focus\\:ring-emerald-500:focus,
+        .admin-custom-theme .focus\\:ring-emerald-400:focus,
+        .admin-custom-theme .dark\\:focus\\:ring-emerald-500:focus {
+          --tw-ring-color: ${adminColor} !important;
+          border-color: ${adminColor} !important;
+        }
+        .admin-custom-theme .shadow-emerald-500\\/5 {
+          --tw-shadow-color: ${adminColor}1a !important;
+          --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -1px var(--tw-shadow-color) !important;
+        }
+        .admin-custom-theme .from-emerald-500\\/5 {
+          --tw-gradient-from: ${adminColor}0d !important;
+          --tw-gradient-to: transparent !important;
+          --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+        }
+        .admin-custom-theme .dark\\:from-emerald-500\\/5 {
+          --tw-gradient-from: ${adminColor}0d !important;
+          --tw-gradient-to: transparent !important;
+          --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+        }
+      `}</style>
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 transition-colors w-full shrink-0">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -509,7 +588,7 @@ export const AdminDashboard = memo(({
                 activeTab === 'requests' ? t('الطلبات والمراجعات') :
                 activeTab === 'reports' ? t('التقارير الذكية') :
                 activeTab === 'supervisors' ? t('المشرفين') :
-                activeTab === 'general_managers' ? t('ملاك النظام') :
+                activeTab === 'general_managers' ? t('المديرين العموم') :
                 activeTab === 'wallet' ? t('رقم المحفظة') :
                 activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') : t('لوحة تحكم النظام')
               )}
@@ -611,47 +690,26 @@ export const AdminDashboard = memo(({
                       </div>
                     </div>
 
-                    {/* Quick Setting / Theme Group */}
+                    {/* Appearance Settings Button */}
                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
-                      <div className="flex flex-col gap-2">
-                        <span className="font-bold text-xs text-slate-400 dark:text-slate-550 pr-1 select-none">{t('وضع الشاشة:')}</span>
-                        <div className="flex gap-3">
-                          {/* النهارى (Light Mode) Button */}
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              if (theme !== 'light') toggleTheme();
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
-                              theme === 'light'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <Sun className={`w-4 h-4 ${theme === 'light' ? 'stroke-[2.5px]' : ''}`} />
-                            <span>{t('النهاري')}</span>
-                          </button>
-
-                          {/* الليلى (Dark Mode) Button */}
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              if (theme !== 'dark') toggleTheme();
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
-                              theme === 'dark'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <Moon className={`w-4 h-4 ${theme === 'dark' ? 'stroke-[2.5px]' : ''}`} />
-                            <span>{t('الليلي')}</span>
-                          </button>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setShowMenu(false);
+                          setShowAppearanceSettings(true);
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-850 dark:text-slate-200 rounded-xl border-2 border-slate-100 dark:border-slate-800 transition-all outline-none cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
+                            <Sliders className="w-4 h-4 text-indigo-500" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{t('إعدادات المظهر')}</span>
                         </div>
-                      </div>
+                      </button>
                     </div>
+
+
 
                     {/* Logout Button */}
                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
@@ -809,16 +867,16 @@ export const AdminDashboard = memo(({
               </div>
             )}
 
-            {/* Card 6.5: General Managers (ملاك النظام) - Only for Super Admin */}
+            {/* Card 6.5: General Managers (المديرين العموم) - Only for Super Admin */}
             {!currentSupervisor && (
               <div 
                 onClick={() => setActiveTab('general_managers')}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
               >
                 <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('ملاك النظام')}</h3>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المديرين العموم')}</h3>
                   <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {generalManagers.length} {t('مالك نظام')}
+                    {generalManagers.length} {t('مدير عام')}
                   </span>
                 </div>
               </div>
@@ -1318,11 +1376,11 @@ export const AdminDashboard = memo(({
                   <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-white dark:text-white" />
                   </div>
-                  {t('إضافة مالك نظام جديد')}
+                  {t('إضافة مدير عام جديد')}
                 </h2>
                 <form onSubmit={handleCreateGeneralManager} className="space-y-5">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم مالك النظام')}</label>
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المدير العام')}</label>
                     <input 
                       value={adminGeneralManagerForm?.name || ''}
                       onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, name: e.target.value})}
@@ -1368,7 +1426,7 @@ export const AdminDashboard = memo(({
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة لمالك النظام')}</label>
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة للمدير العام')}</label>
                     <div className="max-h-48 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-2.5">
                       {approvedGarages.map(g => (
                         <div 
@@ -1400,7 +1458,7 @@ export const AdminDashboard = memo(({
                     {isSubmittingGeneralManager ? <Spinner /> : (
                       <>
                         <Plus className="w-6 h-6" />
-                        <span>{t('إضافة مالك نظام')}</span>
+                        <span>{t('إضافة مدير عام')}</span>
                       </>
                     )}
                   </button>
@@ -1415,7 +1473,7 @@ export const AdminDashboard = memo(({
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
                       <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
                     </div>
-                    {t('قائمة ملاك النظام بالمنصة')}
+                    {t('قائمة المديرين العموم بالمنصة')}
                     <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({generalManagers.length})</span>
                   </h2>
                 </div>
@@ -1455,18 +1513,18 @@ export const AdminDashboard = memo(({
                             onClick={() => {
                               setConfirmDialog({
                                 isOpen: true,
-                                title: t('حذف مالك النظام'),
-                                message: adminLang === 'en' ? `Are you sure you want to delete system owner "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف مالك النظام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+                                title: t('حذف المدير العام'),
+                                message: adminLang === 'en' ? `Are you sure you want to delete general manager "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف المدير العام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
                                 confirmText: t('نعم، احذف'),
                                 cancelText: t('إلغاء'),
                                 type: 'danger',
                                 onConfirm: async () => {
                                   try {
                                     await firestoreService.removeGeneralManager(gm.id);
-                                    showToast(t('تم حذف مالك النظام بنجاح'));
+                                    showToast(t('تم حذف المدير العام بنجاح'));
                                   } catch (error) {
                                     console.error(error);
-                                    showToast(t('فشل حذف مالك النظام'), 'error');
+                                    showToast(t('فشل حذف المدير العام'), 'error');
                                   } finally {
                                     setConfirmDialog(p => ({ ...p, isOpen: false }));
                                   }
@@ -1474,7 +1532,7 @@ export const AdminDashboard = memo(({
                               });
                             }}
                             className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                            title={t('إلغاء صلاحيات مالك النظام')}
+                            title={t('إلغاء صلاحيات المدير العام')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1542,7 +1600,7 @@ export const AdminDashboard = memo(({
                             </div>
                           )}
                           <span className="text-[8px] font-black px-2.5 py-1 bg-purple-550/10 rounded-md text-purple-650 dark:text-purple-400">
-                            {t('مالك نظام لجراج أو أكثر')}
+                            {t('مدير عام لجراج أو أكثر')}
                           </span>
                         </div>
                       </div>
@@ -1550,7 +1608,7 @@ export const AdminDashboard = memo(({
                     {generalManagers.length === 0 && (
                       <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
                         <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        {t('لا يوجد ملاك نظام منشئين حالياً')}
+                        {t('لا يوجد مديرين عموم منشئين حالياً')}
                       </div>
                     )}
                   </div>
@@ -2319,7 +2377,7 @@ export const AdminDashboard = memo(({
                   onSubmit={async (e) => {
                     await handleAddGarage(e);
                     // Clear form on success
-                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '' });
+                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', billingModel: 'commission', subscriptionType: 'weekly' });
                   }}
                   className="space-y-6"
                 >
@@ -2372,8 +2430,23 @@ export const AdminDashboard = memo(({
                     </div>
                   </div>
 
-                  {/* Initial Package (Optional) */}
-                  {packages.length > 0 && (
+                  {/* طريقة الحساب */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('طريقة الحساب بالجراج')}</label>
+                    <select 
+                      name="billingModel" 
+                      value={garageForm.billingModel}
+                      onChange={(e) => setGarageForm({ ...garageForm, billingModel: e.target.value as any })}
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
+                      dir="rtl"
+                    >
+                      <option value="commission">{t('بالعمولة (شحن سيارات)')}</option>
+                      <option value="subscription">{t('بالاشتراك (أسبوعي/شهري)')}</option>
+                    </select>
+                  </div>
+
+                  {/* Initial Package (Only for Commission) */}
+                  {garageForm.billingModel === 'commission' && packages.length > 0 && (
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('باقة البداية (اختياري)')}</label>
                       <select 
@@ -2387,6 +2460,23 @@ export const AdminDashboard = memo(({
                         {packages.map(pkg => (
                           <option key={pkg.id} value={pkg.id}>{pkg.name} - {pkg.price} {t('ج.م')} ({pkg.vehiclesCount} {t('سيارة')})</option>
                         ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Subscription Type (Only for Subscription) */}
+                  {garageForm.billingModel === 'subscription' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('نوع الاشتراك الابتدائي')}</label>
+                      <select 
+                        name="subscriptionType" 
+                        value={garageForm.subscriptionType}
+                        onChange={(e) => setGarageForm({ ...garageForm, subscriptionType: e.target.value as any })}
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
+                        dir="rtl"
+                      >
+                        <option value="weekly">{t('اشتراك أسبوعي - 800 ج.م')}</option>
+                        <option value="monthly">{t('اشتراك شهري - 3000 ج.م')}</option>
                       </select>
                     </div>
                   )}
@@ -2492,6 +2582,16 @@ export const AdminDashboard = memo(({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Appearance Settings Modal */}
+      {showAppearanceSettings && (
+        <AppearanceSettingsModal 
+          onClose={() => setShowAppearanceSettings(false)}
+          showToast={(msg, type) => showToast(msg, type)}
+          adminColor={adminColor}
+          onUpdateAdminColor={(color) => setAdminColor(color)}
+        />
       )}
     </div>
   );

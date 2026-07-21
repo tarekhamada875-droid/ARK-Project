@@ -1068,7 +1068,23 @@ export function useGarageApp() {
       return;
     }
 
-    if (!isSubscriber && (garage.balance || 0) < commissionVal) {
+    const isGarageSubscription = garage.billingModel === 'subscription';
+    let isGarageSubscriptionExpired = false;
+    if (isGarageSubscription) {
+      if (!garage.balanceExpiry) {
+        isGarageSubscriptionExpired = true;
+      } else {
+        const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+        isGarageSubscriptionExpired = expiryDate < new Date();
+      }
+    }
+
+    if (isGarageSubscription && isGarageSubscriptionExpired) {
+      showToast('عفواً، انتهى اشتراك الجراج. يرجى تجديد الاشتراك.', 'error');
+      return;
+    }
+
+    if (!isGarageSubscription && !isSubscriber && (garage.balance || 0) < commissionVal) {
       showToast('عفواً، الرصيد لا يكفي. يرجى الشحن.', 'error');
       return;
     }
@@ -1088,7 +1104,7 @@ export function useGarageApp() {
         status: 'inside',
         staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
         isSubscriber: isSubscriber
-      }, isSubscriber ? 0 : commissionVal);
+      }, (isGarageSubscription || isSubscriber) ? 0 : commissionVal);
 
       await firestoreService.addActivityLog({
         garageId: garage.id,
@@ -1207,7 +1223,21 @@ export function useGarageApp() {
     setShowDeleteConfirm(false);
 
     try {
-      if (isWithinFiveMinutes && !isOverOneDay && garage.balance !== undefined) {
+      const isGarageSubscription = garage.billingModel === 'subscription';
+      if (isGarageSubscription) {
+        const success = await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, garage.lastRefundDate || '');
+        if (success) {
+          await firestoreService.addActivityLog({
+            garageId: garage.id,
+            staffId: currentStaff ? currentStaff.id : null,
+            staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+            actionType: 'delete_refund',
+            plateNumber: `مسح لوحة: ${selectedVehicle.plateNumber}`,
+            timestamp: serverTimestamp() as any
+          });
+          showToast('اللوحة اتمسحت بنجاح');
+        }
+      } else if (isWithinFiveMinutes && !isOverOneDay && garage.balance !== undefined) {
         const todayYMD = new Date().toISOString().split('T')[0];
         const hasLimit = (garage.dailyRefundCount || 0) < 5 || garage.lastRefundDate !== todayYMD;
         
@@ -1317,11 +1347,26 @@ export function useGarageApp() {
     const overnightRate = Number(normalizeDigits(formData.get('overnightRate') as string || '0'));
     const initialPackageId = formData.get('initialPackageId') as string;
     const commissionPerVehicle = 1;
-    
-    const selectedPkg = packages.find(p => p.id === initialPackageId);
-    const initialBalance = selectedPkg ? (selectedPkg.vehiclesCount * commissionPerVehicle) : 0;
-    const initialCars = selectedPkg ? selectedPkg.vehiclesCount : 0;
-    const initialRevenue = selectedPkg ? selectedPkg.price : 0;
+    const billingModel = formData.get('billingModel') as 'subscription' | 'commission' || 'commission';
+    const subscriptionType = formData.get('subscriptionType') as 'weekly' | 'monthly' || 'weekly';
+
+    let initialBalance = 0;
+    let initialCars = 0;
+    let initialRevenue = 0;
+    const expiryDate = new Date();
+
+    if (billingModel === 'subscription') {
+      const days = subscriptionType === 'weekly' ? 7 : 30;
+      expiryDate.setDate(expiryDate.getDate() + days);
+      initialRevenue = subscriptionType === 'weekly' ? 800 : 3000;
+      initialCars = 9999;
+    } else {
+      expiryDate.setFullYear(expiryDate.getFullYear() + 10);
+      const selectedPkg = packages.find(p => p.id === initialPackageId);
+      initialBalance = selectedPkg ? (selectedPkg.vehiclesCount * commissionPerVehicle) : 0;
+      initialCars = selectedPkg ? selectedPkg.vehiclesCount : 0;
+      initialRevenue = selectedPkg ? selectedPkg.price : 0;
+    }
 
     if (phone && (phone.length < 3 || phone.length > 20)) {
       showToast('يرجى إدخال رقم هاتف صحيح يتكون من 3 أرقام على الأقل', 'error');
@@ -1364,9 +1409,6 @@ export function useGarageApp() {
         return;
       }
 
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 10);
-
       const isPending = delegate !== null;
       const actualBalance = isPending ? 0 : initialBalance;
       const actualCars = isPending ? 0 : initialCars;
@@ -1380,8 +1422,8 @@ export function useGarageApp() {
         overnightRate,
         balanceExpiry: Timestamp.fromDate(expiryDate),
         createdAt: serverTimestamp(),
-        balanceDays: 3650,
-        billingModel: 'commission',
+        balanceDays: billingModel === 'subscription' ? (subscriptionType === 'weekly' ? 7 : 30) : 3650,
+        billingModel: billingModel,
         commissionPerVehicle: commissionPerVehicle,
         balance: actualBalance,
         totalRechargedCars: actualCars,
@@ -1477,6 +1519,7 @@ export function useGarageApp() {
     setCurrentStaff,
     sessionId,
     toast,
+    setToast,
     showRecentExitWarning,
     setShowRecentExitWarning,
     recentVehicle,

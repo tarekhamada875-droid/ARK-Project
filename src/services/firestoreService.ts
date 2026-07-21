@@ -873,14 +873,36 @@ export const firestoreService = {
       const garageRef = doc(db, 'garages', request.garageId);
       const delegateRef = doc(db, 'delegates', request.delegateId);
       
-      // 1. Update Garage
-      batch.update(garageRef, {
-        balance: increment(request.amount),
+      const garageDoc = await getDoc(garageRef);
+      const isSub = request.packageId === 'weekly_sub' || request.packageId === 'monthly_sub';
+      
+      const updateData: any = {
         totalAdminRevenue: increment(request.revenueAmount),
-        totalRechargedCars: increment(request.carsCount),
         isLocked: false,
         lastRechargeDate: serverTimestamp()
-      });
+      };
+
+      if (isSub) {
+        let baseDate = new Date();
+        const currentExpiry = garageDoc.exists() ? garageDoc.data()?.balanceExpiry : null;
+        if (currentExpiry) {
+          const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+          if (currentExpiryDate > baseDate) {
+            baseDate = currentExpiryDate;
+          }
+        }
+        const days = request.packageId === 'weekly_sub' ? 7 : 30;
+        baseDate.setDate(baseDate.getDate() + days);
+        
+        updateData.balanceExpiry = Timestamp.fromDate(baseDate);
+        updateData.billingModel = 'subscription';
+      } else {
+        updateData.balance = increment(request.amount);
+        updateData.totalRechargedCars = increment(request.carsCount);
+      }
+
+      // 1. Update Garage
+      batch.update(garageRef, updateData);
 
       // 2. Update Delegate
       batch.update(delegateRef, {

@@ -5,38 +5,44 @@ import { useTheme } from '../../utils/ThemeContext';
 import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
 import { Garage, Staff } from '../../types';
+import { isLightColor } from '../../utils';
 
 interface AppearanceSettingsModalProps {
-  garage: Garage;
-  currentStaff: Staff | null;
+  garage?: Garage | null;
+  currentStaff?: Staff | null;
   onClose: () => void;
   showToast: (msg: string, type: 'success' | 'error') => void;
   onToggleMenu?: () => void;
+  adminColor?: string;
+  onUpdateAdminColor?: (color: string) => void;
 }
 
 const SHIMMER_COLORS = [
-  { value: '#10b981', label: 'أخضر زمردي' },
-  { value: '#3b82f6', label: 'أزرق ملكي' },
-  { value: '#a855f7', label: 'أرجواني فاخر' },
-  { value: '#06b6d4', label: 'فيروزي كهربائي' },
-  { value: '#eab308', label: 'ذهبي براق' },
-  { value: '#f97316', label: 'برتقالي ناري' },
+  { value: '#059669', label: 'أخضر زمردي داكن' },
+  { value: '#1e40af', label: 'كحلي وقور' },
+  { value: '#6d28d9', label: 'بنفسجي ملكي عميق' },
+  { value: '#0f766e', label: 'بترولي كلاسيكي' },
+  { value: '#f59e0b', label: 'ذهبي دافئ وساطع' },
+  { value: '#ea580c', label: 'برتقالي نحاسي' },
   { value: '#ec4899', label: 'رمادي / أوف وايت' },
-  { value: '#ef4444', label: 'أحمر قاني' }
+  { value: '#be123c', label: 'أحمر ياقوتي فاخر' }
 ];
 
 export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = ({
-  garage,
-  currentStaff,
+  garage = null,
+  currentStaff = null,
   onClose,
   showToast,
-  onToggleMenu
+  onToggleMenu,
+  adminColor,
+  onUpdateAdminColor
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [pendingColor, setPendingColor] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const activeColor = pendingColor !== null ? pendingColor : (garage?.shimmerColor || '#10b981');
+  const defaultColor = adminColor || (garage?.shimmerColor || '#10b981');
+  const activeColor = pendingColor !== null ? pendingColor : defaultColor;
   
   const resolvedActiveColor = activeColor === '#ec4899' 
     ? (theme === 'dark' ? '#faf9f6' : '#64748b') 
@@ -49,10 +55,17 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
   const handleUpdateShimmerColor = async (colorVal: string) => {
     setIsSaving(true);
     try {
-      await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
-      soundManager.play('setting');
-      showToast('تم تحديث لون إضاءة الكارت بنجاح', 'success');
-      setPendingColor(null);
+      if (onUpdateAdminColor) {
+        onUpdateAdminColor(colorVal);
+        soundManager.play('setting');
+        showToast('تم تحديث لون الإدارة بنجاح', 'success');
+        setPendingColor(null);
+      } else if (garage) {
+        await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
+        soundManager.play('setting');
+        showToast('تم تحديث لون إضاءة الكارت بنجاح', 'success');
+        setPendingColor(null);
+      }
     } catch (err) {
       console.error('Failed to update shimmer color:', err);
       showToast('حدث خطأ أثناء تحديث اللون', 'error');
@@ -66,7 +79,12 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
       {/* Header */}
       <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-900 flex items-center justify-between bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: resolvedActiveColor }}>
+          <div 
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+              isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white'
+            }`} 
+            style={{ backgroundColor: resolvedActiveColor }}
+          >
             <Sliders className="w-5 h-5" />
           </div>
           <div>
@@ -120,9 +138,11 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
               >
                 <div 
                   className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                    theme === 'light' ? 'text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                    theme === 'light' 
+                      ? (isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white') 
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-450'
                   }`}
-                  style={theme === 'light' ? { backgroundColor: activeColor } : {}}
+                  style={theme === 'light' ? { backgroundColor: resolvedActiveColor } : {}}
                 >
                   <Sun className="w-6 h-6 stroke-[2.5px]" />
                 </div>
@@ -130,7 +150,12 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                   <span className={`block font-black text-sm ${theme === 'light' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>الوضع النهاري</span>
                 </div>
                 {theme === 'light' && (
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: activeColor }}>
+                  <div 
+                    className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                      isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white'
+                    }`} 
+                    style={{ backgroundColor: resolvedActiveColor }}
+                  >
                     <Check className="w-3.5 h-3.5 stroke-[3px]" />
                   </div>
                 )}
@@ -151,7 +176,9 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
               >
                 <div 
                   className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                    theme === 'dark' ? 'text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                    theme === 'dark' 
+                      ? (isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white') 
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                   }`}
                   style={theme === 'dark' ? { backgroundColor: resolvedActiveColor } : {}}
                 >
@@ -161,7 +188,12 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                   <span className={`block font-black text-sm ${theme === 'dark' ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>الوضع الليلي</span>
                 </div>
                 {theme === 'dark' && (
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: resolvedActiveColor }}>
+                  <div 
+                    className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                      isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white'
+                    }`} 
+                    style={{ backgroundColor: resolvedActiveColor }}
+                  >
                     <Check className="w-3.5 h-3.5 stroke-[3px]" />
                   </div>
                 )}
@@ -169,91 +201,99 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
             </div>
           </div>
 
-          {/* Shimmer Color Section (Only Admin) */}
-          {!currentStaff ? (
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-900">
-              <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-900">
-                <Palette className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                <h4 className="text-base font-black text-slate-800 dark:text-slate-100">لون إضاءة الكارت (اللوحة)</h4>
-              </div>
+          {/* Shimmer Color Section (Only Admin if garage or adminColor is provided) */}
+          {(garage || adminColor) && (
+            !currentStaff ? (
+              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-900">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-900">
+                  <Palette className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                  <h4 className="text-base font-black text-slate-800 dark:text-slate-100">
+                    {adminColor ? 'اللون المميز للإدارة' : 'لون إضاءة الكارت (اللوحة)'}
+                  </h4>
+                </div>
 
-              <div className="grid grid-cols-4 gap-3 pt-2">
-                {SHIMMER_COLORS.map((item) => {
-                  const isSelected = activeColor === item.value;
-                  const itemColorResolved = item.value === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : item.value;
-                  return (
-                    <button
-                      key={item.value}
-                      onClick={() => {
-                        soundManager.play('setting');
-                        if (item.value === (garage?.shimmerColor || '#10b981')) {
-                          setPendingColor(null);
-                        } else {
-                          setPendingColor(item.value);
-                        }
-                      }}
-                      title={item.label}
-                      className={`h-11 rounded-xl border-2 transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.98] flex items-center justify-center relative ${
-                        isSelected 
-                          ? 'border-slate-800 dark:border-white scale-[1.03] shadow-md ring-2 ring-slate-800/10' 
-                          : 'border-slate-200 dark:border-slate-800'
-                      }`}
-                      style={{ backgroundColor: itemColorResolved }}
-                    >
-                      {isSelected && (
-                        <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-sm">
-                          <Check className="w-4 h-4 text-slate-900 stroke-[3px]" />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Confirm / Change Area */}
-              <AnimatePresence>
-                {pendingColor !== null && pendingColor !== (garage?.shimmerColor || '#10b981') && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="pt-4"
-                  >
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-150 dark:border-slate-800/80 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">هل تود حفظ اللون الجديد للجراج؟</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            soundManager.play('setting');
+                <div className="grid grid-cols-4 gap-3 pt-2">
+                  {SHIMMER_COLORS.map((item) => {
+                    const isSelected = activeColor === item.value;
+                    const itemColorResolved = item.value === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        onClick={() => {
+                          soundManager.play('setting');
+                          if (item.value === defaultColor) {
                             setPendingColor(null);
-                          }}
-                          className="px-3 py-1.5 text-xs font-black text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors cursor-pointer"
-                        >
-                          إلغاء
-                        </button>
-                        <button
-                          disabled={isSaving}
-                          onClick={() => handleUpdateShimmerColor(pendingColor)}
-                          className="px-4 py-1.5 text-xs font-black text-white rounded-xl transition-all hover:scale-[1.03] active:scale-[0.97] cursor-pointer shadow-sm disabled:opacity-50"
-                          style={{ backgroundColor: resolvedPendingColor || '#10b981' }}
-                        >
-                          {isSaving ? 'جاري الحفظ...' : 'تأكيد وحفظ'}
-                        </button>
+                          } else {
+                            setPendingColor(item.value);
+                          }
+                        }}
+                        title={item.label}
+                        className={`h-11 rounded-xl border-2 transition-all cursor-pointer hover:scale-[1.05] active:scale-[0.98] flex items-center justify-center relative ${
+                          isSelected 
+                            ? 'border-slate-800 dark:border-white scale-[1.03] shadow-md ring-2 ring-slate-800/10' 
+                            : 'border-slate-200 dark:border-slate-800'
+                        }`}
+                        style={{ backgroundColor: itemColorResolved }}
+                      >
+                        {isSelected && (
+                          <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-sm">
+                            <Check className="w-4 h-4 text-slate-900 stroke-[3px]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Confirm / Change Area */}
+                <AnimatePresence>
+                  {pendingColor !== null && pendingColor !== defaultColor && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="pt-4"
+                    >
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-150 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                          <span className="text-xs font-black text-slate-700 dark:text-slate-300">
+                            {adminColor ? 'هل تود حفظ اللون الجديد للإدارة؟' : 'هل تود حفظ اللون الجديد للجراج؟'}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              soundManager.play('setting');
+                              setPendingColor(null);
+                            }}
+                            className="px-3 py-1.5 text-xs font-black text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                          <button
+                            disabled={isSaving}
+                            onClick={() => handleUpdateShimmerColor(pendingColor)}
+                            className={`px-4 py-1.5 text-xs font-black rounded-xl transition-all hover:scale-[1.03] active:scale-[0.97] cursor-pointer shadow-sm disabled:opacity-50 ${
+                              isLightColor(resolvedPendingColor || '#10b981') ? 'text-slate-950' : 'text-white'
+                            }`}
+                            style={{ backgroundColor: resolvedPendingColor || '#10b981' }}
+                          >
+                            {isSaving ? 'جاري الحفظ...' : 'تأكيد وحفظ'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          ) : (
-            <div className="pt-6 border-t border-slate-100 dark:border-slate-900 text-center">
-              <p className="text-xs font-bold text-slate-400 dark:text-slate-500 leading-relaxed">
-                تغيير هوية لون إضاءة الكارت متاح فقط لمدير الجراج.
-              </p>
-            </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-900 text-center">
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 leading-relaxed">
+                  تغيير هوية لون إضاءة الكارت متاح فقط لمدير الجراج.
+                </p>
+              </div>
+            )
           )}
         </div>
       </div>

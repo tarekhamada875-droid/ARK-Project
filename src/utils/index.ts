@@ -332,3 +332,25 @@ export const resolveShimmerColor = (color: string | undefined, theme: 'light' | 
   }
   return baseColor;
 };
+
+/**
+ * Checks if a hex color is "light" (bright), suggesting a dark text color should be used on top of it.
+ */
+export const isLightColor = (color: string | undefined): boolean => {
+  if (!color) return false;
+  const c = color.toLowerCase();
+  if (c === '#faf9f6' || c === '#f59e0b' || c === '#eab308') {
+    return true;
+  }
+  if (c.startsWith('#')) {
+    const hex = c.substring(1);
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+      return yiq > 150;
+    }
+  }
+  return false;
+};

@@ -9,8 +9,8 @@ export interface Package {
   price: number;
   vehiclesCount: number;
   description?: string;
-  isActive: boolean;
-  createdAt: any;
+  isActive?: boolean;
+  createdAt?: any;
 }
 
 export interface Garage {

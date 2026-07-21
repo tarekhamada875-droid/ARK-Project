@@ -10,7 +10,8 @@ import {
   Shield,
   RefreshCw,
 } from 'lucide-react';
-import { safeDate } from './utils';
+import { safeDate, resolveShimmerColor } from './utils';
+import { useTheme } from './utils/ThemeContext';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
@@ -36,6 +37,7 @@ import { SubscriberWarningModal } from './components/modals/SubscriberWarningMod
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
 import { firestoreService } from './services/firestoreService';
+import { PharaonicLoader } from './components/ui/PharaonicLoader';
 
 export default function App() {
   const [minimumLoadingPassed, setMinimumLoadingPassed] = useState(false);
@@ -102,6 +104,7 @@ export default function App() {
     delegateRequests,
     currentStaff,
     toast,
+    setToast,
     showRecentExitWarning,
     setShowRecentExitWarning,
     recentVehicle,
@@ -138,6 +141,51 @@ export default function App() {
     handleRejectApprovalRequest
   } = useGarageApp();
 
+  const { theme } = useTheme();
+
+  const activeColor = (() => {
+    if (view && (view.startsWith('admin_') || view === 'admin_dashboard')) {
+      try {
+        return localStorage.getItem('app_admin_color') || '#10b981';
+      } catch (e) {
+        return '#10b981';
+      }
+    }
+    return garage?.shimmerColor || '#10b981';
+  })();
+
+  const resolvedColor = resolveShimmerColor(activeColor, theme);
+
+  const [pharaonicLoading, setPharaonicLoading] = useState(false);
+  const [pharaonicTargetView, setPharaonicTargetView] = useState<string | null>(null);
+  const [displayedView, setDisplayedView] = useState<string | null>(null);
+
+  // Sync displayedView with view, except when intercepting for the Pharaonic loading screen
+  useEffect(() => {
+    if (!displayedView) {
+      setDisplayedView(view);
+      return;
+    }
+
+    const isLoginView = (v: string | null) => v === 'login' || v === 'admin_login' || v === 'delegate_login';
+    const isDashboardView = (v: string | null) => v === 'garage' || v === 'admin_dashboard' || v === 'general_manager_dashboard' || v === 'delegate_dashboard';
+
+    if (isLoginView(displayedView) && isDashboardView(view)) {
+      setPharaonicTargetView(view);
+      setPharaonicLoading(true);
+    } else {
+      setDisplayedView(view);
+    }
+  }, [view]);
+
+  const handlePharaonicLoaderComplete = () => {
+    if (pharaonicTargetView) {
+      setDisplayedView(pharaonicTargetView);
+    }
+    setPharaonicLoading(false);
+    setPharaonicTargetView(null);
+  };
+
   // Call useBackTrapping hook to handle browser navigation / Android popstate
   useBackTrapping({
     view,
@@ -169,7 +217,7 @@ export default function App() {
 
   const renderView = () => {
     // Balance/Lock Block
-    if (garage && view !== 'admin_dashboard') {
+    if (garage && displayedView !== 'admin_dashboard') {
       const expiry = garage.balanceExpiry ? safeDate(garage.balanceExpiry) : null;
       if (expiry && expiry.getTime() > 0 && expiry.getTime() < Date.now()) {
         return (
@@ -200,7 +248,7 @@ export default function App() {
       }
     }
 
-    if (view === 'login') {
+    if (displayedView === 'login') {
       return (
         <LoginView 
           loginPhone={loginPhone}
@@ -212,7 +260,7 @@ export default function App() {
       );
     }
 
-    if (view === 'admin_login') {
+    if (displayedView === 'admin_login') {
       return (
         <AdminLoginView 
           adminPin={adminPin}
@@ -225,7 +273,7 @@ export default function App() {
       );
     }
 
-    if (view === 'admin_dashboard') {
+    if (displayedView === 'admin_dashboard') {
       return (
         <AdminDashboard 
           allGarages={allGarages}
@@ -250,7 +298,7 @@ export default function App() {
       );
     }
 
-    if (view === 'general_manager_dashboard' && currentGeneralManager) {
+    if (displayedView === 'general_manager_dashboard' && currentGeneralManager) {
       return (
         <GeneralManagerDashboard 
           currentGeneralManager={currentGeneralManager}
@@ -260,7 +308,7 @@ export default function App() {
       );
     }
 
-    if (view === 'delegate_login') {
+    if (displayedView === 'delegate_login') {
       return (
         <DelegateLoginView 
           onLogin={handleDelegateLogin}
@@ -270,7 +318,7 @@ export default function App() {
       );
     }
 
-    if (view === 'delegate_dashboard' && delegate) {
+    if (displayedView === 'delegate_dashboard' && delegate) {
       return (
         <DelegateDashboardView 
           delegate={delegate}
@@ -287,7 +335,7 @@ export default function App() {
       );
     }
 
-    if (view === 'admin_garage_details' && selectedGarageForDetails) {
+    if (displayedView === 'admin_garage_details' && selectedGarageForDetails) {
       return (
         <AdminGarageDetailsView 
           selectedGarageForDetails={selectedGarageForDetails}
@@ -304,7 +352,7 @@ export default function App() {
       );
     }
 
-    if (view === 'admin_delegate_details' && selectedDelegateForDetails) {
+    if (displayedView === 'admin_delegate_details' && selectedDelegateForDetails) {
       // Find the most up-to-date delegate data from our synced delegates list
       const liveDelegate = delegates.find(d => d.id === selectedDelegateForDetails.id) || selectedDelegateForDetails;
       if (!liveDelegate) return <div className="p-8 text-center">جاري التحميل...</div>;
@@ -319,7 +367,7 @@ export default function App() {
       );
     }
 
-    if (view === 'garage' && garage) {
+    if (displayedView === 'garage' && garage) {
       return (
         <GarageDashboardView 
           garage={garage}
@@ -352,13 +400,14 @@ export default function App() {
       );
     }
 
-    if (view === 'packages' && garage) {
+    if (displayedView === 'packages' && garage) {
       return (
         <PackagesModal 
           packages={sortedPackages}
           onClose={() => setView('garage')}
           garageHourlyRate={garage.hourlyRate}
           walletNumber={walletNumber}
+          billingModel={garage.billingModel}
         />
       );
     }
@@ -391,11 +440,38 @@ export default function App() {
     <div className="w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors">
       <ErrorBoundary>
         {toast && (
-          <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[200] px-6 py-4 rounded-2xl font-bold text-white flex items-center gap-3 min-w-[280px] justify-center transition-all ${
-            toast.type === 'error' ? 'bg-red-500' : 'bg-slate-900 dark:bg-slate-800'
-          }`}>
-            {toast.type === 'error' ? <XCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5 text-green-400" />}
-            <span>{toast.message}</span>
+          <div 
+            onClick={() => setToast(null)}
+            className="fixed inset-0 z-[250] bg-slate-950/20 dark:bg-black/40 backdrop-blur-[3px] flex items-center justify-center p-4 animate-overlay-30fps cursor-pointer"
+          >
+            <div 
+              className="w-full max-w-sm bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-[28px] p-6 shadow-2xl flex flex-col items-center text-center animate-popup-30fps animate-step select-none"
+            >
+              <div 
+                className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${
+                  toast.type === 'error' 
+                    ? 'bg-red-500/10 text-red-500 border-2 border-red-500/20' 
+                    : ''
+                }`}
+                style={toast.type === 'error' ? {} : {
+                  backgroundColor: `${resolvedColor}15`,
+                  color: resolvedColor,
+                  borderColor: `${resolvedColor}30`
+                }}
+              >
+                {toast.type === 'error' ? (
+                  <XCircle className="w-9 h-9 stroke-[2.5]" />
+                ) : (
+                  <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
+                )}
+              </div>
+              <h4 className="text-lg font-black text-slate-900 dark:text-white leading-tight mb-2">
+                {toast.type === 'error' ? 'تنبيه' : 'تم بنجاح'}
+              </h4>
+              <p className="text-sm font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
+                {toast.message}
+              </p>
+            </div>
           </div>
         )}
 
@@ -423,7 +499,7 @@ export default function App() {
           />
         )}
 
-        {showDeleteConfirm && view === 'admin_garage_details' && selectedGarageForDetails && (
+        {showDeleteConfirm && displayedView === 'admin_garage_details' && selectedGarageForDetails && (
           <DeleteGarageConfirmModal 
             garage={selectedGarageForDetails}
             isLoading={isLoading}
@@ -488,7 +564,7 @@ export default function App() {
                 <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
                   الحساب مفتوح على جهاز آخر. جاري إرسال طلب للموافقة على تبديل الخدمة إلى هذا الجهاز.
                 </p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                   برجاء إبقاء هذه الشاشة مفتوحة...
                 </p>
               </div>
@@ -547,6 +623,12 @@ export default function App() {
         )}
 
       {renderView()}
+      {pharaonicLoading && (
+        <PharaonicLoader 
+          targetView={pharaonicTargetView || 'garage'} 
+          onComplete={handlePharaonicLoaderComplete} 
+        />
+      )}
       </ErrorBoundary>
     </div>
   );

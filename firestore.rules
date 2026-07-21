@@ -140,7 +140,7 @@ service cloud.firestore {
              data.hourlyRate is number && data.hourlyRate >= 0 &&
              data.overnightRate is number && data.overnightRate >= 0 &&
              data.createdAt is timestamp &&
-             data.billingModel == 'commission' &&
+             (data.billingModel == 'commission' || data.billingModel == 'subscription') &&
              data.pin is string && data.pin.size() >= 4 &&
              (!('currentSessionId' in data) || (data.currentSessionId is string && data.currentSessionId.size() <= 128)) &&
              (!('commissionPerVehicle' in data) || (data.commissionPerVehicle is number && data.commissionPerVehicle >= 0)) &&
