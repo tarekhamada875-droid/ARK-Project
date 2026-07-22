@@ -77,6 +77,59 @@ export const AdminGarageDetailsView = memo(({
   const [monthlyGiftInput, setMonthlyGiftInput] = useState<string>(String(selectedGarageForDetails.monthlyGiftAmount || 0));
   const [isSavingGift, setIsSavingGift] = useState(false);
 
+  const [showSwitchBillingConfirm, setShowSwitchBillingConfirm] = useState(false);
+  const [targetBillingModel, setTargetBillingModel] = useState<'commission' | 'subscription'>(
+    selectedGarageForDetails.billingModel || 'commission'
+  );
+  const [isSwitchingBillingModel, setIsSwitchingBillingModel] = useState(false);
+
+  const handleSwitchBillingModel = async (newModel: 'commission' | 'subscription') => {
+    if (newModel === selectedGarageForDetails.billingModel) return;
+    setIsSwitchingBillingModel(true);
+    try {
+      const updateData: any = {
+        billingModel: newModel,
+        commissionPerVehicle: 1,
+      };
+
+      if (newModel === 'subscription' && !selectedGarageForDetails.balanceExpiry) {
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 7);
+        updateData.balanceExpiry = Timestamp.fromDate(defaultExpiry);
+      }
+
+      await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
+
+      await firestoreService.addActivityLog({
+        garageId: selectedGarageForDetails.id,
+        garageName: selectedGarageForDetails.name,
+        staffId: 'admin',
+        staffName: adminLang === 'en' ? 'System Administrator (Admin)' : 'مدير النظام (Admin)',
+        actionType: 'check_in',
+        plateNumber: adminLang === 'en'
+          ? `Billing model updated to: ${newModel === 'subscription' ? 'Subscription' : 'Pay-per-vehicle Commission'}`
+          : `تغيير نظام المحاسبة للجراج إلى: ${newModel === 'subscription' ? 'نظام الاشتراك (أسبوعي/شهري)' : 'بالعمولة (شحن سيارات)'}`,
+        timestamp: serverTimestamp() as any,
+      });
+
+      selectedGarageForDetails.billingModel = newModel;
+      if (updateData.balanceExpiry) {
+        selectedGarageForDetails.balanceExpiry = updateData.balanceExpiry;
+      }
+
+      showToast(
+        adminLang === 'en'
+          ? `Billing model updated to ${newModel === 'subscription' ? 'Subscription' : 'Commission'}`
+          : `تم تغيير نظام المحاسبة إلى: ${newModel === 'subscription' ? 'نظام الاشتراك' : 'بالعمولة (شحن سيارات)'}`
+      );
+      setShowSwitchBillingConfirm(false);
+    } catch (e) {
+      showToast(t('فشل'), 'error');
+    } finally {
+      setIsSwitchingBillingModel(false);
+    }
+  };
+
   React.useEffect(() => {
     setHourlyRateInput(String(selectedGarageForDetails.hourlyRate || 0));
     setOvernightRateInput(String(selectedGarageForDetails.overnightRate || 0));
@@ -381,6 +434,12 @@ export const AdminGarageDetailsView = memo(({
                                         }
                                         setIsUpdatingGaragePin(true);
                                         try {
+                                            const pinCheck = await firestoreService.isPinTaken(garagePinInput, selectedGarageForDetails.id);
+                                            if (pinCheck.taken) {
+                                                showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+                                                setIsUpdatingGaragePin(false);
+                                                return;
+                                            }
                                             await firestoreService.updateGarage(selectedGarageForDetails.id, { pin: garagePinInput });
                                             selectedGarageForDetails.pin = garagePinInput;
                                             setIsEditingGaragePin(false);
@@ -515,6 +574,71 @@ export const AdminGarageDetailsView = memo(({
           </div>
         </div>
 
+        {/* Billing Model Config Card */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              {t('نموذج المحاسبة والجباية')}
+            </h4>
+            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              {selectedGarageForDetails.billingModel === 'subscription' ? t('نظام الاشتراك') : t('بالعمولة (شحن سيارات)')}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+            {t('يمكنك التبديل الآمن بين نظام العمولة والاشتراك بدون حذف الجراج أو فقدان أي من سجلاته التاريخية.')}
+          </p>
+
+          <div className="grid grid-cols-1 gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedGarageForDetails.billingModel !== 'commission') {
+                  setTargetBillingModel('commission');
+                  setShowSwitchBillingConfirm(true);
+                }
+              }}
+              className={`p-3.5 rounded-xl border-2 text-right flex items-center justify-between transition-all outline-none cursor-pointer ${
+                selectedGarageForDetails.billingModel === 'commission'
+                  ? 'bg-amber-500/10 border-amber-500 text-slate-900 dark:text-white shadow-sm'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+            >
+              <div>
+                <div className="font-black text-xs">{t('بالعمولة (شحن سيارات)')}</div>
+                <div className="text-[10px] opacity-75 mt-0.5">{t('خصم 1 وحدة رصيد لكل سيارة تدخل الجراج')}</div>
+              </div>
+              {selectedGarageForDetails.billingModel === 'commission' && (
+                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mr-2" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedGarageForDetails.billingModel !== 'subscription') {
+                  setTargetBillingModel('subscription');
+                  setShowSwitchBillingConfirm(true);
+                }
+              }}
+              className={`p-3.5 rounded-xl border-2 text-right flex items-center justify-between transition-all outline-none cursor-pointer ${
+                selectedGarageForDetails.billingModel === 'subscription'
+                  ? 'bg-amber-500/10 border-amber-500 text-slate-900 dark:text-white shadow-sm'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
+              }`}
+            >
+              <div>
+                <div className="font-black text-xs">{t('نظام الاشتراك (أسبوعي / شهري)')}</div>
+                <div className="text-[10px] opacity-75 mt-0.5">{t('محاسبة دورية محددة بفترة أسبوعية أو شهرية')}</div>
+              </div>
+              {selectedGarageForDetails.billingModel === 'subscription' && (
+                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mr-2" />
+              )}
+            </button>
+          </div>
+        </div>
+
         {/* Monthly Gift Config */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
           <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -634,6 +758,12 @@ export const AdminGarageDetailsView = memo(({
                                                         }
                                                         setIsUpdatingStaffPin(true);
                                                         try {
+                                                            const pinCheck = await firestoreService.isPinTaken(editingStaffPinValue, s.id);
+                                                            if (pinCheck.taken) {
+                                                                showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+                                                                setIsUpdatingStaffPin(false);
+                                                                return;
+                                                            }
                                                             await firestoreService.updateStaff(s.id, { pin: editingStaffPinValue });
                                                             s.pin = editingStaffPinValue;
                                                             setEditingStaffPinId(null);
@@ -872,6 +1002,12 @@ export const AdminGarageDetailsView = memo(({
                             if (!staffForm.name || !staffForm.pin) return;
                             setIsLoading(true);
                             try {
+                                const pinCheck = await firestoreService.isPinTaken(staffForm.pin);
+                                if (pinCheck.taken) {
+                                    showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+                                    setIsLoading(false);
+                                    return;
+                                }
                                 await firestoreService.addStaff({ 
                                     name: staffForm.name, 
                                     pin: staffForm.pin, 
@@ -973,6 +1109,51 @@ export const AdminGarageDetailsView = memo(({
                 disabled={isLoading}
                 onClick={() => setPendingPackage(null)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-4 rounded-xl font-black text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50 outline-none cursor-pointer"
+              >
+                {t('إلغاء')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Switch Billing Model Confirmation Modal */}
+      {showSwitchBillingConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 max-w-md w-full border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-5">
+            <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto text-amber-500 border border-amber-500/20">
+              <Zap className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                {t('تأكيد تغيير نظام المحاسبة')}
+              </h3>
+              <p className="text-xs md:text-sm font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">
+                {targetBillingModel === 'subscription'
+                  ? t('هل أنت متأكد من تحويل هذا الجراج إلى نظام الاشتراك (أسبوعي/شهري)؟ سيتم تفعيل باقات التجديد الزمني له.')
+                  : t('هل أنت متأكد من تحويل هذا الجراج إلى نظام الشحن بالعمولة؟ سيتم خصم 1 وحدة رصيد لكل سيارة عند الدخول.')}
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                disabled={isSwitchingBillingModel}
+                onClick={() => handleSwitchBillingModel(targetBillingModel)}
+                className="flex-1 py-3.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer outline-none"
+              >
+                {isSwitchingBillingModel ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <span>{t('تأكيد التحويل الآن')}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isSwitchingBillingModel}
+                onClick={() => setShowSwitchBillingConfirm(false)}
+                className="flex-1 py-3.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm rounded-xl transition-all cursor-pointer outline-none"
               >
                 {t('إلغاء')}
               </button>

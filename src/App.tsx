@@ -424,7 +424,7 @@ export default function App() {
 
   // --- Landscape Orientation Check for Mobiles ---
   if (isLandscapeMobile) {
-    return <LandscapeMobileView garage={garage} />;
+    return <LandscapeMobileView garage={displayedView === 'garage' ? garage : null} />;
   }
 
   // --- Offline Mode (Gatekeeper) ---

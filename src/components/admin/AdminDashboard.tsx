@@ -314,6 +314,12 @@ export const AdminDashboard = memo(({
 
     setIsSubmittingDelegate(true);
     try {
+      const pinCheck = await firestoreService.isPinTaken(delegateForm.pin);
+      if (pinCheck.taken) {
+        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+        setIsSubmittingDelegate(false);
+        return;
+      }
       await addDelegate({
         ...delegateForm,
         role: 'delegate',
@@ -359,6 +365,12 @@ export const AdminDashboard = memo(({
 
     setIsSubmittingSupervisor(true);
     try {
+      const pinCheck = await firestoreService.isPinTaken(cleanPin);
+      if (pinCheck.taken) {
+        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+        setIsSubmittingSupervisor(false);
+        return;
+      }
       await firestoreService.addSupervisor({
         name: cleanName,
         phone: cleanPhone,
@@ -413,6 +425,12 @@ export const AdminDashboard = memo(({
 
     setIsSubmittingGeneralManager(true);
     try {
+      const pinCheck = await firestoreService.isPinTaken(cleanPin);
+      if (pinCheck.taken) {
+        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+        setIsSubmittingGeneralManager(false);
+        return;
+      }
       await firestoreService.addGeneralManager({
         name: cleanName,
         phone: cleanPhone,
@@ -1312,6 +1330,12 @@ export const AdminDashboard = memo(({
                                   }
                                   setIsUpdatingSupervisorPin(true);
                                   try {
+                                    const pinCheck = await firestoreService.isPinTaken(editingSupervisorPinValue, s.id);
+                                    if (pinCheck.taken) {
+                                      showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+                                      setIsUpdatingSupervisorPin(false);
+                                      return;
+                                    }
                                     await firestoreService.updateSupervisor(s.id, { pin: editingSupervisorPinValue });
                                     s.pin = editingSupervisorPinValue;
                                     setEditingSupervisorPinId(null);
@@ -1560,6 +1584,12 @@ export const AdminDashboard = memo(({
                                   }
                                   setIsUpdatingGeneralManagerPin(true);
                                   try {
+                                    const pinCheck = await firestoreService.isPinTaken(editingGeneralManagerPinValue, gm.id);
+                                    if (pinCheck.taken) {
+                                      showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+                                      setIsUpdatingGeneralManagerPin(false);
+                                      return;
+                                    }
                                     await firestoreService.updateGeneralManager(gm.id, { pin: editingGeneralManagerPinValue });
                                     gm.pin = editingGeneralManagerPinValue;
                                     setEditingGeneralManagerPinId(null);

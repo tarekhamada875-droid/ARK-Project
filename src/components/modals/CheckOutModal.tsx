@@ -327,26 +327,27 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                 {/* Grid / Bento layout for 4 items without icons to maximize text size */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                   
-                  {/* Item 1: وقت الدخول (الوصول) */}
+                  {/* Item 1: الفئة / النوع (النوع) */}
                   <div className="flex flex-col h-[90px] sm:h-[110px] md:h-[130px] bg-[#faf9f6] dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 rounded-2xl shadow-sm text-center overflow-hidden">
                     {/* Header Block */}
                     <div className="py-1.5 sm:py-2 px-3 bg-slate-100/70 dark:bg-slate-950/50 border-b border-slate-150 dark:border-slate-800/60 shrink-0">
-                      <span className="text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 tracking-wide">الوصول</span>
+                      <span className="text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 tracking-wide">النوع</span>
                     </div>
                     {/* Body Block */}
                     <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-3">
-                      <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1 leading-tight">
-                        <span className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white font-sans">
-                          {formatEntryTimeParts(selectedVehicle.entryTime || now, now).main}
-                        </span>
-                        {(() => {
-                          const parts = formatEntryTimeParts(selectedVehicle.entryTime || now, now);
-                          if (parts.isToday) {
-                            return <span className="text-[10px] sm:text-xs md:text-sm text-slate-400 dark:text-slate-500 font-black leading-none mt-[-1px] sm:mt-0">اليوم</span>;
-                          }
-                          return <span className="text-[10px] sm:text-xs md:text-sm text-emerald-600 dark:text-emerald-400 font-bold leading-none mt-[-1px] sm:mt-0">{parts.sub}</span>;
-                        })()}
-                      </div>
+                      <span className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none font-sans">
+                        {selectedVehicle.isSubscriber ? (
+                          'مشترك'
+                        ) : selectedVehicle.type === 'overnight' ? (
+                          <>
+                            {garage.overnightRate} <span className="text-xs sm:text-lg font-black font-sans">× المبيت</span>
+                          </>
+                        ) : (
+                          <>
+                            {garage.hourlyRate} <span className="text-xs sm:text-lg font-black font-sans">× الساعة</span>
+                          </>
+                        )}
+                      </span>
                     </div>
                   </div>
 
@@ -390,27 +391,26 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Item 3: الفئة / النوع (النوع) */}
+                  {/* Item 3: وقت الدخول (الوصول) */}
                   <div className="flex flex-col h-[90px] sm:h-[110px] md:h-[130px] bg-[#faf9f6] dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 rounded-2xl shadow-sm text-center overflow-hidden">
                     {/* Header Block */}
                     <div className="py-1.5 sm:py-2 px-3 bg-slate-100/70 dark:bg-slate-950/50 border-b border-slate-150 dark:border-slate-800/60 shrink-0">
-                      <span className="text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 tracking-wide">النوع</span>
+                      <span className="text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 tracking-wide">الوصول</span>
                     </div>
                     {/* Body Block */}
                     <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-3">
-                      <span className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-none font-sans">
-                        {selectedVehicle.isSubscriber ? (
-                          'مشترك'
-                        ) : selectedVehicle.type === 'overnight' ? (
-                          <>
-                            {garage.overnightRate} <span className="text-xs sm:text-lg font-black font-sans">× المبيت</span>
-                          </>
-                        ) : (
-                          <>
-                            {garage.hourlyRate} <span className="text-xs sm:text-lg font-black font-sans">× الساعة</span>
-                          </>
-                        )}
-                      </span>
+                      <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1 leading-tight">
+                        <span className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white font-sans">
+                          {formatEntryTimeParts(selectedVehicle.entryTime || now, now).main}
+                        </span>
+                        {(() => {
+                          const parts = formatEntryTimeParts(selectedVehicle.entryTime || now, now);
+                          if (parts.isToday) {
+                            return <span className="text-[10px] sm:text-xs md:text-sm text-slate-400 dark:text-slate-500 font-black leading-none mt-[-1px] sm:mt-0">اليوم</span>;
+                          }
+                          return <span className="text-[10px] sm:text-xs md:text-sm text-emerald-600 dark:text-emerald-400 font-bold leading-none mt-[-1px] sm:mt-0">{parts.sub}</span>;
+                        })()}
+                      </div>
                     </div>
                   </div>
 

@@ -317,6 +317,49 @@ export const firestoreService = {
     }
   },
 
+  isPinTaken: async (pin: string, excludeId?: string): Promise<{ taken: boolean; role?: string; name?: string }> => {
+    const normalizedPin = pin.trim();
+    if (!normalizedPin) return { taken: false };
+
+    // We also check against the developer active admin PIN to prevent collision with Admin
+    try {
+      const settingsSnap = await getDoc(doc(db, 'admin_settings', 'auth_pin'));
+      const activeAdminPin = settingsSnap.exists() ? settingsSnap.data()?.pin : ADMIN_PIN;
+      if (normalizedPin === activeAdminPin) {
+        return { taken: true, role: 'مسؤول النظام (الآدمن الرئيسي)', name: 'الآدمن' };
+      }
+    } catch (err) {
+      console.warn("Failed to check admin pin during uniqueness verification:", err);
+    }
+
+    const collectionsToCheck = [
+      { name: 'general_managers', label: 'مدير عام / مالك نظام' },
+      { name: 'supervisors', label: 'مشرف نظام' },
+      { name: 'delegates', label: 'مندوب شحن' },
+      { name: 'staff', label: 'موظف جراج' },
+      { name: 'garages', label: 'صاحب جراج' }
+    ];
+
+    for (const coll of collectionsToCheck) {
+      const q = query(collection(db, coll.name), where('pin', '==', normalizedPin), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docFound = snap.docs[0];
+        if (excludeId && docFound.id === excludeId) {
+          continue;
+        }
+        const docData = docFound.data();
+        return { 
+          taken: true, 
+          role: coll.label, 
+          name: docData.name || docData.ownerName || docData.garageName || 'مستخدم آخر'
+        };
+      }
+    }
+
+    return { taken: false };
+  },
+
   // Vehicles
   subscribeToActiveVehicles: (garageId: string, callback: (vehicles: Vehicle[]) => void) => {
     const q = query(
@@ -868,8 +911,19 @@ export const firestoreService = {
 
   approveRechargeRequest: async (request: RechargeRequest) => {
     try {
-      const batch = writeBatch(db);
       const requestRef = doc(db, 'recharge_requests', request.id);
+      
+      // Concurrency check: Ensure the request is still pending before proceeding
+      const requestSnap = await getDoc(requestRef);
+      if (!requestSnap.exists()) {
+        throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
+      }
+      const currentStatus = requestSnap.data()?.status;
+      if (currentStatus && currentStatus !== 'pending') {
+        throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
+      }
+
+      const batch = writeBatch(db);
       const garageRef = doc(db, 'garages', request.garageId);
       const delegateRef = doc(db, 'delegates', request.delegateId);
       
@@ -938,7 +992,19 @@ export const firestoreService = {
 
   rejectRechargeRequest: async (requestId: string) => {
     try {
-      return await updateDoc(doc(db, 'recharge_requests', requestId), {
+      const requestRef = doc(db, 'recharge_requests', requestId);
+      
+      // Concurrency check: Ensure the request is still pending before proceeding
+      const requestSnap = await getDoc(requestRef);
+      if (!requestSnap.exists()) {
+        throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
+      }
+      const currentStatus = requestSnap.data()?.status;
+      if (currentStatus && currentStatus !== 'pending') {
+        throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
+      }
+
+      return await updateDoc(requestRef, {
         status: 'rejected',
         resolvedAt: serverTimestamp()
       });

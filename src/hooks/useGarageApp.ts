@@ -478,11 +478,11 @@ export function useGarageApp() {
 
   // Cooperative session collision checker
   useEffect(() => {
-    const isDashboardView = view === 'garage' || view === 'delegate_dashboard' || (view.startsWith('admin_') && currentSupervisor);
+    const isDashboardView = view === 'garage' || view === 'delegate_dashboard' || view === 'general_manager_dashboard' || (view.startsWith('admin_') && currentSupervisor);
     if (!isDashboardView) return;
 
     let id: string | null = null;
-    let collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | null = null;
+    let collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers' | null = null;
 
     if (view === 'garage') {
       if (currentStaff) {
@@ -498,6 +498,9 @@ export function useGarageApp() {
     } else if (view.startsWith('admin_') && currentSupervisor) {
       id = currentSupervisor.id;
       collectionName = 'supervisors';
+    } else if (view === 'general_manager_dashboard' && currentGeneralManager) {
+      id = currentGeneralManager.id;
+      collectionName = 'general_managers';
     }
 
     if (!id || !collectionName) return;
@@ -512,7 +515,11 @@ export function useGarageApp() {
     };
 
     const unsubscribe = onSnapshot(doc(db, collectionName, id), (snapshot) => {
-      if (!snapshot.exists()) return;
+      if (!snapshot.exists()) {
+        showToast('عذراً، تم حذف أو تعطيل هذا الحساب من قبل مدير النظام.', 'error');
+        handleLogout();
+        return;
+      }
       const data = snapshot.data();
 
       if (data.currentSessionId && data.currentSessionId !== sessionId) {
@@ -554,7 +561,7 @@ export function useGarageApp() {
       unsubRequests();
       if (heartbeatTimer) clearInterval(heartbeatTimer);
     };
-  }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, sessionId]);
+  }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, currentGeneralManager?.id, sessionId]);
 
   // Fast typing auto-checkout trigger disabled to prevent unexpected checkout modal popups on incomplete/colliding plate prefixes
   /*
@@ -999,7 +1006,7 @@ export function useGarageApp() {
     }
   }, [isOnline, allGarages, delegate, showToast]);
 
-  const handleCheckIn = useCallback(async (type: 'hourly' | 'overnight') => {
+  const handleCheckIn = useCallback(async (type: 'hourly' | 'overnight', bypassWarning = false) => {
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى إعادة المحاولة عند عودة النت.', 'error');
       return;
@@ -1025,7 +1032,7 @@ export function useGarageApp() {
         return timeB - timeA;
       })[0];
 
-    if (recentlyExited && !showRecentExitWarning) {
+    if (recentlyExited && !showRecentExitWarning && !bypassWarning) {
       const exitTime = recentlyExited.exitTime ? safeDate(recentlyExited.exitTime) : new Date();
       if (Date.now() - exitTime.getTime() < 3600000) {
         setRecentVehicle(recentlyExited);
@@ -1142,7 +1149,7 @@ export function useGarageApp() {
       showToast('لا يوجد اتصال بالإنترنت. يرجى إعادة المحاولة عند عودة النت.', 'error');
       return;
     }
-    if (!garage || !selectedVehicle) return;
+    if (!garage || !selectedVehicle || isLoading) return;
     closeKeyboard();
 
     setIsLoading(true);
@@ -1196,7 +1203,7 @@ export function useGarageApp() {
       setIsLoading(false);
       setLoadingType(null);
     }
-  }, [isOnline, garage, selectedVehicle, closeKeyboard, currentStaff, showToast]);
+  }, [isOnline, garage, selectedVehicle, isLoading, closeKeyboard, currentStaff, showToast]);
 
   const handleDeleteVehicle = useCallback(async () => {
     if (!isOnline) {
@@ -1400,6 +1407,13 @@ export function useGarageApp() {
           setIsLoading(false);
           return;
         }
+      }
+
+      const pinCheck = await firestoreService.isPinTaken(pin);
+      if (pinCheck.taken) {
+        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
+        setIsLoading(false);
+        return;
       }
 
       const existing = allGarages.find(g => (phone && g.phone === phone) || g.name === name);
