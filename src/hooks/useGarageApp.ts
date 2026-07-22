@@ -145,7 +145,7 @@ export function useGarageApp() {
     const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
       setVehicles(activeVehicles);
       const currentGarage = garageRef.current;
-      if (currentGarage && (typeof currentGarage.carsInside !== 'number' || currentGarage.carsInside !== activeVehicles.length)) {
+      if (currentGarage && typeof currentGarage.carsInside !== 'number') {
         firestoreService.updateGarage(currentGarage.id, { carsInside: activeVehicles.length }).catch((err) => {
           console.warn('Failed to heal carsInside:', err);
         });
@@ -447,7 +447,7 @@ export function useGarageApp() {
       const targetId = view === 'admin_garage_details' ? selectedGarageForDetails?.id : garage?.id;
       
       if (targetId) {
-        const unsubGarage = onSnapshot(doc(db, 'garages', targetId), { includeMetadataChanges: true }, (snapshot) => {
+        const unsubGarage = onSnapshot(doc(db, 'garages', targetId), (snapshot) => {
           if (snapshot.exists()) {
             const data = { id: snapshot.id, ...snapshot.data() } as Garage;
             
@@ -1113,14 +1113,14 @@ export function useGarageApp() {
         isSubscriber: isSubscriber
       }, (isGarageSubscription || isSubscriber) ? 0 : commissionVal);
 
-      await firestoreService.addActivityLog({
+      firestoreService.addActivityLog({
         garageId: garage.id,
         staffId: currentStaff ? currentStaff.id : null,
         staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
         actionType: 'check_in',
         plateNumber: formatted,
         timestamp: serverTimestamp() as any
-      });
+      }).catch(err => console.warn('CheckIn activity log error:', err));
 
       setShowCheckInModal(false);
     } catch (error: any) {
@@ -1161,14 +1161,14 @@ export function useGarageApp() {
 
       await firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost);
       
-      await firestoreService.addActivityLog({
+      firestoreService.addActivityLog({
         garageId: garage.id,
         staffId: currentStaff ? currentStaff.id : null,
         staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
         actionType: 'check_out',
         plateNumber: selectedVehicle.plateNumber,
         timestamp: serverTimestamp() as any
-      });
+      }).catch(err => console.warn('CheckOut activity log error:', err));
 
       setShowCheckOutModal(false);
       setSelectedVehicle(null);
