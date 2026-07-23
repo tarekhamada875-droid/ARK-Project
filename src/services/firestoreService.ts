@@ -361,6 +361,50 @@ export const firestoreService = {
   },
 
   // Vehicles
+  getVehiclesInsideOnce: async (garageId: string): Promise<Vehicle[]> => {
+    try {
+      const q = query(
+        collection(db, `garages/${garageId}/vehicles`),
+        where('status', '==', 'inside')
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
+      data.sort((a, b) => {
+        const timeA = a.entryTime?.toMillis ? a.entryTime.toMillis() : (a.entryTime?.seconds ? a.entryTime.seconds * 1000 : (a.entryTime ? new Date(a.entryTime).getTime() : 0));
+        const timeB = b.entryTime?.toMillis ? b.entryTime.toMillis() : (b.entryTime?.seconds ? b.entryTime.seconds * 1000 : (b.entryTime ? new Date(b.entryTime).getTime() : 0));
+        return timeB - timeA;
+      });
+      return data;
+    } catch (err) {
+      console.error('Error fetching vehicles inside once:', err);
+      return [];
+    }
+  },
+
+  getTodayTransactionsOnce: async (garageId: string): Promise<Vehicle[]> => {
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const q = query(
+        collection(db, `garages/${garageId}/vehicles`),
+        where('exitTime', '>=', Timestamp.fromDate(startOfDay))
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Vehicle))
+        .filter(v => v.status === 'outside');
+      data.sort((a, b) => {
+        const timeA = a.exitTime?.toMillis ? a.exitTime.toMillis() : (a.exitTime?.seconds ? a.exitTime.seconds * 1000 : (a.exitTime ? new Date(a.exitTime).getTime() : 0));
+        const timeB = b.exitTime?.toMillis ? b.exitTime.toMillis() : (b.exitTime?.seconds ? b.exitTime.seconds * 1000 : (b.exitTime ? new Date(b.exitTime).getTime() : 0));
+        return timeB - timeA;
+      });
+      return data.slice(0, 100);
+    } catch (err) {
+      console.error('Error fetching today transactions once:', err);
+      return [];
+    }
+  },
+
   subscribeToActiveVehicles: (garageId: string, callback: (vehicles: Vehicle[]) => void) => {
     const q = query(
       collection(db, `garages/${garageId}/vehicles`),

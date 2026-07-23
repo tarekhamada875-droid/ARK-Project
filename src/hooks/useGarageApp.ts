@@ -136,34 +136,13 @@ export function useGarageApp() {
     garageRef.current = garage;
   }, [garage]);
 
-  // Subscribe to Active Vehicles with instant local cache
-  useEffect(() => {
-    if (garage?.id) {
-      try {
-        const cached = localStorage.getItem(`app_cached_vehicles_${garage.id}`);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setVehicles(parsed);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to load cached vehicles:', err);
-      }
-    }
-  }, [garage?.id]);
-
+  // Subscribe to Active Vehicles
   useEffect(() => {
     if (!isSessionReady || !garage?.id) {
       return;
     }
     const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
       setVehicles(activeVehicles);
-      try {
-        localStorage.setItem(`app_cached_vehicles_${garage.id}`, JSON.stringify(activeVehicles));
-      } catch (err) {
-        console.warn('Failed to cache active vehicles:', err);
-      }
       const currentGarage = garageRef.current;
       if (currentGarage && currentGarage.carsInside !== activeVehicles.length) {
         firestoreService.updateGarage(currentGarage.id, { carsInside: activeVehicles.length }).catch((err) => {
@@ -177,7 +156,6 @@ export function useGarageApp() {
   // Subscribe to completed transactions
   useEffect(() => {
     if (!isSessionReady || !garage?.id) {
-      setTodayTransactions([]);
       return;
     }
     const unsub = firestoreService.subscribeToTodayTransactions(garage.id, (completedTransactions) => {
@@ -747,7 +725,8 @@ export function useGarageApp() {
     }
 
     setIsLoading(true);
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10 * 1000));
+    const minLoadingDelay = new Promise(resolve => setTimeout(resolve, 5000));
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30 * 1000));
 
     try {
       if (!auth.currentUser) {
@@ -774,6 +753,7 @@ export function useGarageApp() {
               await setDoc(doc(db, 'general_manager_sessions', auth.currentUser.uid), { generalManagerId: gmData.id, pin: gmData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateGeneralManagerSession(gmData.id, sessionId);
+            await minLoadingDelay;
             setCurrentGeneralManager(gmData);
             setView('general_manager_dashboard');
             showToast(`مرحباً بك يا ${gmData.name} (مالك النظام)`);
@@ -798,6 +778,7 @@ export function useGarageApp() {
               await setDoc(doc(db, 'supervisor_sessions', auth.currentUser.uid), { supervisorId: supervisorData.id, pin: supervisorData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateSupervisorSession(supervisorData.id, sessionId);
+            await minLoadingDelay;
             setCurrentSupervisor(supervisorData);
             setView('admin_dashboard');
             showToast(`مرحباً بك يا ${supervisorData.name} (مشرف)`);
@@ -822,6 +803,7 @@ export function useGarageApp() {
               await setDoc(doc(db, 'delegate_sessions', auth.currentUser.uid), { delegateId: delegateData.id, pin: delegateData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateDelegateSession(delegateData.id, sessionId);
+            await minLoadingDelay;
             setDelegate(delegateData);
             setView('delegate_dashboard');
             showToast(`مرحباً بك يا ${delegateData.name}`);
@@ -854,6 +836,18 @@ export function useGarageApp() {
                 await setDoc(doc(db, 'staff_sessions', auth.currentUser.uid), { staffId: staffData.id, pin: staffData.pin, garageId: staffData.garageId, createdAt: serverTimestamp() });
               }
               await firestoreService.updateStaffSession(staffData.id, sessionId);
+
+              // Fetch fresh server data & wait for min 5s loading delay
+              const [activeV, todayT, sList] = await Promise.all([
+                firestoreService.getVehiclesInsideOnce(linkedGarage.id),
+                firestoreService.getTodayTransactionsOnce(linkedGarage.id),
+                firestoreService.getStaffByGarageOnce(linkedGarage.id),
+                minLoadingDelay
+              ]);
+
+              setVehicles(activeV);
+              setTodayTransactions(todayT);
+              setStaffList(sList);
               setGarage(linkedGarage);
               setCurrentStaff(staffData);
               setView('garage');
@@ -884,6 +878,18 @@ export function useGarageApp() {
               await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
+
+            // Fetch fresh server data & wait for min 5s loading delay
+            const [activeV, todayT, sList] = await Promise.all([
+              firestoreService.getVehiclesInsideOnce(garageData.id),
+              firestoreService.getTodayTransactionsOnce(garageData.id),
+              firestoreService.getStaffByGarageOnce(garageData.id),
+              minLoadingDelay
+            ]);
+
+            setVehicles(activeV);
+            setTodayTransactions(todayT);
+            setStaffList(sList);
             setGarage(garageData);
             setCurrentStaff(null);
             setView('garage');
@@ -913,6 +919,18 @@ export function useGarageApp() {
               await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
+
+            // Fetch fresh server data & wait for min 5s loading delay
+            const [activeV, todayT, sList] = await Promise.all([
+              firestoreService.getVehiclesInsideOnce(garageData.id),
+              firestoreService.getTodayTransactionsOnce(garageData.id),
+              firestoreService.getStaffByGarageOnce(garageData.id),
+              minLoadingDelay
+            ]);
+
+            setVehicles(activeV);
+            setTodayTransactions(todayT);
+            setStaffList(sList);
             setGarage(garageData);
             setCurrentStaff(null);
             setView('garage');
