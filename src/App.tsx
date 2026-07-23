@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -15,7 +15,6 @@ import { useTheme } from './utils/ThemeContext';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
-import { CloudSyncLoadingView } from './components/layout/CloudSyncLoadingView';
 
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { GeneralManagerDashboard } from './components/general_manager/GeneralManagerDashboard';
@@ -37,18 +36,8 @@ import { SubscriberWarningModal } from './components/modals/SubscriberWarningMod
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
 import { firestoreService } from './services/firestoreService';
-import { PharaonicLoader } from './components/ui/PharaonicLoader';
 
 export default function App() {
-  const [minimumLoadingPassed, setMinimumLoadingPassed] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setMinimumLoadingPassed(true);
-    }, 1600);
-    return () => clearTimeout(timer);
-  }, []);
-
   const {
     isAuthReady,
     isLandscapeMobile,
@@ -156,35 +145,22 @@ export default function App() {
 
   const resolvedColor = resolveShimmerColor(activeColor, theme);
 
-  const [pharaonicLoading, setPharaonicLoading] = useState(false);
-  const [pharaonicTargetView, setPharaonicTargetView] = useState<string | null>(null);
-  const [displayedView, setDisplayedView] = useState<string | null>(null);
-
-  // Sync displayedView with view, except when intercepting for the Pharaonic loading screen
+  // View auto-recovery fallback when persisted view data is missing
   useEffect(() => {
-    if (!displayedView) {
-      setDisplayedView(view);
-      return;
+    if (!isLoading && isAuthReady) {
+      if (view === 'garage' && !garage) {
+        setView('login');
+      } else if (view === 'delegate_dashboard' && !delegate) {
+        setView('login');
+      } else if (view === 'general_manager_dashboard' && !currentGeneralManager) {
+        setView('login');
+      } else if (view === 'admin_garage_details' && !selectedGarageForDetails) {
+        setView('admin_dashboard');
+      } else if (view === 'admin_delegate_details' && !selectedDelegateForDetails) {
+        setView('admin_dashboard');
+      }
     }
-
-    const isLoginView = (v: string | null) => v === 'login' || v === 'admin_login' || v === 'delegate_login';
-    const isDashboardView = (v: string | null) => v === 'garage' || v === 'admin_dashboard' || v === 'general_manager_dashboard' || v === 'delegate_dashboard';
-
-    if (isLoginView(displayedView) && isDashboardView(view)) {
-      setPharaonicTargetView(view);
-      setPharaonicLoading(true);
-    } else {
-      setDisplayedView(view);
-    }
-  }, [view]);
-
-  const handlePharaonicLoaderComplete = () => {
-    if (pharaonicTargetView) {
-      setDisplayedView(pharaonicTargetView);
-    }
-    setPharaonicLoading(false);
-    setPharaonicTargetView(null);
-  };
+  }, [view, garage, delegate, currentGeneralManager, selectedGarageForDetails, selectedDelegateForDetails, isLoading, isAuthReady, setView]);
 
   // Call useBackTrapping hook to handle browser navigation / Android popstate
   useBackTrapping({
@@ -217,7 +193,7 @@ export default function App() {
 
   const renderView = () => {
     // Balance/Lock Block
-    if (garage && displayedView !== 'admin_dashboard') {
+    if (garage && view !== 'admin_dashboard') {
       const expiry = garage.balanceExpiry ? safeDate(garage.balanceExpiry) : null;
       if (expiry && expiry.getTime() > 0 && expiry.getTime() < Date.now()) {
         return (
@@ -248,19 +224,19 @@ export default function App() {
       }
     }
 
-    if (displayedView === 'login') {
+    if (view === 'login') {
       return (
         <LoginView 
           loginPhone={loginPhone}
           setLoginPhone={setLoginPhone}
           handleGarageLogin={handleGarageLogin}
-          isLoading={isLoading}
+          isLoading={isLoading || !isAuthReady}
           closeKeyboard={closeKeyboard}
         />
       );
     }
 
-    if (displayedView === 'admin_login') {
+    if (view === 'admin_login') {
       return (
         <AdminLoginView 
           adminPin={adminPin}
@@ -273,7 +249,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'admin_dashboard') {
+    if (view === 'admin_dashboard') {
       return (
         <AdminDashboard 
           allGarages={allGarages}
@@ -298,7 +274,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'general_manager_dashboard' && currentGeneralManager) {
+    if (view === 'general_manager_dashboard' && currentGeneralManager) {
       return (
         <GeneralManagerDashboard 
           currentGeneralManager={currentGeneralManager}
@@ -308,7 +284,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'delegate_login') {
+    if (view === 'delegate_login') {
       return (
         <DelegateLoginView 
           onLogin={handleDelegateLogin}
@@ -318,7 +294,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'delegate_dashboard' && delegate) {
+    if (view === 'delegate_dashboard' && delegate) {
       return (
         <DelegateDashboardView 
           delegate={delegate}
@@ -335,7 +311,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'admin_garage_details' && selectedGarageForDetails) {
+    if (view === 'admin_garage_details' && selectedGarageForDetails) {
       return (
         <AdminGarageDetailsView 
           selectedGarageForDetails={selectedGarageForDetails}
@@ -352,7 +328,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'admin_delegate_details' && selectedDelegateForDetails) {
+    if (view === 'admin_delegate_details' && selectedDelegateForDetails) {
       // Find the most up-to-date delegate data from our synced delegates list
       const liveDelegate = delegates.find(d => d.id === selectedDelegateForDetails.id) || selectedDelegateForDetails;
       if (!liveDelegate) return <div className="p-8 text-center">جاري التحميل...</div>;
@@ -367,7 +343,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'garage' && garage) {
+    if (view === 'garage' && garage) {
       return (
         <GarageDashboardView 
           garage={garage}
@@ -400,7 +376,7 @@ export default function App() {
       );
     }
 
-    if (displayedView === 'packages' && garage) {
+    if (view === 'packages' && garage) {
       return (
         <PackagesModal 
           packages={sortedPackages}
@@ -417,23 +393,19 @@ export default function App() {
       loginPhone={loginPhone}
       setLoginPhone={setLoginPhone}
       handleGarageLogin={handleGarageLogin}
-      isLoading={isLoading}
+      isLoading={isLoading || !isAuthReady}
       closeKeyboard={closeKeyboard}
     />;
   };
 
   // --- Landscape Orientation Check for Mobiles ---
   if (isLandscapeMobile) {
-    return <LandscapeMobileView garage={displayedView === 'garage' ? garage : null} />;
+    return <LandscapeMobileView garage={view === 'garage' ? garage : null} />;
   }
 
   // --- Offline Mode (Gatekeeper) ---
   if (showOfflineScreen) {
     return <OfflineView />;
-  }
-
-  if (!isAuthReady || !minimumLoadingPassed) {
-    return <CloudSyncLoadingView />;
   }
 
   return (
@@ -499,7 +471,7 @@ export default function App() {
           />
         )}
 
-        {showDeleteConfirm && displayedView === 'admin_garage_details' && selectedGarageForDetails && (
+        {showDeleteConfirm && view === 'admin_garage_details' && selectedGarageForDetails && (
           <DeleteGarageConfirmModal 
             garage={selectedGarageForDetails}
             isLoading={isLoading}
@@ -623,12 +595,6 @@ export default function App() {
         )}
 
       {renderView()}
-      {pharaonicLoading && (
-        <PharaonicLoader 
-          targetView={pharaonicTargetView || 'garage'} 
-          onComplete={handlePharaonicLoaderComplete} 
-        />
-      )}
       </ErrorBoundary>
     </div>
   );

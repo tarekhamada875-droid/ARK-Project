@@ -136,16 +136,36 @@ export function useGarageApp() {
     garageRef.current = garage;
   }, [garage]);
 
-  // Subscribe to Active Vehicles
+  // Subscribe to Active Vehicles with instant local cache
+  useEffect(() => {
+    if (garage?.id) {
+      try {
+        const cached = localStorage.getItem(`app_cached_vehicles_${garage.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setVehicles(parsed);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load cached vehicles:', err);
+      }
+    }
+  }, [garage?.id]);
+
   useEffect(() => {
     if (!isSessionReady || !garage?.id) {
-      setVehicles([]);
       return;
     }
     const unsub = firestoreService.subscribeToActiveVehicles(garage.id, (activeVehicles) => {
       setVehicles(activeVehicles);
+      try {
+        localStorage.setItem(`app_cached_vehicles_${garage.id}`, JSON.stringify(activeVehicles));
+      } catch (err) {
+        console.warn('Failed to cache active vehicles:', err);
+      }
       const currentGarage = garageRef.current;
-      if (currentGarage && typeof currentGarage.carsInside !== 'number') {
+      if (currentGarage && currentGarage.carsInside !== activeVehicles.length) {
         firestoreService.updateGarage(currentGarage.id, { carsInside: activeVehicles.length }).catch((err) => {
           console.warn('Failed to heal carsInside:', err);
         });
@@ -530,7 +550,8 @@ export function useGarageApp() {
       
       let currentOffset = serverTimeOffset;
       if (!snapshot.metadata.hasPendingWrites && data.lastActive) {
-        const serverTime = (data.lastActive as Timestamp).toMillis();
+        const d = safeDate(data.lastActive);
+        const serverTime = d.getTime();
         const localTime = Date.now();
         currentOffset = serverTime - localTime;
         setServerTimeOffset(currentOffset);
@@ -1388,14 +1409,7 @@ export function useGarageApp() {
           if (g.createdByDelegateId !== delegate.id) return false;
           if (!g.createdAt) return false;
           
-          let createdDate: Date;
-          if (typeof g.createdAt.toDate === 'function') {
-            createdDate = g.createdAt.toDate();
-          } else if (g.createdAt.seconds !== undefined) {
-            createdDate = new Date(g.createdAt.seconds * 1000);
-          } else {
-            createdDate = new Date(g.createdAt);
-          }
+          const createdDate = safeDate(g.createdAt);
 
           return createdDate.getDate() === today.getDate() &&
                  createdDate.getMonth() === today.getMonth() &&

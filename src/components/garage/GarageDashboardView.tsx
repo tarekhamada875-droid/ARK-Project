@@ -132,6 +132,12 @@ export const GarageDashboardView = memo(({
     return Math.max(0, Math.floor(currentBalance / commission));
   }, [isSubscription, remainingDays, currentBalance, commission]);
 
+  const activeVehiclesCount = React.useMemo(() => {
+    if (vehicles.length > 0) return vehicles.length;
+    if (typeof garage.carsInside === 'number') return Math.max(0, garage.carsInside);
+    return 0;
+  }, [vehicles.length, garage.carsInside]);
+
   const [balanceTransition, setBalanceTransition] = React.useState<'increase' | 'decrease' | null>(null);
   const prevVehiclesRef = React.useRef(availableVehicles);
 
@@ -601,7 +607,7 @@ export const GarageDashboardView = memo(({
                   onClick={() => setCurrentView('active_vehicles')}
                   className="mb-4 md:mb-10 scale-100 md:scale-110 cursor-pointer"
                 >
-                  <FlipNumber value={vehicles.length} size="lg" />
+                  <FlipNumber value={activeVehiclesCount} size="lg" />
                 </div>
                 
                 <button 
@@ -641,7 +647,7 @@ export const GarageDashboardView = memo(({
                   </div>
                   <div>
                     <h3 className="font-black text-slate-900 dark:text-white text-sm md:text-lg uppercase tracking-tight">
-                      إجمالى العدد {vehicles.length}
+                      إجمالى العدد {activeVehiclesCount}
                     </h3>
                   </div>
                 </div>

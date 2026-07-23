@@ -47,9 +47,9 @@ export class ErrorBoundary extends Component<Props, State> {
               <RefreshCw className="w-4 h-4" />
               تنشيط الصفحة الآن
             </button>
-            {import.meta.env.DEV && (
-              <div className="mt-6 text-left p-4 bg-slate-950 rounded-lg overflow-auto max-h-32 text-[10px] font-mono text-red-400 opacity-50">
-                {this.state.error?.message}
+            {this.state.error?.message && (
+              <div className="mt-6 text-left p-4 bg-slate-950 rounded-lg overflow-auto max-h-32 text-[10px] font-mono text-red-400 opacity-70 dir-ltr">
+                {this.state.error.message}
               </div>
             )}
           </div>

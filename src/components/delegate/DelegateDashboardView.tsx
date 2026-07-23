@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
-import { generateSafePin } from '../../utils';
+import { generateSafePin, safeDate } from '../../utils';
 import { AnimatedCounter } from '../AnimatedCounter';
 
 interface DelegateDashboardViewProps {
@@ -134,14 +134,7 @@ export const DelegateDashboardView = memo(({
 
   const formatRequestDate = (createdAt: any) => {
     if (!createdAt) return 'مؤخراً';
-    let d: Date;
-    if (createdAt.seconds) {
-      d = new Date(createdAt.seconds * 1000);
-    } else if (createdAt.toDate) {
-      d = createdAt.toDate();
-    } else {
-      d = new Date(createdAt);
-    }
+    const d = safeDate(createdAt);
     if (isNaN(d.getTime())) return 'مؤخراً';
     return d.toLocaleString('ar-EG', {
       day: 'numeric',
