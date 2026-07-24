@@ -221,14 +221,9 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                   className="snake-border-wrapper w-60 h-28 sm:w-96 sm:h-52 rounded-2xl sm:rounded-2xl p-[6px] pointer-events-auto shadow-xl"
                 >
                   <button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (!isLoading && !loadingType) {
-                        onConfirm();
-                      }
-                    }}
-                    disabled={isLoading || !!loadingType}
-                    className={`relative w-full h-full rounded-[2.1rem] sm:rounded-[2.4rem] bg-slate-950 dark:bg-red-500 flex flex-col items-center justify-center z-10 outline-none transition-transform ${isLoading || loadingType ? 'pointer-events-none opacity-80' : ''}`}
+                    onClick={() => onConfirm()}
+                    disabled={isLoading}
+                    className="relative w-full h-full rounded-[2.1rem] sm:rounded-[2.4rem] bg-slate-950 dark:bg-red-500 flex flex-col items-center justify-center z-10 outline-none transition-transform"
                   >
                     {loadingType === 'checkout' ? (
                       <Spinner />
