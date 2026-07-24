@@ -81,6 +81,8 @@ export function useGarageApp() {
   
   const plateInputRef = useRef<HTMLInputElement>(null);
   const deletingVehicleRef = useRef<string | null>(null);
+  const isCheckingInRef = useRef(false);
+  const isCheckingOutRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<'hourly' | 'overnight' | 'checkout' | 'delete' | 'general' | null>(null);
   const [selectedGarageForDetails, setSelectedGarageForDetails] = useLocalStorageState<Garage | null>('app_selected_garage_details', null);
@@ -1046,11 +1048,13 @@ export function useGarageApp() {
   }, [isOnline, allGarages, delegate, showToast]);
 
   const handleCheckIn = useCallback(async (type: 'hourly' | 'overnight', bypassWarning = false) => {
+    if (isCheckingInRef.current) return;
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى إعادة المحاولة عند عودة النت.', 'error');
       return;
     }
     if (!garage || !newPlateNumber || isLoading) return;
+    isCheckingInRef.current = true;
     closeKeyboard();
 
     const raw = getRawPlate(newPlateNumber);
@@ -1060,6 +1064,7 @@ export function useGarageApp() {
     if (existing) {
       showToast('هذه السيارة موجودة بالفعل بالداخل', 'error');
       setShowCheckInModal(false);
+      isCheckingInRef.current = false;
       return;
     }
 
@@ -1078,6 +1083,7 @@ export function useGarageApp() {
         setPendingCheckInType(type);
         setShowRecentExitWarning(true);
         soundManager.play('error');
+        isCheckingInRef.current = false;
         return;
       }
     }
@@ -1111,6 +1117,7 @@ export function useGarageApp() {
       setShowCheckInModal(false);
       setNewPlateNumber('');
       soundManager.play('error');
+      isCheckingInRef.current = false;
       return;
     }
 
@@ -1127,11 +1134,13 @@ export function useGarageApp() {
 
     if (isGarageSubscription && isGarageSubscriptionExpired) {
       showToast('عفواً، انتهى اشتراك الجراج. يرجى تجديد الاشتراك.', 'error');
+      isCheckingInRef.current = false;
       return;
     }
 
     if (!isGarageSubscription && !isSubscriber && (garage.balance || 0) < commissionVal) {
       showToast('عفواً، الرصيد لا يكفي. يرجى الشحن.', 'error');
+      isCheckingInRef.current = false;
       return;
     }
 
@@ -1180,25 +1189,34 @@ export function useGarageApp() {
     } finally {
       setIsLoading(false);
       setLoadingType(null);
+      isCheckingInRef.current = false;
     }
   }, [isOnline, garage, newPlateNumber, isLoading, closeKeyboard, vehicles, todayTransactions, showRecentExitWarning, currentStaff, showToast]);
 
   const confirmCheckOut = useCallback(async () => {
+    if (isCheckingOutRef.current) return;
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى إعادة المحاولة عند عودة النت.', 'error');
       return;
     }
     if (!garage || !selectedVehicle || isLoading) return;
+
+    isCheckingOutRef.current = true;
     closeKeyboard();
 
     setIsLoading(true);
     setLoadingType('checkout');
     soundManager.play('checkOut');
     
+    const minDelay = new Promise(resolve => setTimeout(resolve, 2000));
+
     try {
       const cost = calculateCost(selectedVehicle, garage, now);
 
-      await firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost);
+      await Promise.all([
+        firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost),
+        minDelay
+      ]);
       
       firestoreService.addActivityLog({
         garageId: garage.id,
@@ -1215,6 +1233,7 @@ export function useGarageApp() {
     } catch (error: any) {
       console.error('CheckOut Error:', error);
       let errMsg = 'حدث خطأ أثناء الخروج';
+      let isAlreadyOut = false;
       
       try {
         const message = error?.message || '';
@@ -1223,8 +1242,10 @@ export function useGarageApp() {
           const rawErr = parsed.error;
           if (rawErr === 'ALREADY_OUTSIDE') {
             errMsg = 'هذه السيارة تم تسجيل خروجها بالفعل (من جهاز آخر)';
+            isAlreadyOut = true;
           } else if (rawErr === 'VEHICLE_NOT_FOUND') {
             errMsg = 'لم يتم العثور على بيانات السيارة';
+            isAlreadyOut = true;
           } else if (rawErr === 'GARAGE_NOT_FOUND') {
             errMsg = 'لم يتم العثور على الجراج';
           } else {
@@ -1238,9 +1259,14 @@ export function useGarageApp() {
       }
       
       showToast(errMsg, 'error');
+      if (isAlreadyOut) {
+        setShowCheckOutModal(false);
+        setSelectedVehicle(null);
+      }
     } finally {
       setIsLoading(false);
       setLoadingType(null);
+      isCheckingOutRef.current = false;
     }
   }, [isOnline, garage, selectedVehicle, isLoading, closeKeyboard, currentStaff, showToast]);
 
