@@ -1185,6 +1185,20 @@ export function useGarageApp() {
         timestamp: serverTimestamp() as any
       }).catch(err => console.warn('CheckIn activity log error:', err));
 
+      const newVehicleObj: Vehicle = {
+        id: raw,
+        plateNumber: formatted,
+        plateNumberRaw: raw,
+        entryTime: new Date() as any,
+        type: type,
+        garageId: garage.id,
+        status: 'inside',
+        staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+        isSubscriber: isSubscriber
+      };
+      setVehicles(prev => [newVehicleObj, ...prev.filter(v => v.id !== raw)]);
+
+      showToast('تم تسجيل دخول السيارة بنجاح', 'success');
       setShowCheckInModal(false);
     } catch (error: any) {
       let message = error?.message || '';
@@ -1215,27 +1229,31 @@ export function useGarageApp() {
     if (!garage || !selectedVehicle || isLoading) return;
     closeKeyboard();
 
+    const vehicleToOut = selectedVehicle;
+
     setIsLoading(true);
     setLoadingType('checkout');
     soundManager.play('checkOut');
     
     try {
-      const cost = calculateCost(selectedVehicle, garage, now);
+      const cost = calculateCost(vehicleToOut, garage, now);
 
-      await firestoreService.checkOutVehicle(garage.id, selectedVehicle.id, cost);
+      await firestoreService.checkOutVehicle(garage.id, vehicleToOut.id, cost);
       
       firestoreService.addActivityLog({
         garageId: garage.id,
         staffId: currentStaff ? currentStaff.id : null,
         staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
         actionType: 'check_out',
-        plateNumber: selectedVehicle.plateNumber,
+        plateNumber: vehicleToOut.plateNumber,
         timestamp: serverTimestamp() as any
       }).catch(err => console.warn('CheckOut activity log error:', err));
 
+      setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
       setShowCheckOutModal(false);
       setSelectedVehicle(null);
       setNewPlateNumber('');
+      showToast('تم تسجيل خروج السيارة بنجاح', 'success');
     } catch (error: any) {
       console.error('CheckOut Error:', error);
       let errMsg = 'حدث خطأ أثناء الخروج';
@@ -1262,6 +1280,13 @@ export function useGarageApp() {
       }
       
       showToast(errMsg, 'error');
+      
+      // Clean up modal and remove stale/checked-out vehicle from local state
+      setShowCheckOutModal(false);
+      if (vehicleToOut) {
+        setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
+      }
+      setSelectedVehicle(null);
     } finally {
       setIsLoading(false);
       setLoadingType(null);
@@ -1361,6 +1386,9 @@ export function useGarageApp() {
       console.error('Delete Vehicle Error:', err);
       showToast('فشل في حذف السيارة برصيد، جرب تانى', 'error');
     } finally {
+      if (selectedVehicle) {
+        setVehicles(prev => prev.filter(v => v.id !== selectedVehicle.id));
+      }
       deletingVehicleRef.current = null;
       setSelectedVehicle(null);
       setNewPlateNumber('');
