@@ -540,18 +540,30 @@ export default function App() {
                   برجاء إبقاء هذه الشاشة مفتوحة...
                 </p>
               </div>
-              <button 
-                onClick={() => {
-                  if (typeof (window as any)._cancelSessionRequest === 'function') {
-                    (window as any)._cancelSessionRequest();
-                  } else {
-                    setIsWaitingForApproval(false);
-                  }
-                }}
-                className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3.5 rounded-2xl font-bold text-base transition-all"
-              >
-                إلغاء الطلب
-              </button>
+              <div className="flex flex-col gap-2.5 w-full">
+                <button 
+                  onClick={() => {
+                    if (typeof (window as any)._forceTakeoverSession === 'function') {
+                      (window as any)._forceTakeoverSession();
+                    }
+                  }}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-2xl font-black text-sm transition-all shadow-md active:scale-[0.98]"
+                >
+                  ⚡ سحب الجلسة والدخول مباشرة
+                </button>
+                <button 
+                  onClick={() => {
+                    if (typeof (window as any)._cancelSessionRequest === 'function') {
+                      (window as any)._cancelSessionRequest();
+                    } else {
+                      setIsWaitingForApproval(false);
+                    }
+                  }}
+                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-2xl font-bold text-xs transition-all"
+                >
+                  إلغاء الطلب
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -224,7 +224,7 @@ export function useGarageApp() {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(async (isRemoteKicked: boolean = false) => {
     try {
       if (auth.currentUser) {
         const myUid = auth.currentUser.uid;
@@ -237,11 +237,13 @@ export function useGarageApp() {
           deleteDoc(doc(db, 'staff_sessions', myUid)),
         ]).catch(err => console.warn('Clean security sessions failed:', err));
       }
-      if (garage) firestoreService.updateSession('garages', garage.id, null);
-      if (currentStaff) firestoreService.updateSession('staff', currentStaff.id, null);
-      if (delegate) firestoreService.updateSession('delegates', delegate.id, null);
-      if (currentSupervisor) firestoreService.updateSession('supervisors', currentSupervisor.id, null);
-      if (currentGeneralManager) firestoreService.updateSession('general_managers', currentGeneralManager.id, null);
+      if (!isRemoteKicked) {
+        if (garage) firestoreService.updateSession('garages', garage.id, null);
+        if (currentStaff) firestoreService.updateSession('staff', currentStaff.id, null);
+        if (delegate) firestoreService.updateSession('delegates', delegate.id, null);
+        if (currentSupervisor) firestoreService.updateSession('supervisors', currentSupervisor.id, null);
+        if (currentGeneralManager) firestoreService.updateSession('general_managers', currentGeneralManager.id, null);
+      }
       await signOut(auth);
     } catch (e) {
       console.error('Logout error:', e);
@@ -261,6 +263,8 @@ export function useGarageApp() {
       setStaffList([]);
       setLoginPhone('');
       setAdminPin('');
+      setPendingApprovalRequest(null);
+      setIsWaitingForApproval(false);
       setView('login');
       setShowLogoutConfirm(false);
     }
@@ -515,14 +519,14 @@ export function useGarageApp() {
     const unsubscribe = onSnapshot(doc(db, collectionName, id), (snapshot) => {
       if (!snapshot.exists()) {
         showToast('عذراً، تم حذف أو تعطيل هذا الحساب من قبل مدير النظام.', 'error');
-        handleLogout();
+        handleLogout(true);
         return;
       }
       const data = snapshot.data();
 
       if (data.currentSessionId && data.currentSessionId !== sessionId) {
-        showToast('تم تسجيل الدخول من جهاز آخر أو انتهت الجلسة', 'error');
-        handleLogout();
+        showToast('تم تسجيل الدخول من جهاز آخر وإغلاق الجلسة هنا.', 'error');
+        handleLogout(true);
         return;
       }
       
@@ -656,6 +660,25 @@ export function useGarageApp() {
         }
       };
 
+      (window as any)._forceTakeoverSession = async () => {
+        clearTimeout(timeoutTimer);
+        unsub();
+        setIsWaitingForApproval(false);
+        setIsLoading(true);
+        try {
+          await setDoc(doc(db, 'login_requests', id), {
+            status: 'approved'
+          }, { merge: true }).catch(err => console.warn(err));
+          await deleteDoc(doc(db, 'login_requests', id)).catch(err => console.warn(err));
+          await onSuccess();
+        } catch (err) {
+          console.error('Failed to force takeover:', err);
+          showToast('فشل سحب الجلسة. يرجى إعادة المحاولة.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
     } catch (err) {
       console.error('Failed to initiate request:', err);
       setIsWaitingForApproval(false);
@@ -677,11 +700,12 @@ export function useGarageApp() {
 
       showToast('تم قبول طلب الدخول بنجاح.', 'success');
       setPendingApprovalRequest(null);
+      await handleLogout(true);
     } catch (err) {
       console.error('Failed to accept session request:', err);
       showToast('حدث خطأ أثناء الموافقة على الدخول الجديد.', 'error');
     }
-  }, [pendingApprovalRequest, showToast]);
+  }, [pendingApprovalRequest, showToast, handleLogout]);
 
   const handleRejectApprovalRequest = useCallback(async () => {
     if (!pendingApprovalRequest) return;
