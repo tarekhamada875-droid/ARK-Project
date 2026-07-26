@@ -1198,7 +1198,7 @@ export function useGarageApp() {
       };
       setVehicles(prev => [newVehicleObj, ...prev.filter(v => v.id !== raw)]);
 
-      showToast('تم تسجيل دخول السيارة بنجاح', 'success');
+      // showToast('تم تسجيل دخول السيارة بنجاح', 'success');
       setShowCheckInModal(false);
     } catch (error: any) {
       let message = error?.message || '';
@@ -1253,7 +1253,7 @@ export function useGarageApp() {
       setShowCheckOutModal(false);
       setSelectedVehicle(null);
       setNewPlateNumber('');
-      showToast('تم تسجيل خروج السيارة بنجاح', 'success');
+      // showToast('تم تسجيل خروج السيارة بنجاح', 'success');
     } catch (error: any) {
       console.error('CheckOut Error:', error);
       let errMsg = 'حدث خطأ أثناء الخروج';
