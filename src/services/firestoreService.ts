@@ -317,6 +317,36 @@ export const firestoreService = {
     }
   },
 
+  subscribeToSubscriptionPrices: (callback: (prices: { weekly: number; monthly: number }) => void) => {
+    return onSnapshot(doc(db, 'admin_settings', 'subscription_prices'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        callback({
+          weekly: typeof data.weekly === 'number' && data.weekly > 0 ? data.weekly : 800,
+          monthly: typeof data.monthly === 'number' && data.monthly > 0 ? data.monthly : 3000
+        });
+      } else {
+        callback({ weekly: 800, monthly: 3000 });
+      }
+    }, (err) => {
+      console.warn("Subscription prices observer failed or unsubscribed:", err);
+      callback({ weekly: 800, monthly: 3000 });
+    });
+  },
+
+  updateSubscriptionPrices: async (prices: { weekly: number; monthly: number }) => {
+    try {
+      return await setDoc(doc(db, 'admin_settings', 'subscription_prices'), { 
+        weekly: prices.weekly,
+        monthly: prices.monthly,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'admin_settings/subscription_prices');
+      throw error;
+    }
+  },
+
   isPinTaken: async (pin: string, excludeId?: string): Promise<{ taken: boolean; role?: string; name?: string }> => {
     const normalizedPin = pin.trim();
     if (!normalizedPin) return { taken: false };

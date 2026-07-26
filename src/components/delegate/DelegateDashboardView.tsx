@@ -36,6 +36,7 @@ interface DelegateDashboardViewProps {
   pendingRequests: RechargeRequest[];
   delegateRequests?: RechargeRequest[];
   showToast: (message: string, type?: 'success' | 'error') => void;
+  subscriptionPrices?: { weekly: number; monthly: number };
 }
 
 export const DelegateDashboardView = memo(({ 
@@ -48,7 +49,8 @@ export const DelegateDashboardView = memo(({
   packages,
   pendingRequests,
   delegateRequests = [],
-  showToast
+  showToast,
+  subscriptionPrices = { weekly: 800, monthly: 3000 }
 }: DelegateDashboardViewProps) => {
   const [activeTab, setActiveTab] = useState<'garages' | 'performance'>('garages');
   const [searchTerm, setSearchTerm] = useState('');
@@ -607,8 +609,8 @@ export const DelegateDashboardView = memo(({
                     className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none transition-all" 
                     dir="rtl"
                   >
-                    <option value="weekly">اشتراك أسبوعي - 800 ج.م</option>
-                    <option value="monthly">اشتراك شهري - 3000 ج.م</option>
+                    <option value="weekly">اشتراك أسبوعي - {subscriptionPrices.weekly} ج.م</option>
+                    <option value="monthly">اشتراك شهري - {subscriptionPrices.monthly} ج.م</option>
                   </select>
                 </div>
               )}
@@ -769,8 +771,8 @@ export const DelegateDashboardView = memo(({
                   {(() => {
                     const isSub = selectedGarage.billingModel === 'subscription';
                     const subPackages: Package[] = [
-                      { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: 800, vehiclesCount: 7 },
-                      { id: 'monthly_sub', name: 'اشتراك شهري', price: 3000, vehiclesCount: 30 }
+                      { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
+                      { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
                     ];
                     const list = isSub ? subPackages : (packages.length > 0 ? packages.slice(0, 6) : []);
                     

@@ -9,6 +9,7 @@ interface PackagesModalProps {
   walletNumber?: string;
   onToggleMenu?: () => void;
   billingModel?: 'subscription' | 'commission';
+  subscriptionPrices?: { weekly: number; monthly: number };
 }
 
 export const PackagesModal: React.FC<PackagesModalProps> = ({ 
@@ -17,7 +18,8 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
   garageHourlyRate, 
   walletNumber = "015 - 524 - 113 - 23", 
   onToggleMenu,
-  billingModel = 'commission'
+  billingModel = 'commission',
+  subscriptionPrices = { weekly: 800, monthly: 3000 }
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -79,8 +81,8 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
             {(() => {
               const displayPackages = isSub 
                 ? [
-                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: 800, vehiclesCount: 7 },
-                    { id: 'monthly_sub', name: 'اشتراك شهري', price: 3000, vehiclesCount: 30 }
+                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
+                    { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
                   ]
                 : [...packages].sort((a, b) => a.price - b.price);
 
@@ -98,7 +100,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
                   ratePerVehicle = (pkg.price / pkg.vehiclesCount).toFixed(2);
                   if (pkg.id === 'monthly_sub') {
                     // Monthly subscription compared to weekly subscription daily rate
-                    const weeklyDailyRate = 800 / 7;
+                    const weeklyDailyRate = subscriptionPrices.weekly / 7;
                     const expectedPrice = 30 * weeklyDailyRate;
                     savings = Math.round(expectedPrice - pkg.price);
                   }

@@ -54,6 +54,7 @@ export default function App() {
     setAdminPin,
     activeAdminPin,
     walletNumber,
+    subscriptionPrices,
     loginPhone,
     setLoginPhone,
     showCheckInModal,
@@ -270,6 +271,7 @@ export default function App() {
           currentAdminPin={activeAdminPin}
           currentWalletNumber={walletNumber}
           onUpdateWalletNumber={firestoreService.updateWalletNumber}
+          subscriptionPrices={subscriptionPrices}
         />
       );
     }
@@ -307,6 +309,7 @@ export default function App() {
           pendingRequests={rechargeRequests}
           delegateRequests={delegateRequests}
           showToast={showToast}
+          subscriptionPrices={subscriptionPrices}
         />
       );
     }
@@ -324,6 +327,7 @@ export default function App() {
           isLoading={isLoading}
           setIsLoading={setIsLoading}
           packages={sortedPackages}
+          subscriptionPrices={subscriptionPrices}
         />
       );
     }
@@ -384,6 +388,7 @@ export default function App() {
           garageHourlyRate={garage.hourlyRate}
           walletNumber={walletNumber}
           billingModel={garage.billingModel}
+          subscriptionPrices={subscriptionPrices}
         />
       );
     }

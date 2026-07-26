@@ -158,6 +158,11 @@ export interface GlobalSettings {
   checkOutSound: string;
 }
 
+export interface SubscriptionPrices {
+  weekly: number;
+  monthly: number;
+}
+
 export interface RechargeRequest {
   id: string;
   garageId: string;

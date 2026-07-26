@@ -60,6 +60,7 @@ interface AdminDashboardProps {
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
+  subscriptionPrices?: { weekly: number; monthly: number };
 }
 
 export const AdminDashboard = memo(({
@@ -80,7 +81,8 @@ export const AdminDashboard = memo(({
   generalManagers = [],
   currentAdminPin,
   currentWalletNumber,
-  onUpdateWalletNumber
+  onUpdateWalletNumber,
+  subscriptionPrices = { weekly: 800, monthly: 3000 }
 }: AdminDashboardProps) => {
 
   // Localized states to encapsulate admin view and prevent global App re-renders
@@ -1827,7 +1829,68 @@ export const AdminDashboard = memo(({
             )}
           </div>
         ) : activeTab === 'packages' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="space-y-8">
+            {/* Subscription Prices Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3 font-sans">
+                <div className="w-8 h-8 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg flex items-center justify-center shrink-0">
+                  <Zap className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                {t('تعديل أسعار اشتراكات الجراجات الدوريّة')}
+              </h2>
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const weeklyInput = form.elements.namedItem('weeklyPrice') as HTMLInputElement;
+                  const monthlyInput = form.elements.namedItem('monthlyPrice') as HTMLInputElement;
+                  const weekly = Number(weeklyInput.value);
+                  const monthly = Number(monthlyInput.value);
+                  if (weekly <= 0 || monthly <= 0) {
+                    showToast(t('يرجى إدخال أسعار صحيحة أكبر من الصفر'), 'error');
+                    return;
+                  }
+                  try {
+                    await firestoreService.updateSubscriptionPrices({ weekly, monthly });
+                    showToast(t('تم تحديث أسعار الاشتراكات بنجاح'));
+                  } catch (err) {
+                    showToast(t('حدث خطأ أثناء تحديث الأسعار'), 'error');
+                  }
+                }}
+                className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end font-sans"
+              >
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الأسبوعي (7 أيام) - ج.م')}</label>
+                  <input 
+                    name="weeklyPrice" 
+                    type="number" 
+                    defaultValue={subscriptionPrices.weekly}
+                    key={`weekly-${subscriptionPrices.weekly}`}
+                    required 
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الشهري (30 يوماً) - ج.م')}</label>
+                  <input 
+                    name="monthlyPrice" 
+                    type="number" 
+                    defaultValue={subscriptionPrices.monthly}
+                    key={`monthly-${subscriptionPrices.monthly}`}
+                    required 
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all" 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-bold text-base transition-all outline-none flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <span>{t('حفظ أسعار الاشتراكات')}</span>
+                </button>
+              </form>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <section className="lg:col-span-1">
               <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3 font-sans">
@@ -1986,6 +2049,7 @@ export const AdminDashboard = memo(({
                 </div>
               </div>
             </section>
+          </div>
           </div>
         ) : activeTab === 'reports' ? (
           <AdminReportsView allGarages={approvedGarages} delegates={delegates} />
@@ -2505,8 +2569,8 @@ export const AdminDashboard = memo(({
                         className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
                         dir="rtl"
                       >
-                        <option value="weekly">{t('اشتراك أسبوعي - 800 ج.م')}</option>
-                        <option value="monthly">{t('اشتراك شهري - 3000 ج.م')}</option>
+                        <option value="weekly">{t(`اشتراك أسبوعي - ${subscriptionPrices.weekly} ج.م`)}</option>
+                        <option value="monthly">{t(`اشتراك شهري - ${subscriptionPrices.monthly} ج.م`)}</option>
                       </select>
                     </div>
                   )}

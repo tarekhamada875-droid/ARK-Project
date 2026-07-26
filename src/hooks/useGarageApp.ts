@@ -73,6 +73,7 @@ export function useGarageApp() {
   const [adminPin, setAdminPin] = useLocalStorageState<string>('app_admin_pin', '');
   const [activeAdminPin, setActiveAdminPin] = useState<string>(ADMIN_PIN);
   const [walletNumber, setWalletNumber] = useLocalStorageState<string>('app_wallet_number', '015 - 524 - 113 - 23');
+  const [subscriptionPrices, setSubscriptionPrices] = useState<{ weekly: number; monthly: number }>({ weekly: 800, monthly: 3000 });
   const [loginPhone, setLoginPhone] = useLocalStorageState<string>('app_login_phone', '');
   const [showCheckInModal, setShowCheckInModal] = useLocalStorageState<boolean>('app_show_checkin', false);
   const [showCheckOutModal, setShowCheckOutModal] = useLocalStorageState<boolean>('app_show_checkout', false);
@@ -321,6 +322,15 @@ export function useGarageApp() {
     if (!user) return;
     const unsub = firestoreService.subscribeToWalletNumber((wallet) => {
       setWalletNumber(wallet);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // Subscription Prices Sync
+  useEffect(() => {
+    if (!user) return;
+    const unsub = firestoreService.subscribeToSubscriptionPrices((prices) => {
+      setSubscriptionPrices(prices);
     });
     return () => unsub();
   }, [user]);
@@ -1456,7 +1466,7 @@ export function useGarageApp() {
     if (billingModel === 'subscription') {
       const days = subscriptionType === 'weekly' ? 7 : 30;
       expiryDate.setDate(expiryDate.getDate() + days);
-      initialRevenue = subscriptionType === 'weekly' ? 800 : 3000;
+      initialRevenue = subscriptionType === 'weekly' ? subscriptionPrices.weekly : subscriptionPrices.monthly;
       initialCars = 9999;
     } else {
       expiryDate.setFullYear(expiryDate.getFullYear() + 10);
@@ -1573,6 +1583,7 @@ export function useGarageApp() {
     setAdminPin,
     activeAdminPin,
     walletNumber,
+    subscriptionPrices,
     loginPhone,
     setLoginPhone,
     showCheckInModal,

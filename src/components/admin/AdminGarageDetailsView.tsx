@@ -39,6 +39,7 @@ interface AdminGarageDetailsViewProps {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   packages: Package[];
+  subscriptionPrices?: { weekly: number; monthly: number };
 }
 
 export const AdminGarageDetailsView = memo(({
@@ -51,7 +52,8 @@ export const AdminGarageDetailsView = memo(({
   staffList,
   isLoading,
   setIsLoading,
-  packages
+  packages,
+  subscriptionPrices = { weekly: 800, monthly: 3000 }
 }: AdminGarageDetailsViewProps) => {
   const [showClearBalanceConfirm, setShowClearBalanceConfirm] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -932,8 +934,8 @@ export const AdminGarageDetailsView = memo(({
                             {(() => {
                                 const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
                                 const subPackages: Package[] = [
-                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: 800, vehiclesCount: 7 },
-                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: 3000, vehiclesCount: 30 }
+                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
+                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
                                 ];
                                 const displayPackages = isSubscriptionGarage ? subPackages : (packages.length > 0 ? packages : []);
                                 
