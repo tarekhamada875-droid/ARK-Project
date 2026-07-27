@@ -25,10 +25,35 @@ import {
   increment
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../types';
+import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon } from '../types';
 import { ADMIN_PIN } from '../constants';
 
-export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager };
+export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon };
+
+/**
+ * Helper to retry transient Firestore write errors automatically up to maxRetries times.
+ * Includes network status checks before and during execution.
+ */
+async function withRetry<T>(operation: () => Promise<T>, maxRetries = 3, delayMs = 300): Promise<T> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('لا يوجد اتصال بالإنترنت. يرجى التأكد من اتصالك بشبكة الإنترنت ثم المحاولة مرة أخرى.');
+  }
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('انقطع الاتصال بالإنترنت أثناء تنفيذ العملية. يرجى إعادة الاتصال والمحاولة مرة أخرى.');
+      }
+      if (attempt < maxRetries) {
+        await new Promise((res) => setTimeout(res, delayMs * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+  throw lastError;
+}
 
 export const firestoreService = {
   // Garages
@@ -51,7 +76,7 @@ export const firestoreService = {
 
   createGarage: async (data: Omit<Garage, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'garages'), data);
+      return await withRetry(() => addDoc(collection(db, 'garages'), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'garages');
       throw error;
@@ -60,7 +85,7 @@ export const firestoreService = {
 
   updateGarage: async (id: string, data: Partial<Garage>) => {
     try {
-      return await updateDoc(doc(db, 'garages', id), data);
+      return await withRetry(() => updateDoc(doc(db, 'garages', id), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${id}`);
       throw error;
@@ -69,18 +94,20 @@ export const firestoreService = {
 
   rechargeGarage: async (garageId: string, amount: number, carsCount: number, revenueAmount: number) => {
     try {
-      const batch = writeBatch(db);
-      const garageRef = doc(db, 'garages', garageId);
-      
-      batch.update(garageRef, {
-        balance: increment(amount),
-        totalAdminRevenue: increment(revenueAmount),
-        totalRechargedCars: increment(carsCount),
-        isLocked: false,
-        lastRechargeDate: serverTimestamp()
-      });
+      return await withRetry(async () => {
+        const batch = writeBatch(db);
+        const garageRef = doc(db, 'garages', garageId);
+        
+        batch.update(garageRef, {
+          balance: increment(amount),
+          totalAdminRevenue: increment(revenueAmount),
+          totalRechargedCars: increment(carsCount),
+          isLocked: false,
+          lastRechargeDate: serverTimestamp()
+        });
 
-      return await batch.commit();
+        return await batch.commit();
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/recharge`);
       throw error;
@@ -89,7 +116,7 @@ export const firestoreService = {
 
   awardMonthlyGift: async (garageId: string, month: string, carsCount: number) => {
     try {
-      await runTransaction(db, async (transaction) => {
+      await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const garageDoc = await transaction.get(garageRef);
         
@@ -110,7 +137,7 @@ export const firestoreService = {
           lastGiftAwardedAt: serverTimestamp(),
           isLocked: false // Gifts can unlock a garage
         });
-      });
+      }));
     } catch (error) {
        handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/gift`);
     }
@@ -118,47 +145,49 @@ export const firestoreService = {
 
   deleteGarage: async (id: string) => {
     try {
-      // Helper to fetch snaps safely (returns empty snap on error like missing index)
-      const fetchSnapSafe = async (q: any) => {
-        try {
-          return await getDocs(q);
-        } catch (e) {
-          console.warn('Subcollection fetch failed during garage deletion (likely missing index):', e);
-          return { forEach: () => {} } as any; 
+      return await withRetry(async () => {
+        // Helper to fetch snaps safely (returns empty snap on error like missing index)
+        const fetchSnapSafe = async (q: any) => {
+          try {
+            return await getDocs(q);
+          } catch (e) {
+            console.warn('Subcollection fetch failed during garage deletion (likely missing index):', e);
+            return { forEach: () => {} } as any; 
+          }
+        };
+
+        // 1. Get subcollections and associated docs (limiting to stay under 500 batch limit)
+        const [vehiclesSnap, dailyStatsSnap, logsSnap, staffSnap, subscribersSnap, topupsSnap] = await Promise.all([
+          fetchSnapSafe(query(collection(db, `garages/${id}/vehicles`), limit(300))),
+          fetchSnapSafe(query(collection(db, `garages/${id}/daily_stats`), limit(30))),
+          fetchSnapSafe(query(collection(db, 'activity_logs'), where('garageId', '==', id), limit(40))),
+          fetchSnapSafe(query(collection(db, 'staff'), where('garageId', '==', id), limit(40))),
+          fetchSnapSafe(query(collection(db, `garages/${id}/subscribers`), limit(40))),
+          fetchSnapSafe(query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(40)))
+        ]);
+
+        const refsToDelete: any[] = [];
+        if (vehiclesSnap.docs) vehiclesSnap.forEach(doc => refsToDelete.push(doc.ref));
+        if (dailyStatsSnap.docs) dailyStatsSnap.forEach(doc => refsToDelete.push(doc.ref));
+        if (logsSnap.docs) logsSnap.forEach(doc => refsToDelete.push(doc.ref));
+        if (staffSnap.docs) staffSnap.forEach(doc => refsToDelete.push(doc.ref));
+        if (subscribersSnap.docs) subscribersSnap.forEach(doc => refsToDelete.push(doc.ref));
+        if (topupsSnap.docs) topupsSnap.forEach(doc => refsToDelete.push(doc.ref));
+        
+        // Add the main garage document
+        refsToDelete.push(doc(db, 'garages', id));
+
+        // 2. Commit in chunks of 400 to stay safely below Firestore's 500 limit
+        const chunkSize = 400;
+        for (let i = 0; i < refsToDelete.length; i += chunkSize) {
+          const chunk = refsToDelete.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+          chunk.forEach(ref => batch.delete(ref));
+          await batch.commit();
         }
-      };
 
-      // 1. Get subcollections and associated docs (limiting to stay under 500 batch limit)
-      const [vehiclesSnap, dailyStatsSnap, logsSnap, staffSnap, subscribersSnap, topupsSnap] = await Promise.all([
-        fetchSnapSafe(query(collection(db, `garages/${id}/vehicles`), limit(300))),
-        fetchSnapSafe(query(collection(db, `garages/${id}/daily_stats`), limit(30))),
-        fetchSnapSafe(query(collection(db, 'activity_logs'), where('garageId', '==', id), limit(40))),
-        fetchSnapSafe(query(collection(db, 'staff'), where('garageId', '==', id), limit(40))),
-        fetchSnapSafe(query(collection(db, `garages/${id}/subscribers`), limit(40))),
-        fetchSnapSafe(query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(40)))
-      ]);
-
-      const refsToDelete: any[] = [];
-      if (vehiclesSnap.docs) vehiclesSnap.forEach(doc => refsToDelete.push(doc.ref));
-      if (dailyStatsSnap.docs) dailyStatsSnap.forEach(doc => refsToDelete.push(doc.ref));
-      if (logsSnap.docs) logsSnap.forEach(doc => refsToDelete.push(doc.ref));
-      if (staffSnap.docs) staffSnap.forEach(doc => refsToDelete.push(doc.ref));
-      if (subscribersSnap.docs) subscribersSnap.forEach(doc => refsToDelete.push(doc.ref));
-      if (topupsSnap.docs) topupsSnap.forEach(doc => refsToDelete.push(doc.ref));
-      
-      // Add the main garage document
-      refsToDelete.push(doc(db, 'garages', id));
-
-      // 2. Commit in chunks of 400 to stay safely below Firestore's 500 limit
-      const chunkSize = 400;
-      for (let i = 0; i < refsToDelete.length; i += chunkSize) {
-        const chunk = refsToDelete.slice(i, i + chunkSize);
-        const batch = writeBatch(db);
-        chunk.forEach(ref => batch.delete(ref));
-        await batch.commit();
-      }
-
-      return true;
+        return true;
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `garages/${id}`);
       throw error;
@@ -178,14 +207,14 @@ export const firestoreService = {
 
   updateSession: async (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers', id: string, sessionId: string | null) => {
     try {
-      await updateDoc(doc(db, collectionName, id), { 
-          currentSessionId: sessionId,
-          lastActive: sessionId ? serverTimestamp() : null
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${id}`);
-      }
-    },
+      await withRetry(() => updateDoc(doc(db, collectionName, id), { 
+        currentSessionId: sessionId,
+        lastActive: sessionId ? serverTimestamp() : null
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${collectionName}/${id}`);
+    }
+  },
 
   // Legacy wrappers for compatibility
   updateGarageSession: async (garageId: string, sessionId: string | null) => {
@@ -219,10 +248,10 @@ export const firestoreService = {
   // Logs
   addActivityLog: async (data: Omit<ActivityLog, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'activity_logs'), {
+      return await withRetry(() => addDoc(collection(db, 'activity_logs'), {
         ...data,
         timestamp: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'activity_logs');
     }
@@ -231,7 +260,7 @@ export const firestoreService = {
   // Staff
   addStaff: async (data: Omit<Staff, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'staff'), data);
+      return await withRetry(() => addDoc(collection(db, 'staff'), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'staff');
       throw error;
@@ -240,7 +269,7 @@ export const firestoreService = {
 
   removeStaff: async (id: string) => {
     try {
-      return await deleteDoc(doc(db, 'staff', id));
+      return await withRetry(() => deleteDoc(doc(db, 'staff', id)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `staff/${id}`);
       throw error;
@@ -249,7 +278,7 @@ export const firestoreService = {
 
   updateStaff: async (id: string, data: Partial<Staff>) => {
     try {
-      return await updateDoc(doc(db, 'staff', id), data);
+      return await withRetry(() => updateDoc(doc(db, 'staff', id), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `staff/${id}`);
       throw error;
@@ -282,10 +311,10 @@ export const firestoreService = {
 
   updateAdminPin: async (newPin: string) => {
     try {
-      return await setDoc(doc(db, 'admin_settings', 'auth_pin'), { 
+      return await withRetry(() => setDoc(doc(db, 'admin_settings', 'auth_pin'), { 
         pin: newPin,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      }, { merge: true }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'admin_settings/auth_pin');
       throw error;
@@ -307,23 +336,25 @@ export const firestoreService = {
 
   updateWalletNumber: async (newWallet: string) => {
     try {
-      return await setDoc(doc(db, 'admin_settings', 'wallet_number'), { 
+      return await withRetry(() => setDoc(doc(db, 'admin_settings', 'wallet_number'), { 
         number: newWallet,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      }, { merge: true }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'admin_settings/wallet_number');
       throw error;
     }
   },
 
-  subscribeToSubscriptionPrices: (callback: (prices: { weekly: number; monthly: number }) => void) => {
+  subscribeToSubscriptionPrices: (callback: (prices: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }) => void) => {
     return onSnapshot(doc(db, 'admin_settings', 'subscription_prices'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         callback({
           weekly: typeof data.weekly === 'number' && data.weekly > 0 ? data.weekly : 800,
-          monthly: typeof data.monthly === 'number' && data.monthly > 0 ? data.monthly : 3000
+          monthly: typeof data.monthly === 'number' && data.monthly > 0 ? data.monthly : 3000,
+          weeklyDiscount: typeof data.weeklyDiscount === 'number' && data.weeklyDiscount >= 10 && data.weeklyDiscount <= 50 ? data.weeklyDiscount : undefined,
+          monthlyDiscount: typeof data.monthlyDiscount === 'number' && data.monthlyDiscount >= 10 && data.monthlyDiscount <= 50 ? data.monthlyDiscount : undefined
         });
       } else {
         callback({ weekly: 800, monthly: 3000 });
@@ -334,13 +365,15 @@ export const firestoreService = {
     });
   },
 
-  updateSubscriptionPrices: async (prices: { weekly: number; monthly: number }) => {
+  updateSubscriptionPrices: async (prices: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }) => {
     try {
-      return await setDoc(doc(db, 'admin_settings', 'subscription_prices'), { 
+      return await withRetry(() => setDoc(doc(db, 'admin_settings', 'subscription_prices'), { 
         weekly: prices.weekly,
         monthly: prices.monthly,
+        weeklyDiscount: prices.weeklyDiscount ?? null,
+        monthlyDiscount: prices.monthlyDiscount ?? null,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      }, { merge: true }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'admin_settings/subscription_prices');
       throw error;
@@ -481,7 +514,7 @@ export const firestoreService = {
 
   checkInVehicle: async (garageId: string, vehicleData: Omit<Vehicle, 'id'>, commission: number) => {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const garageDoc = await transaction.get(garageRef);
         
@@ -509,7 +542,7 @@ export const firestoreService = {
           balance: increment(-commission),
           carsInside: increment(1)
         });
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `garages/${garageId}/vehicles/checkin`);
       throw error;
@@ -519,7 +552,7 @@ export const firestoreService = {
 
   checkOutVehicle: async (garageId: string, vehicleId: string, cost: number) => {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
         const today = new Date().toISOString().split('T')[0];
@@ -559,7 +592,7 @@ export const firestoreService = {
         };
 
         transaction.update(garageRef, updateData);
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/vehicles/${vehicleId}/checkout`);
       throw error;
@@ -568,7 +601,7 @@ export const firestoreService = {
 
   deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, todayYMD: string) => {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await withRetry(() => runTransaction(db, async (transaction) => {
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
         const garageRef = doc(db, 'garages', garageId);
         
@@ -594,7 +627,7 @@ export const firestoreService = {
 
         transaction.update(garageRef, updates);
         return true;
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `garages/${garageId}/vehicles/${vehicleId}`);
       throw error;
@@ -604,11 +637,11 @@ export const firestoreService = {
   // Supervisors
   addSupervisor: async (data: Omit<Supervisor, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'supervisors'), {
+      return await withRetry(() => addDoc(collection(db, 'supervisors'), {
         ...data,
         adminPin: ADMIN_PIN,
         createdAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'supervisors');
       throw error;
@@ -617,7 +650,7 @@ export const firestoreService = {
 
   removeSupervisor: async (id: string) => {
     try {
-      return await deleteDoc(doc(db, 'supervisors', id));
+      return await withRetry(() => deleteDoc(doc(db, 'supervisors', id)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `supervisors/${id}`);
       throw error;
@@ -645,7 +678,7 @@ export const firestoreService = {
 
   updateSupervisor: async (id: string, data: Partial<Supervisor>) => {
     try {
-      return await updateDoc(doc(db, 'supervisors', id), data);
+      return await withRetry(() => updateDoc(doc(db, 'supervisors', id), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `supervisors/${id}`);
       throw error;
@@ -655,10 +688,10 @@ export const firestoreService = {
   // General Managers
   addGeneralManager: async (data: Omit<GeneralManager, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'general_managers'), {
+      return await withRetry(() => addDoc(collection(db, 'general_managers'), {
         ...data,
         createdAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'general_managers');
       throw error;
@@ -667,7 +700,7 @@ export const firestoreService = {
 
   removeGeneralManager: async (id: string) => {
     try {
-      return await deleteDoc(doc(db, 'general_managers', id));
+      return await withRetry(() => deleteDoc(doc(db, 'general_managers', id)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `general_managers/${id}`);
       throw error;
@@ -676,7 +709,7 @@ export const firestoreService = {
 
   updateGeneralManager: async (id: string, data: Partial<GeneralManager>) => {
     try {
-      return await updateDoc(doc(db, 'general_managers', id), data);
+      return await withRetry(() => updateDoc(doc(db, 'general_managers', id), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `general_managers/${id}`);
       throw error;
@@ -694,11 +727,11 @@ export const firestoreService = {
   // Delegates
   addDelegate: async (data: Omit<Delegate, 'id'>) => {
     try {
-      return await addDoc(collection(db, 'delegates'), {
+      return await withRetry(() => addDoc(collection(db, 'delegates'), {
         ...data,
         adminPin: ADMIN_PIN,
         createdAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'delegates');
       throw error;
@@ -707,7 +740,7 @@ export const firestoreService = {
 
   removeDelegate: async (id: string) => {
     try {
-      return await deleteDoc(doc(db, 'delegates', id));
+      return await withRetry(() => deleteDoc(doc(db, 'delegates', id)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `delegates/${id}`);
       throw error;
@@ -747,7 +780,7 @@ export const firestoreService = {
 
   updateDelegate: async (id: string, data: Partial<Delegate>) => {
     try {
-      return await updateDoc(doc(db, 'delegates', id), data);
+      return await withRetry(() => updateDoc(doc(db, 'delegates', id), data));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `delegates/${id}`);
       throw error;
@@ -784,16 +817,21 @@ export const firestoreService = {
   },
 
   addPackage: async (pkg: Omit<Package, 'id' | 'createdAt' | 'isActive'>): Promise<void> => {
-    await addDoc(collection(db, 'packages'), {
+    await withRetry(() => addDoc(collection(db, 'packages'), {
       ...pkg,
       isActive: true,
       createdAt: serverTimestamp()
-    });
+    }));
+  },
+
+  updatePackage: async (id: string, data: Partial<Package>): Promise<void> => {
+    const docRef = doc(db, 'packages', id);
+    await withRetry(() => updateDoc(docRef, data));
   },
 
   deletePackage: async (id: string): Promise<void> => {
     const docRef = doc(db, 'packages', id);
-    await updateDoc(docRef, { isActive: false });
+    await withRetry(() => updateDoc(docRef, { isActive: false }));
   },
 
   subscribeToPackages: (callback: (packages: Package[]) => void) => {
@@ -803,15 +841,47 @@ export const firestoreService = {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'packages'));
   },
 
+  // Coupons Management
+  addCoupon: async (coupon: Omit<Coupon, 'id' | 'createdAt' | 'isActive'>): Promise<void> => {
+    await withRetry(() => addDoc(collection(db, 'coupons'), {
+      ...coupon,
+      code: coupon.code.toUpperCase().trim(),
+      isActive: true,
+      createdAt: serverTimestamp()
+    }));
+  },
+
+  deleteCoupon: async (id: string): Promise<void> => {
+    const docRef = doc(db, 'coupons', id);
+    await withRetry(() => updateDoc(docRef, { isActive: false }));
+  },
+
+  subscribeToCoupons: (callback: (coupons: Coupon[]) => void) => {
+    const q = query(collection(db, 'coupons'), where('isActive', '==', true));
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Coupon)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'coupons'));
+  },
+
+  getCouponByCode: async (code: string): Promise<Coupon | null> => {
+    const normalizedCode = code.toUpperCase().trim();
+    const q = query(collection(db, 'coupons'), where('code', '==', normalizedCode), where('isActive', '==', true), limit(1));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Coupon;
+  },
+
   resetTotalAdminRevenue: async (garages: Garage[]) => {
     try {
-      const batch = writeBatch(db);
-      garages.forEach(g => {
-        batch.update(doc(db, 'garages', g.id), {
-          totalAdminRevenue: 0
+      return await withRetry(async () => {
+        const batch = writeBatch(db);
+        garages.forEach(g => {
+          batch.update(doc(db, 'garages', g.id), {
+            totalAdminRevenue: 0
+          });
         });
+        await batch.commit();
       });
-      await batch.commit();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'garages/all');
       throw error;
@@ -832,7 +902,7 @@ export const firestoreService = {
 
   addSubscriber: async (garageId: string, subscriberData: any) => {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const garageDoc = await transaction.get(garageRef);
         
@@ -863,7 +933,7 @@ export const firestoreService = {
         });
 
         return subscriberRef.id;
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `garages/${garageId}/subscribers`);
       throw error;
@@ -872,7 +942,7 @@ export const firestoreService = {
 
   renewSubscriber: async (garageId: string, subscriberId: string, costUnits: number, newDates: { startDate: string, endDate: string }) => {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const garageDoc = await transaction.get(garageRef);
         
@@ -901,7 +971,7 @@ export const firestoreService = {
         });
 
         return true;
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/subscribers/${subscriberId}/renew`);
       throw error;
@@ -910,7 +980,7 @@ export const firestoreService = {
 
   updateSubscriber: async (garageId: string, subscriberId: string, subscriberData: any) => {
     try {
-      return await updateDoc(doc(db, `garages/${garageId}/subscribers`, subscriberId), subscriberData);
+      return await withRetry(() => updateDoc(doc(db, `garages/${garageId}/subscribers`, subscriberId), subscriberData));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/subscribers`);
       throw error;
@@ -919,7 +989,7 @@ export const firestoreService = {
 
   deleteSubscriber: async (garageId: string, subscriberId: string) => {
     try {
-      return await deleteDoc(doc(db, `garages/${garageId}/subscribers`, subscriberId));
+      return await withRetry(() => deleteDoc(doc(db, `garages/${garageId}/subscribers`, subscriberId)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `garages/${garageId}/subscribers`);
       throw error;
@@ -929,11 +999,14 @@ export const firestoreService = {
   // Recharge Requests
   createRechargeRequest: async (data: Omit<RechargeRequest, 'id' | 'status' | 'createdAt'>) => {
     try {
-      return await addDoc(collection(db, 'recharge_requests'), {
-        ...data,
+      const cleanData = Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+      );
+      return await withRetry(() => addDoc(collection(db, 'recharge_requests'), {
+        ...cleanData,
         status: 'pending',
         createdAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'recharge_requests');
       throw error;
@@ -985,79 +1058,81 @@ export const firestoreService = {
 
   approveRechargeRequest: async (request: RechargeRequest) => {
     try {
-      const requestRef = doc(db, 'recharge_requests', request.id);
-      
-      // Concurrency check: Ensure the request is still pending before proceeding
-      const requestSnap = await getDoc(requestRef);
-      if (!requestSnap.exists()) {
-        throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
-      }
-      const currentStatus = requestSnap.data()?.status;
-      if (currentStatus && currentStatus !== 'pending') {
-        throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
-      }
-
-      const batch = writeBatch(db);
-      const garageRef = doc(db, 'garages', request.garageId);
-      const delegateRef = doc(db, 'delegates', request.delegateId);
-      
-      const garageDoc = await getDoc(garageRef);
-      const isSub = request.packageId === 'weekly_sub' || request.packageId === 'monthly_sub';
-      
-      const updateData: any = {
-        totalAdminRevenue: increment(request.revenueAmount),
-        isLocked: false,
-        lastRechargeDate: serverTimestamp()
-      };
-
-      if (isSub) {
-        let baseDate = new Date();
-        const currentExpiry = garageDoc.exists() ? garageDoc.data()?.balanceExpiry : null;
-        if (currentExpiry) {
-          const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
-          if (currentExpiryDate > baseDate) {
-            baseDate = currentExpiryDate;
-          }
-        }
-        const days = request.packageId === 'weekly_sub' ? 7 : 30;
-        baseDate.setDate(baseDate.getDate() + days);
+      return await withRetry(async () => {
+        const requestRef = doc(db, 'recharge_requests', request.id);
         
-        updateData.balanceExpiry = Timestamp.fromDate(baseDate);
-        updateData.billingModel = 'subscription';
-      } else {
-        updateData.balance = increment(request.amount);
-        updateData.totalRechargedCars = increment(request.carsCount);
-      }
+        // Concurrency check: Ensure the request is still pending before proceeding
+        const requestSnap = await getDoc(requestRef);
+        if (!requestSnap.exists()) {
+          throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
+        }
+        const currentStatus = requestSnap.data()?.status;
+        if (currentStatus && currentStatus !== 'pending') {
+          throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
+        }
 
-      // 1. Update Garage
-      batch.update(garageRef, updateData);
+        const batch = writeBatch(db);
+        const garageRef = doc(db, 'garages', request.garageId);
+        const delegateRef = doc(db, 'delegates', request.delegateId);
+        
+        const garageDoc = await getDoc(garageRef);
+        const isSub = request.packageId === 'weekly_sub' || request.packageId === 'monthly_sub';
+        
+        const updateData: any = {
+          totalAdminRevenue: increment(request.revenueAmount),
+          isLocked: false,
+          lastRechargeDate: serverTimestamp()
+        };
 
-      // 2. Update Delegate
-      batch.update(delegateRef, {
-        totalRechargedAmount: increment(request.revenueAmount)
+        if (isSub) {
+          let baseDate = new Date();
+          const currentExpiry = garageDoc.exists() ? garageDoc.data()?.balanceExpiry : null;
+          if (currentExpiry) {
+            const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+            if (currentExpiryDate > baseDate) {
+              baseDate = currentExpiryDate;
+            }
+          }
+          const days = request.packageId === 'weekly_sub' ? 7 : 30;
+          baseDate.setDate(baseDate.getDate() + days);
+          
+          updateData.balanceExpiry = Timestamp.fromDate(baseDate);
+          updateData.billingModel = 'subscription';
+        } else {
+          updateData.balance = increment(request.amount);
+          updateData.totalRechargedCars = increment(request.carsCount);
+        }
+
+        // 1. Update Garage
+        batch.update(garageRef, updateData);
+
+        // 2. Update Delegate
+        batch.update(delegateRef, {
+          totalRechargedAmount: increment(request.revenueAmount)
+        });
+
+        // 3. Update Request Status
+        batch.update(requestRef, {
+          status: 'approved',
+          resolvedAt: serverTimestamp()
+        });
+
+        // 4. Add Activity Log
+        const logRef = doc(collection(db, 'activity_logs'));
+        batch.set(logRef, {
+          garageId: request.garageId,
+          garageName: request.garageName,
+          staffId: request.delegateId,
+          staffName: request.delegateName,
+          actionType: 'recharge',
+          plateNumber: `شحن ${request.packageName} (${request.carsCount} سيارة) - ${request.revenueAmount} ج`,
+          timestamp: serverTimestamp(),
+          amount: request.revenueAmount,
+          packageId: request.packageId
+        });
+
+        return await batch.commit();
       });
-
-      // 3. Update Request Status
-      batch.update(requestRef, {
-        status: 'approved',
-        resolvedAt: serverTimestamp()
-      });
-
-      // 4. Add Activity Log
-      const logRef = doc(collection(db, 'activity_logs'));
-      batch.set(logRef, {
-        garageId: request.garageId,
-        garageName: request.garageName,
-        staffId: request.delegateId,
-        staffName: request.delegateName,
-        actionType: 'recharge',
-        plateNumber: `شحن ${request.packageName} (${request.carsCount} سيارة) - ${request.revenueAmount} ج`,
-        timestamp: serverTimestamp(),
-        amount: request.revenueAmount,
-        packageId: request.packageId
-      });
-
-      return await batch.commit();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `recharge_requests/${request.id}/approve`);
       throw error;
@@ -1066,21 +1141,23 @@ export const firestoreService = {
 
   rejectRechargeRequest: async (requestId: string) => {
     try {
-      const requestRef = doc(db, 'recharge_requests', requestId);
-      
-      // Concurrency check: Ensure the request is still pending before proceeding
-      const requestSnap = await getDoc(requestRef);
-      if (!requestSnap.exists()) {
-        throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
-      }
-      const currentStatus = requestSnap.data()?.status;
-      if (currentStatus && currentStatus !== 'pending') {
-        throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
-      }
+      return await withRetry(async () => {
+        const requestRef = doc(db, 'recharge_requests', requestId);
+        
+        // Concurrency check: Ensure the request is still pending before proceeding
+        const requestSnap = await getDoc(requestRef);
+        if (!requestSnap.exists()) {
+          throw new Error("عذراً، هذا طلب الشحن لم يعد موجوداً في النظام.");
+        }
+        const currentStatus = requestSnap.data()?.status;
+        if (currentStatus && currentStatus !== 'pending') {
+          throw new Error("عذراً، تم معالجة هذا طلب الشحن مسبقاً (تم قبوله أو رفضه بالفعل).");
+        }
 
-      return await updateDoc(requestRef, {
-        status: 'rejected',
-        resolvedAt: serverTimestamp()
+        return await updateDoc(requestRef, {
+          status: 'rejected',
+          resolvedAt: serverTimestamp()
+        });
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `recharge_requests/${requestId}/reject`);
@@ -1137,18 +1214,20 @@ export const firestoreService = {
 
   recalculateCarsInside: async (garageId: string): Promise<number> => {
     try {
-      const q = query(
-        collection(db, `garages/${garageId}/vehicles`),
-        where('status', '==', 'inside')
-      );
-      const snapshot = await getDocs(q);
-      const actualCount = snapshot.size;
+      return await withRetry(async () => {
+        const q = query(
+          collection(db, `garages/${garageId}/vehicles`),
+          where('status', '==', 'inside')
+        );
+        const snapshot = await getDocs(q);
+        const actualCount = snapshot.size;
 
-      await updateDoc(doc(db, 'garages', garageId), {
-        carsInside: actualCount
+        await updateDoc(doc(db, 'garages', garageId), {
+          carsInside: actualCount
+        });
+
+        return actualCount;
       });
-
-      return actualCount;
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/recalculateCarsInside`);
       throw error;

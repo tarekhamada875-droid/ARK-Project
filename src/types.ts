@@ -11,6 +11,17 @@ export interface Package {
   description?: string;
   isActive?: boolean;
   createdAt?: any;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  isActive: boolean;
+  createdAt?: any;
 }
 
 export interface Garage {
@@ -174,6 +185,9 @@ export interface RechargeRequest {
   amount: number;
   carsCount: number;
   revenueAmount: number;
+  originalRevenueAmount?: number;
+  couponCode?: string;
+  discountAmount?: number;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
   resolvedAt?: any;

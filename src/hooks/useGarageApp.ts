@@ -73,7 +73,7 @@ export function useGarageApp() {
   const [adminPin, setAdminPin] = useLocalStorageState<string>('app_admin_pin', '');
   const [activeAdminPin, setActiveAdminPin] = useState<string>(ADMIN_PIN);
   const [walletNumber, setWalletNumber] = useLocalStorageState<string>('app_wallet_number', '015 - 524 - 113 - 23');
-  const [subscriptionPrices, setSubscriptionPrices] = useState<{ weekly: number; monthly: number }>({ weekly: 800, monthly: 3000 });
+  const [subscriptionPrices, setSubscriptionPrices] = useState<{ weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }>({ weekly: 800, monthly: 3000 });
   const [loginPhone, setLoginPhone] = useLocalStorageState<string>('app_login_phone', '');
   const [showCheckInModal, setShowCheckInModal] = useLocalStorageState<boolean>('app_show_checkin', false);
   const [showCheckOutModal, setShowCheckOutModal] = useLocalStorageState<boolean>('app_show_checkout', false);
@@ -1042,7 +1042,7 @@ export function useGarageApp() {
     }
   }, [isOnline, sessionId, showToast, fetchServerTimeOffset]);
 
-  const handleDelegateRecharge = useCallback(async (garageId: string, amount: number, pkg?: Package) => {
+  const handleDelegateRecharge = useCallback(async (garageId: string, amount: number, pkg?: Package, discountInfo?: { couponCode?: string; discountAmount?: number; originalRevenueAmount?: number }) => {
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى المحاولة عند عودة النت.', 'error');
       return;
@@ -1060,9 +1060,14 @@ export function useGarageApp() {
       const commission = Math.max(g.commissionPerVehicle || 1, 1);
       const carsToMove = pkg ? pkg.vehiclesCount : Math.floor(amount / commission);
       const balanceIncrement = pkg ? (pkg.vehiclesCount * commission) : amount;
-      const revenueIncrement = pkg ? pkg.price : amount;
+      let revenueIncrement = pkg ? pkg.price : amount;
+      const originalRev = discountInfo?.originalRevenueAmount !== undefined ? discountInfo.originalRevenueAmount : revenueIncrement;
 
-      await firestoreService.createRechargeRequest({
+      if (discountInfo?.discountAmount && discountInfo.discountAmount > 0) {
+        revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
+      }
+
+      const rechargePayload: any = {
         garageId: garageId,
         garageName: g.name,
         delegateId: delegate.id,
@@ -1071,8 +1076,15 @@ export function useGarageApp() {
         packageName: pkg?.name || 'مبلغ مخصص',
         amount: balanceIncrement,
         carsCount: carsToMove,
-        revenueAmount: revenueIncrement
-      });
+        revenueAmount: revenueIncrement,
+        originalRevenueAmount: originalRev,
+        discountAmount: discountInfo?.discountAmount || 0
+      };
+      if (discountInfo?.couponCode) {
+        rechargePayload.couponCode = discountInfo.couponCode;
+      }
+
+      await firestoreService.createRechargeRequest(rechargePayload);
     } catch (error) {
       showToast('فشل في إرسال طلب الشحن', 'error');
       throw error;

@@ -18,25 +18,32 @@ import {
   XCircle,
   AlertCircle,
   Calendar,
-  Sparkles
+  Sparkles,
+  Tag
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
 import { generateSafePin, safeDate } from '../../utils';
 import { AnimatedCounter } from '../AnimatedCounter';
+import { firestoreService } from '../../services/firestoreService';
 
 interface DelegateDashboardViewProps {
   delegate: Delegate;
   allGarages: Garage[];
   onLogout: () => void;
-  onRecharge: (garageId: string, amount: number, pkg?: Package) => Promise<void>;
+  onRecharge: (
+    garageId: string, 
+    amount: number, 
+    pkg?: Package, 
+    discountInfo?: { couponCode?: string; discountAmount?: number }
+  ) => Promise<void>;
   onCreateGarage: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   isLoading: boolean;
   packages: Package[];
   pendingRequests: RechargeRequest[];
   delegateRequests?: RechargeRequest[];
   showToast: (message: string, type?: 'success' | 'error') => void;
-  subscriptionPrices?: { weekly: number; monthly: number };
+  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const DelegateDashboardView = memo(({ 
@@ -64,6 +71,9 @@ export const DelegateDashboardView = memo(({
   const [showMenu, setShowMenu] = useState(false);
   const [delegateBillingModel, setDelegateBillingModel] = useState<'commission' | 'subscription'>('commission');
   const [delegateSubscriptionType, setDelegateSubscriptionType] = useState<'weekly' | 'monthly'>('weekly');
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountType: 'percentage' | 'fixed'; discountValue: number } | null>(null);
+  const [isCheckingCoupon, setIsCheckingCoupon] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -93,7 +103,7 @@ export const DelegateDashboardView = memo(({
     g.name.includes(searchTerm) || (g.phone || '').includes(searchTerm)
   );
 
-  const handleRechargeSubmit = async (customAmount?: number, pkg?: Package) => {
+  const handleRechargeSubmit = async (customAmount?: number, pkg?: Package, discountInfo?: { couponCode?: string; discountAmount?: number }) => {
     if (!selectedGarage) return;
     
     // Determine amount and package
@@ -103,9 +113,11 @@ export const DelegateDashboardView = memo(({
 
     setIsProcessing(true);
     try {
-      await onRecharge(selectedGarage.id, amount, pkg);
+      await onRecharge(selectedGarage.id, amount, pkg, discountInfo);
       setSuccess(true);
       setPendingPackage(null);
+      setAppliedCoupon(null);
+      setCouponInput('');
       setTimeout(() => {
         setSuccess(false);
         setSelectedGarage(null);
@@ -771,36 +783,59 @@ export const DelegateDashboardView = memo(({
                   {(() => {
                     const isSub = selectedGarage.billingModel === 'subscription';
                     const subPackages: Package[] = [
-                      { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
-                      { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
+                      { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage', discountValue: subscriptionPrices.weeklyDiscount },
+                      { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage', discountValue: subscriptionPrices.monthlyDiscount }
                     ];
                     const list = isSub ? subPackages : (packages.length > 0 ? packages.slice(0, 6) : []);
                     
-                    return list.map((pkg) => (
-                      <button
-                        key={pkg.id}
-                        onClick={() => {
-                          if (isProcessing) return;
-                          setPendingPackage(pkg);
-                        }}
-                        className="flex-none w-[160px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-5 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group"
-                      >
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                          {isSub ? pkg.name : `باقة ${pkg.name.split(' ')[1] || pkg.name}`}
-                        </span>
-                        
-                        <div className="flex flex-col items-center">
-                          <span className="text-4xl font-black text-slate-950 dark:text-white font-mono tracking-tighter leading-none">{pkg.vehiclesCount}</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                            {isSub ? 'يوم' : 'وحدة'}
-                          </span>
-                        </div>
+                    return list.map((pkg) => {
+                      const hasDiscount = pkg.discountValue && pkg.discountValue > 0;
+                      const discountedPrice = hasDiscount
+                        ? (pkg.discountType === 'percentage'
+                            ? Math.round(pkg.price * (1 - pkg.discountValue! / 100))
+                            : Math.max(0, pkg.price - pkg.discountValue!))
+                        : pkg.price;
 
-                        <div className="mt-6 bg-emerald-600 text-white w-full py-2.5 rounded-2xl font-black text-sm font-mono">
-                          {pkg.price} ج.م
-                        </div>
-                      </button>
-                    ));
+                      return (
+                        <button
+                          key={pkg.id}
+                          onClick={() => {
+                            if (isProcessing) return;
+                            setPendingPackage(pkg);
+                          }}
+                          className="flex-none w-[160px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-5 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group relative overflow-hidden"
+                        >
+                          {hasDiscount && (
+                            <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                              <Tag className="w-2.5 h-2.5" />
+                              {pkg.discountType === 'percentage' ? `%${pkg.discountValue}` : `${pkg.discountValue}ج`}
+                            </span>
+                          )}
+
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 mt-1">
+                            {isSub ? pkg.name : `باقة ${pkg.name.split(' ')[1] || pkg.name}`}
+                          </span>
+                          
+                          <div className="flex flex-col items-center">
+                            <span className="text-4xl font-black text-slate-950 dark:text-white font-mono tracking-tighter leading-none">{pkg.vehiclesCount}</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                              {isSub ? 'يوم' : 'وحدة'}
+                            </span>
+                          </div>
+
+                          <div className="mt-6 bg-emerald-600 text-white w-full py-2.5 rounded-2xl font-black text-sm font-mono flex flex-col items-center">
+                            {hasDiscount ? (
+                              <>
+                                <span>{discountedPrice} ج.م</span>
+                                <span className="text-[9px] line-through opacity-70">{pkg.price} ج.م</span>
+                              </>
+                            ) : (
+                              <span>{pkg.price} ج.م</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    });
                   })()}
                   {packages.length === 0 && selectedGarage.billingModel !== 'subscription' && (
                     <div className="w-full py-8 text-center text-slate-400 dark:text-slate-600 text-xs font-bold">لا توجد باقات حالية</div>
@@ -814,7 +849,7 @@ export const DelegateDashboardView = memo(({
           {pendingPackage && !success && (
             <div className="absolute inset-x-4 bottom-4 z-20" onClick={e => e.stopPropagation()}>
               <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border-2 border-emerald-500 animate-in fade-in slide-in-from-bottom-4 transition-all duration-300">
-                <div className="text-center mb-6">
+                <div className="text-center mb-4">
                   <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-400/10 rounded-full flex items-center justify-center mx-auto mb-3">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                   </div>
@@ -828,39 +863,129 @@ export const DelegateDashboardView = memo(({
                   </p>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 flex justify-between items-center">
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر المطلوب</p>
-                    <p className="text-xl font-black text-slate-900 dark:text-white">{pendingPackage.price} ج.م</p>
+                {/* Coupon Code Input */}
+                <div className="mb-4">
+                  <label className="text-[10px] font-bold text-slate-400 mb-1 block">كود خصم إضافي (اختياري)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="أدخل كود الكوبون"
+                      className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold font-mono uppercase text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={isCheckingCoupon || !couponInput.trim()}
+                      onClick={async () => {
+                        if (!couponInput.trim()) return;
+                        setIsCheckingCoupon(true);
+                        try {
+                          const coupon = await firestoreService.getCouponByCode(couponInput.trim());
+                          if (coupon) {
+                            setAppliedCoupon({
+                              code: coupon.code,
+                              discountType: coupon.discountType,
+                              discountValue: coupon.discountValue
+                            });
+                            showToast('تم تطبيق الكوبون بنجاح!');
+                          } else {
+                            showToast('كود الخصم غير صحيح أو منتهي', 'error');
+                          }
+                        } catch (err) {
+                          showToast('فشل التحقق من كود الخصم', 'error');
+                        } finally {
+                          setIsCheckingCoupon(false);
+                        }
+                      }}
+                      className="px-4 py-2.5 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-all"
+                    >
+                      {isCheckingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'تطبيق'}
+                    </button>
                   </div>
-                  <div className="text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      {selectedGarage.billingModel === 'subscription' ? 'المدة' : 'عدد العربيات'}
-                    </p>
-                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-                      {pendingPackage.vehiclesCount} {selectedGarage.billingModel === 'subscription' ? 'يوم' : 'وحدة'}
-                    </p>
-                  </div>
+                  {appliedCoupon && (
+                    <div className="flex items-center justify-between mt-2 p-2 bg-emerald-500/10 rounded-lg text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                      <span className="flex items-center gap-1">
+                        <Tag className="w-3.5 h-3.5" />
+                        تم تطبيق كوبون: {appliedCoupon.code} ({appliedCoupon.discountType === 'percentage' ? `${appliedCoupon.discountValue}%` : `${appliedCoupon.discountValue}ج.م`})
+                      </span>
+                      <button 
+                        onClick={() => { setAppliedCoupon(null); setCouponInput(''); }}
+                        className="text-red-500 hover:underline text-[10px]"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex gap-3">
-                  <button
-                    disabled={isProcessing || pendingRequests.some(r => r.garageId === selectedGarage.id)}
-                    onClick={() => handleRechargeSubmit(undefined, pendingPackage)}
-                    className="flex-1 bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                      <span>{pendingRequests.some(r => r.garageId === selectedGarage.id) ? 'طلب معلق...' : 'تأكيد الشحن'}</span>
-                    )}
-                  </button>
-                  <button
-                    disabled={isProcessing}
-                    onClick={() => setPendingPackage(null)}
-                    className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-4 rounded-xl font-black text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
-                  >
-                    إلغاء
-                  </button>
-                </div>
+                {(() => {
+                  const inherentDiscount = pendingPackage.discountValue && pendingPackage.discountValue > 0
+                    ? (pendingPackage.discountType === 'percentage'
+                        ? Math.round(pendingPackage.price * pendingPackage.discountValue / 100)
+                        : pendingPackage.discountValue)
+                    : 0;
+
+                  let couponDiscount = 0;
+                  if (appliedCoupon) {
+                    const priceAfterPkgDiscount = Math.max(0, pendingPackage.price - inherentDiscount);
+                    couponDiscount = appliedCoupon.discountType === 'percentage'
+                      ? Math.round(priceAfterPkgDiscount * appliedCoupon.discountValue / 100)
+                      : appliedCoupon.discountValue;
+                  }
+
+                  const totalDiscount = inherentDiscount + couponDiscount;
+                  const finalPrice = Math.max(0, pendingPackage.price - totalDiscount);
+
+                  return (
+                    <>
+                      <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 flex justify-between items-center">
+                        <div className="text-right">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر المطلوب</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-xl font-black text-slate-900 dark:text-white">{finalPrice} ج.م</p>
+                            {totalDiscount > 0 && (
+                              <p className="text-xs font-bold text-slate-400 line-through">{pendingPackage.price} ج.م</p>
+                            )}
+                          </div>
+                          {totalDiscount > 0 && (
+                            <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">إجمالي الخصم: {totalDiscount} ج.م</p>
+                          )}
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            {selectedGarage.billingModel === 'subscription' ? 'المدة' : 'عدد العربيات'}
+                          </p>
+                          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                            {pendingPackage.vehiclesCount} {selectedGarage.billingModel === 'subscription' ? 'يوم' : 'وحدة'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          disabled={isProcessing || pendingRequests.some(r => r.garageId === selectedGarage.id)}
+                          onClick={() => handleRechargeSubmit(undefined, pendingPackage, {
+                            couponCode: appliedCoupon?.code,
+                            discountAmount: totalDiscount
+                          })}
+                          className="flex-1 bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                            <span>{pendingRequests.some(r => r.garageId === selectedGarage.id) ? 'طلب معلق...' : 'تأكيد الشحن'}</span>
+                          )}
+                        </button>
+                        <button
+                          disabled={isProcessing}
+                          onClick={() => { setPendingPackage(null); setAppliedCoupon(null); setCouponInput(''); }}
+                          className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-4 rounded-xl font-black text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

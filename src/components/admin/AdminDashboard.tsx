@@ -27,7 +27,8 @@ import {
   Building2,
   Wallet,
   LogOut,
-  Sliders
+  Sliders,
+  Tag
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { Spinner } from '../ui/Spinner';
@@ -60,7 +61,7 @@ interface AdminDashboardProps {
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
-  subscriptionPrices?: { weekly: number; monthly: number };
+  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const AdminDashboard = memo(({
@@ -150,6 +151,8 @@ export const AdminDashboard = memo(({
   React.useEffect(() => {
     setWalletValue(currentWalletNumber);
   }, [currentWalletNumber]);
+
+
   const [confirmDialog, setConfirmDialog] = React.useState<{
     isOpen: boolean;
     title: string;
@@ -1721,7 +1724,14 @@ export const AdminDashboard = memo(({
                           </div>
                           <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('المبلغ المدفوع')}</p>
-                            <p className="text-sm font-black text-slate-900 dark:text-white font-mono">{request.revenueAmount} <span className="text-[10px]">{t('ج.م')}</span></p>
+                            <div className="flex flex-col items-center">
+                              <p className="text-sm font-black text-slate-900 dark:text-white font-mono">{request.revenueAmount} <span className="text-[10px]">{t('ج.م')}</span></p>
+                              {request.discountAmount && request.discountAmount > 0 ? (
+                                <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  خصم {request.discountAmount} ج.م {request.couponCode ? `[كود: ${request.couponCode}]` : ''}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1844,20 +1854,32 @@ export const AdminDashboard = memo(({
                   const form = e.target as HTMLFormElement;
                   const weeklyInput = form.elements.namedItem('weeklyPrice') as HTMLInputElement;
                   const monthlyInput = form.elements.namedItem('monthlyPrice') as HTMLInputElement;
+                  const weeklyDiscountInput = form.elements.namedItem('weeklyDiscount') as HTMLSelectElement | HTMLInputElement;
+                  const monthlyDiscountInput = form.elements.namedItem('monthlyDiscount') as HTMLSelectElement | HTMLInputElement;
+
                   const weekly = Number(weeklyInput.value);
                   const monthly = Number(monthlyInput.value);
+                  const weeklyDiscountVal = weeklyDiscountInput?.value ? Number(weeklyDiscountInput.value) : undefined;
+                  const monthlyDiscountVal = monthlyDiscountInput?.value ? Number(monthlyDiscountInput.value) : undefined;
+
                   if (weekly <= 0 || monthly <= 0) {
                     showToast(t('يرجى إدخال أسعار صحيحة أكبر من الصفر'), 'error');
                     return;
                   }
+
                   try {
-                    await firestoreService.updateSubscriptionPrices({ weekly, monthly });
-                    showToast(t('تم تحديث أسعار الاشتراكات بنجاح'));
+                    await firestoreService.updateSubscriptionPrices({ 
+                      weekly, 
+                      monthly,
+                      weeklyDiscount: weeklyDiscountVal,
+                      monthlyDiscount: monthlyDiscountVal
+                    });
+                    showToast(t('تم تحديث أسعار الاشتراكات والخصومات بنجاح'));
                   } catch (err) {
                     showToast(t('حدث خطأ أثناء تحديث الأسعار'), 'error');
                   }
                 }}
-                className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end font-sans"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end font-sans"
               >
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الأسبوعي (7 أيام) - ج.م')}</label>
@@ -1871,6 +1893,22 @@ export const AdminDashboard = memo(({
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 dark:text-amber-400 mr-2">{t('نسبة الخصم الأسبوعي (%) [اختياري]')}</label>
+                  <select 
+                    name="weeklyDiscount" 
+                    defaultValue={subscriptionPrices.weeklyDiscount || ''}
+                    key={`weeklyDiscount-${subscriptionPrices.weeklyDiscount}`}
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all cursor-pointer" 
+                  >
+                    <option value="">{t('بدون خصم (0%)')}</option>
+                    {[10, 15, 20, 25, 30, 50].map((num) => (
+                      <option key={num} value={num}>
+                        {num}%
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الشهري (30 يوماً) - ج.م')}</label>
                   <input 
                     name="monthlyPrice" 
@@ -1881,11 +1919,27 @@ export const AdminDashboard = memo(({
                     className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all" 
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 dark:text-amber-400 mr-2">{t('نسبة الخصم الشهري (%) [اختياري]')}</label>
+                  <select 
+                    name="monthlyDiscount" 
+                    defaultValue={subscriptionPrices.monthlyDiscount || ''}
+                    key={`monthlyDiscount-${subscriptionPrices.monthlyDiscount}`}
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all cursor-pointer" 
+                  >
+                    <option value="">{t('بدون خصم (0%)')}</option>
+                    {[10, 15, 20, 25, 30, 50].map((num) => (
+                      <option key={num} value={num}>
+                        {num}%
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button 
                   type="submit" 
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-bold text-base transition-all outline-none flex items-center justify-center gap-2 shadow-sm"
+                  className="col-span-1 md:col-span-2 lg:col-span-4 bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-bold text-base transition-all outline-none flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <span>{t('حفظ أسعار الاشتراكات')}</span>
+                  <span>{t('حفظ أسعار الاشتراكات والخصومات')}</span>
                 </button>
               </form>
             </div>
@@ -1906,13 +1960,26 @@ export const AdminDashboard = memo(({
                     const nameInput = form.elements.namedItem('pkgName') as HTMLInputElement;
                     const priceInput = form.elements.namedItem('pkgPrice') as HTMLInputElement;
                     const countInput = form.elements.namedItem('pkgCount') as HTMLInputElement;
+                    const discountValueInput = form.elements.namedItem('pkgDiscountValue') as HTMLSelectElement | HTMLInputElement;
                     
                     const name = nameInput.value;
                     const price = Number(priceInput.value);
                     const count = Number(countInput.value);
+                    const discountVal = discountValueInput?.value ? Number(discountValueInput.value) : 0;
                     
+                    if (discountVal > 0 && (discountVal < 10 || discountVal > 50)) {
+                      showToast(t('نسبة الخصم يجب أن تكون بين 10% و 50%'), 'error');
+                      return;
+                    }
+
                     try {
-                      await firestoreService.addPackage({ name, price, vehiclesCount: count });
+                      await firestoreService.addPackage({ 
+                        name, 
+                        price, 
+                        vehiclesCount: count,
+                        discountType: discountVal > 0 ? 'percentage' : undefined,
+                        discountValue: discountVal > 0 ? discountVal : undefined
+                      });
                       form.reset();
                       showToast(t('تم إضافة الباقة بنجاح'));
                     } catch (err) {
@@ -1931,7 +1998,7 @@ export const AdminDashboard = memo(({
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الباقة (ج.م)')}</label>
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الباقة قبل الخصم (ج.م)')}</label>
                     <input 
                       name="pkgPrice" 
                       type="number" 
@@ -1951,6 +2018,27 @@ export const AdminDashboard = memo(({
                     />
                   </div>
 
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mr-2">
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>{t('خصم خاص على الباقة (نسبة مئوية من 10% إلى 50%)')}</span>
+                    </label>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 mb-1 block">{t('نسبة الخصم (%) [اختياري]')}</label>
+                      <select 
+                        name="pkgDiscountValue"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        <option value="">{t('بدون خصم (0%)')}</option>
+                        {[10, 15, 20, 25, 30, 50].map((num) => (
+                          <option key={num} value={num}>
+                            {num}%
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <button 
                     type="submit" 
                     className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-95 transition-all outline-none flex items-center justify-center gap-3 mt-4 pointer-events-auto"
@@ -1962,7 +2050,7 @@ export const AdminDashboard = memo(({
               </div>
             </section>
 
-            <section className="lg:col-span-2">
+            <section className="lg:col-span-2 space-y-8">
               <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="p-8 border-b-2 border-slate-100 dark:border-slate-850 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors font-sans">
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
@@ -1981,7 +2069,15 @@ export const AdminDashboard = memo(({
                         className="p-5 bg-white dark:bg-slate-900 border bg-white dark:bg-slate-900 border-2 border-slate-103 dark:border-slate-800 rounded-2xl hover:border-emerald-500 dark:hover:border-emerald-500 transition-all flex flex-col justify-between min-h-40 shadow-sm relative overflow-hidden"
                       >
                         <div className="flex justify-between items-start mb-4">
-                          <h4 className="font-sans font-black text-slate-900 dark:text-white text-lg">{pkg.name}</h4>
+                          <div>
+                            <h4 className="font-sans font-black text-slate-900 dark:text-white text-lg">{pkg.name}</h4>
+                            {pkg.discountValue && pkg.discountValue > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mt-1">
+                                <Tag className="w-3 h-3" />
+                                {pkg.discountType === 'percentage' ? `خصم ${pkg.discountValue}%` : `خصم ${pkg.discountValue} ج.م`}
+                              </span>
+                            ) : null}
+                          </div>
                           <button 
                             type="button"
                             onClick={() => {
@@ -2014,8 +2110,21 @@ export const AdminDashboard = memo(({
                           <div className="flex flex-col items-center">
                             <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold leading-none mb-1">{t('سعر الباقة')}</span>
                             <div className="flex items-baseline gap-0.5 font-black mt-0.5 whitespace-nowrap justify-center w-full">
-                              <span className="text-sm xs:text-base sm:text-lg text-emerald-500 font-mono">{pkg.price}</span>
-                              <span className="text-[8px] text-emerald-500 font-semibold">{t('ج.م')}</span>
+                              {pkg.discountValue && pkg.discountValue > 0 ? (
+                                <div className="flex flex-col items-center">
+                                  <span className="text-sm xs:text-base sm:text-lg text-emerald-500 font-mono">
+                                    {pkg.discountType === 'percentage'
+                                      ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
+                                      : Math.max(0, pkg.price - pkg.discountValue)}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 line-through font-mono">{pkg.price} ج.م</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="text-sm xs:text-base sm:text-lg text-emerald-500 font-mono">{pkg.price}</span>
+                                  <span className="text-[8px] text-emerald-500 font-semibold">{t('ج.م')}</span>
+                                </>
+                              )}
                             </div>
                           </div>
 
@@ -2023,7 +2132,13 @@ export const AdminDashboard = memo(({
                             <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold leading-none mb-1">{t('سعر السيارة')}</span>
                             <div className="flex items-baseline gap-0.5 font-black mt-0.5 whitespace-nowrap justify-center w-full">
                               <span className="text-sm xs:text-base sm:text-lg text-emerald-500 dark:text-emerald-400 font-mono">
-                                {Number((pkg.price / (pkg.vehiclesCount || 1)).toFixed(2))}
+                                {Number(((
+                                  pkg.discountValue && pkg.discountValue > 0
+                                    ? (pkg.discountType === 'percentage'
+                                        ? pkg.price * (1 - pkg.discountValue / 100)
+                                        : Math.max(0, pkg.price - pkg.discountValue))
+                                    : pkg.price
+                                ) / (pkg.vehiclesCount || 1)).toFixed(2))}
                               </span>
                               <span className="text-[8px] text-emerald-500 dark:text-emerald-400 font-semibold font-sans">{t('ج.م')}</span>
                             </div>
@@ -2048,6 +2163,8 @@ export const AdminDashboard = memo(({
                   </div>
                 </div>
               </div>
+
+
             </section>
           </div>
           </div>

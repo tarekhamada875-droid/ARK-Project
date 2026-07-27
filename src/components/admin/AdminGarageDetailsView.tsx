@@ -39,7 +39,7 @@ interface AdminGarageDetailsViewProps {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   packages: Package[];
-  subscriptionPrices?: { weekly: number; monthly: number };
+  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const AdminGarageDetailsView = memo(({
@@ -94,10 +94,15 @@ export const AdminGarageDetailsView = memo(({
         commissionPerVehicle: 1,
       };
 
-      if (newModel === 'subscription' && !selectedGarageForDetails.balanceExpiry) {
-        const defaultExpiry = new Date();
-        defaultExpiry.setDate(defaultExpiry.getDate() + 7);
-        updateData.balanceExpiry = Timestamp.fromDate(defaultExpiry);
+      if (newModel === 'subscription') {
+        const now = new Date();
+        const currentExp = selectedGarageForDetails.balanceExpiry ? (selectedGarageForDetails.balanceExpiry.toDate ? selectedGarageForDetails.balanceExpiry.toDate() : new Date(selectedGarageForDetails.balanceExpiry)) : null;
+        // If no expiry, or if expiry is in far future (>60 days leftover from commission default), reset to 30 days
+        if (!currentExp || currentExp.getTime() - now.getTime() > 60 * 24 * 60 * 60 * 1000) {
+          const defaultExpiry = new Date();
+          defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+          updateData.balanceExpiry = Timestamp.fromDate(defaultExpiry);
+        }
       }
 
       await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
@@ -908,7 +913,15 @@ export const AdminGarageDetailsView = memo(({
                       <button 
                         onClick={async () => {
                           setIsLoading(true);
-                          try { await firestoreService.updateGarage(selectedGarageForDetails.id, { balance: 0, isLocked: true }); showToast(t('تم التصفير')); setShowClearBalanceConfirm(false); } 
+                          try { 
+                            const updateFields: any = { balance: 0, isLocked: true };
+                            if (selectedGarageForDetails.billingModel === 'subscription') {
+                              updateFields.balanceExpiry = Timestamp.fromDate(new Date());
+                            }
+                            await firestoreService.updateGarage(selectedGarageForDetails.id, updateFields); 
+                            showToast(t('تم التصفير')); 
+                            setShowClearBalanceConfirm(false); 
+                          } 
                           catch (error) { showToast(t('فشل'), 'error'); } finally { setIsLoading(false); }
                         }}
                         className="flex-1 py-3 bg-red-500 text-white rounded-xl font-black text-xs hover:bg-red-600 transition-all outline-none cursor-pointer"
@@ -934,14 +947,20 @@ export const AdminGarageDetailsView = memo(({
                             {(() => {
                                 const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
                                 const subPackages: Package[] = [
-                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
-                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
+                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage', discountValue: subscriptionPrices.weeklyDiscount },
+                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage', discountValue: subscriptionPrices.monthlyDiscount }
                                 ];
                                 const displayPackages = isSubscriptionGarage ? subPackages : (packages.length > 0 ? packages : []);
                                 
                                 return displayPackages.map((pkg) => {
                                     const isPremium = pkg.price >= 4000;
                                     const isMid = pkg.price >= 1500 && pkg.price < 4000;
+                                    const hasDiscount = pkg.discountValue && pkg.discountValue > 0;
+                                    const discountedPrice = hasDiscount
+                                        ? (pkg.discountType === 'percentage'
+                                            ? Math.round(pkg.price * (1 - pkg.discountValue! / 100))
+                                            : Math.max(0, pkg.price - pkg.discountValue!))
+                                        : pkg.price;
                                     
                                     return (
                                         <button
@@ -969,8 +988,15 @@ export const AdminGarageDetailsView = memo(({
                                                   {isSubscriptionGarage ? t('يوم') : t('وحدة رصيد')}
                                                 </span>
       
-                                                <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105">
-                                                    {pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}
+                                                <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105 flex flex-col items-center">
+                                                    {hasDiscount ? (
+                                                        <>
+                                                            <span>{discountedPrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                            <span className="text-[10px] line-through opacity-70">{pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span>{pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </button>

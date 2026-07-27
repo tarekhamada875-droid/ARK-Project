@@ -11,7 +11,9 @@ const app = initializeApp(firebaseConfig);
 
 // Use memory-only local cache to guarantee 100% online consistency.
 // This prevents offline writes which would lead to race-conditions or credit/balance desynchronization.
+// experimentalAutoDetectLongPolling ensures reliable backend connectivity in sandboxed iframe environments.
 export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
   localCache: memoryLocalCache()
 }, firebaseConfig.firestoreDatabaseId);
 

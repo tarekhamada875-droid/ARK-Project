@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Package } from '../../types';
-import { X, Menu } from 'lucide-react';
+import { X, Menu, Tag } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -9,7 +9,7 @@ interface PackagesModalProps {
   walletNumber?: string;
   onToggleMenu?: () => void;
   billingModel?: 'subscription' | 'commission';
-  subscriptionPrices?: { weekly: number; monthly: number };
+  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const PackagesModal: React.FC<PackagesModalProps> = ({ 
@@ -31,6 +31,38 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
+      <style>{`
+        @keyframes badge-snake-rotate {
+          from { transform: translate(-50%, -50%) rotate(0deg); }
+          to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        .discount-snake-wrapper {
+          position: relative;
+          z-index: 0;
+          overflow: hidden;
+          padding: 2.5px;
+          border-radius: 9999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .discount-snake-wrapper::before {
+          content: '';
+          position: absolute;
+          z-index: -1;
+          top: 50%;
+          left: 50%;
+          width: 350px;
+          height: 350px;
+          background: conic-gradient(from 0deg, transparent 140deg, #d97706 240deg, #f59e0b 310deg, #fbbf24 360deg);
+          transform-origin: center center;
+          animation: badge-snake-rotate 1.8s linear infinite;
+        }
+        .dark .discount-snake-wrapper::before {
+          background: conic-gradient(from 0deg, transparent 140deg, #f59e0b 240deg, #fbbf24 310deg, #fef08a 360deg);
+        }
+      `}</style>
+
       {/* Header */}
       <div className="p-6 pb-4 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
           <div className="flex items-center gap-3">
@@ -81,8 +113,8 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
             {(() => {
               const displayPackages = isSub 
                 ? [
-                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7 },
-                    { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30 }
+                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage' as const, discountValue: subscriptionPrices.weeklyDiscount },
+                    { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage' as const, discountValue: subscriptionPrices.monthlyDiscount }
                   ]
                 : [...packages].sort((a, b) => a.price - b.price);
 
@@ -96,20 +128,26 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
                 let ratePerVehicle = '';
                 let expectedRevenue = 0;
 
+                const effectivePrice = pkg.discountValue && pkg.discountValue > 0
+                  ? (pkg.discountType === 'percentage'
+                      ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
+                      : Math.max(0, pkg.price - pkg.discountValue))
+                  : pkg.price;
+
                 if (isSub) {
-                  ratePerVehicle = (pkg.price / pkg.vehiclesCount).toFixed(2);
+                  ratePerVehicle = (effectivePrice / pkg.vehiclesCount).toFixed(2);
                   if (pkg.id === 'monthly_sub') {
                     // Monthly subscription compared to weekly subscription daily rate
                     const weeklyDailyRate = subscriptionPrices.weekly / 7;
                     const expectedPrice = 30 * weeklyDailyRate;
-                    savings = Math.round(expectedPrice - pkg.price);
+                    savings = Math.round(expectedPrice - effectivePrice);
                   }
                 } else {
                   const prevPkg = index > 0 ? displayPackages[index - 1] : null;
                   const comparisonRate = prevPkg ? (prevPkg.price / prevPkg.vehiclesCount) : baseRate;
                   const expectedPrice = pkg.vehiclesCount * comparisonRate;
-                  savings = Math.round(expectedPrice - pkg.price);
-                  ratePerVehicle = (pkg.price / pkg.vehiclesCount).toFixed(2);
+                  savings = Math.round(expectedPrice - effectivePrice);
+                  ratePerVehicle = (effectivePrice / pkg.vehiclesCount).toFixed(2);
                   expectedRevenue = pkg.vehiclesCount * garageHourlyRate;
                 }
 
@@ -117,12 +155,25 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
                 const isLast = index === displayPackages.length - 1;
                 
                 return (
-                  <div key={pkg.id} className={`flex flex-col gap-2 relative py-12 ${!isLast ? 'border-b-2 border-dashed border-slate-200 dark:border-slate-800' : ''} transition-colors`}>
-                    {/* Package Name Badge */}
-                    <div className="absolute top-9 left-1/2 -translate-x-1/2 z-10 bg-[#faf9f6] dark:bg-slate-800 px-4 py-1 rounded-full border-2 border-slate-100 dark:border-slate-800 transition-colors">
-                      <span className="text-[11px] font-black uppercase tracking-widest leading-none text-slate-900 dark:text-slate-100">
-                        {pkg.name || 'باقة توفير'}
-                      </span>
+                  <div key={pkg.id} className={`flex flex-col gap-3 relative pt-6 pb-8 ${!isLast ? 'border-b-2 border-dashed border-slate-200 dark:border-slate-800' : ''} transition-colors`}>
+                    {/* Header Badges Row */}
+                    <div className="flex items-center justify-center gap-2 mb-0.5 flex-wrap">
+                      <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-1.5 rounded-full border-2 border-slate-800 dark:border-slate-700 shadow-sm flex items-center gap-2 shrink-0">
+                        <span className="text-[12px] font-black uppercase tracking-widest leading-none text-white whitespace-nowrap">
+                          {pkg.name || 'باقة توفير'}
+                        </span>
+                      </div>
+
+                      {pkg.discountValue && pkg.discountValue > 0 ? (
+                        <div className="discount-snake-wrapper shadow-lg shrink-0">
+                          <div className="bg-slate-900 dark:bg-slate-800 text-amber-400 dark:text-amber-300 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                            <Tag className="w-3.5 h-3.5 shrink-0 text-amber-400 dark:text-amber-300" />
+                            <span className="text-[12px] font-black tracking-tight leading-none whitespace-nowrap">
+                              {pkg.discountType === 'percentage' ? `خصم %${pkg.discountValue}` : `خصم ${pkg.discountValue} ج.م`}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div 
@@ -137,9 +188,27 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
                           </span>
                         </div>
                         
-                        <div className="px-5 py-3 rounded-xl flex flex-col items-center justify-center border-2 bg-slate-900 dark:bg-slate-800 text-white border-slate-900 dark:border-slate-700 tracking-tight transition-all select-none">
-                          <span className="text-xl font-black font-mono tracking-tight leading-none">{formatNumber(pkg.price)}</span>
-                          <span className="text-[9px] font-black uppercase tracking-widest mt-1.5 opacity-40">جنيه مصري</span>
+                        <div className="px-5 py-3 rounded-xl flex flex-col items-center justify-center border-2 bg-slate-900 dark:bg-slate-800 text-white border-slate-900 dark:border-slate-700 tracking-tight transition-all select-none relative">
+                          {pkg.discountValue && pkg.discountValue > 0 ? (
+                            <>
+                              <div className="flex items-baseline justify-center gap-2 font-mono">
+                                <span className="text-xl font-black text-emerald-400">
+                                  {formatNumber(effectivePrice)}
+                                </span>
+                                <span className="text-xs text-slate-400 line-through">
+                                  {formatNumber(pkg.price)}
+                                </span>
+                              </div>
+                              <span className="text-[9px] font-black uppercase tracking-widest mt-1 text-slate-300">
+                                جنيه مصري
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xl font-black font-mono tracking-tight leading-none">{formatNumber(pkg.price)}</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest mt-1.5 opacity-40">جنيه مصري</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
