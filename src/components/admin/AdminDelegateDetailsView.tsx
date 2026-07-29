@@ -293,7 +293,7 @@ export const AdminDelegateDetailsView = ({
               <>
                 {/* Backdrop to prevent the menu from melting into the background */}
                 <div 
-                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35 backdrop-blur-[2px]" 
+                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35" 
                   onClick={() => setShowMenu(false)}
                 />
                 
@@ -623,7 +623,7 @@ export const AdminDelegateDetailsView = ({
 
       {/* Custom Confirmation Dialog */}
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
           <div 
             className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}

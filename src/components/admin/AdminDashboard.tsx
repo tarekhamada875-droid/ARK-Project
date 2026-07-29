@@ -633,7 +633,7 @@ export const AdminDashboard = memo(({
               <>
                 <div 
                   onClick={() => setShowMenu(false)}
-                  className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm z-50 pointer-events-auto"
+                  className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 z-50 pointer-events-auto"
                 />
                 
                 <div 
@@ -2438,7 +2438,7 @@ export const AdminDashboard = memo(({
 
       {/* Plans Management Modal */}
       {showPlansModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPlansModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80" onClick={() => setShowPlansModal(false)}>
           <div 
             className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 transition-colors"
             onClick={e => e.stopPropagation()}
@@ -2554,7 +2554,7 @@ export const AdminDashboard = memo(({
       )}
 
       {showOverview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-start sm:justify-center overflow-y-auto bg-slate-900/60 dark:bg-slate-950/80 p-4 backdrop-blur-sm" onClick={() => setShowOverview(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-start sm:justify-center overflow-y-auto bg-slate-900/60 dark:bg-slate-950/80 p-4" onClick={() => setShowOverview(false)}>
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl relative z-10 my-auto overflow-hidden border border-slate-100 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
             <div className="p-8 border-b-2 border-slate-50 dark:border-slate-800 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 z-20 transition-colors">
               <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-3">
@@ -2751,7 +2751,7 @@ export const AdminDashboard = memo(({
       )}
       {/* Custom Confirmation Dialog */}
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80">
           <div 
             className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800"
             onClick={e => e.stopPropagation()}

@@ -80,7 +80,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div 
         onClick={onCancel}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
       />
       <div 
         className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-8 border border-slate-150 dark:border-slate-800 shadow-xl"

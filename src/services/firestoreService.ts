@@ -617,13 +617,20 @@ export const firestoreService = {
 
         // 2. Refund balance and remove lock if active
         const isSameDay = garageDoc.data()?.lastRefundDate === todayYMD;
+        const vehicleData = vehicleDoc.data();
         const updates: any = {
-          balance: increment(refundAmount),
           isLocked: false,
           dailyRefundCount: isSameDay ? increment(1) : 1,
-          lastRefundDate: todayYMD,
-          carsInside: increment(-1)
+          lastRefundDate: todayYMD
         };
+
+        if (refundAmount > 0) {
+          updates.balance = increment(refundAmount);
+        }
+
+        if (vehicleData?.status === 'inside') {
+          updates.carsInside = increment(-1);
+        }
 
         transaction.update(garageRef, updates);
         return true;
@@ -911,12 +918,17 @@ export const firestoreService = {
         }
         
         const garageData = garageDoc.data() as Garage;
-        const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
-        const requiredDeduction = 5 * commissionVal;
-        const currentBalance = garageData.balance || 0;
+        const isSubscriptionModel = garageData.billingModel === 'subscription';
         
-        if (currentBalance < requiredDeduction) {
-          throw new Error('INSUFFICIENT_BALANCE');
+        let requiredDeduction = 0;
+        if (!isSubscriptionModel) {
+          const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
+          requiredDeduction = 5 * commissionVal;
+          const currentBalance = garageData.balance || 0;
+          
+          if (currentBalance < requiredDeduction) {
+            throw new Error('INSUFFICIENT_BALANCE');
+          }
         }
 
         const subscribersCol = collection(db, `garages/${garageId}/subscribers`);
@@ -928,9 +940,11 @@ export const firestoreService = {
           createdAt: serverTimestamp()
         });
 
-        transaction.update(garageRef, {
-          balance: increment(-requiredDeduction)
-        });
+        if (requiredDeduction > 0) {
+          transaction.update(garageRef, {
+            balance: increment(-requiredDeduction)
+          });
+        }
 
         return subscriberRef.id;
       }));
@@ -951,12 +965,17 @@ export const firestoreService = {
         }
         
         const garageData = garageDoc.data() as Garage;
-        const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
-        const requiredDeduction = costUnits * commissionVal;
-        const currentBalance = garageData.balance || 0;
+        const isSubscriptionModel = garageData.billingModel === 'subscription';
         
-        if (currentBalance < requiredDeduction) {
-          throw new Error('INSUFFICIENT_BALANCE');
+        let requiredDeduction = 0;
+        if (!isSubscriptionModel) {
+          const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
+          requiredDeduction = costUnits * commissionVal;
+          const currentBalance = garageData.balance || 0;
+          
+          if (currentBalance < requiredDeduction) {
+            throw new Error('INSUFFICIENT_BALANCE');
+          }
         }
 
         const subscriberRef = doc(db, `garages/${garageId}/subscribers`, subscriberId);
@@ -966,9 +985,11 @@ export const firestoreService = {
           endDate: newDates.endDate
         });
 
-        transaction.update(garageRef, {
-          balance: increment(-requiredDeduction)
-        });
+        if (requiredDeduction > 0) {
+          transaction.update(garageRef, {
+            balance: increment(-requiredDeduction)
+          });
+        }
 
         return true;
       }));
@@ -1101,6 +1122,7 @@ export const firestoreService = {
         } else {
           updateData.balance = increment(request.amount);
           updateData.totalRechargedCars = increment(request.carsCount);
+          updateData.billingModel = 'commission';
         }
 
         // 1. Update Garage

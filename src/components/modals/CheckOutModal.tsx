@@ -140,7 +140,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 1 }}
         onClick={() => !isLoading && onCancel()}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
         style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
         transition={{ duration: 0 }}
       />

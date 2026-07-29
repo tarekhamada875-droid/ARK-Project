@@ -68,7 +68,7 @@ export const LandscapeMobileView: React.FC<LandscapeMobileViewProps> = ({ garage
 
   // Default Fallback when no active garage is logged in (e.g. general login screens)
   return (
-    <div className="fixed inset-0 bg-slate-900/95 dark:bg-slate-950/98 backdrop-blur-md z-[20000] flex flex-col items-center justify-center p-6 text-center select-none" dir="rtl">
+    <div className="fixed inset-0 bg-slate-900/95 dark:bg-slate-950/98 z-[20000] flex flex-col items-center justify-center p-6 text-center select-none" dir="rtl">
       <style>{`
         @keyframes phone-rotate-hint {
           0% { transform: rotate(90deg); }

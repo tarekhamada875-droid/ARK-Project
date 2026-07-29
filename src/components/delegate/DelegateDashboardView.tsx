@@ -186,7 +186,7 @@ export const DelegateDashboardView = memo(({
               <>
                 {/* Backdrop to prevent the menu from melting into the background */}
                 <div 
-                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35 backdrop-blur-[2px]" 
+                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35" 
                   onClick={() => setShowMenu(false)}
                 />
                 
@@ -544,7 +544,7 @@ export const DelegateDashboardView = memo(({
 
       {/* Add Garage Modal */}
       {showAddGarage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm overflow-y-auto" onClick={() => setShowAddGarage(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 overflow-y-auto" onClick={() => setShowAddGarage(false)}>
           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl p-8 relative my-auto border border-slate-200 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-4">
@@ -699,7 +699,7 @@ export const DelegateDashboardView = memo(({
       {/* Recharge Modal */}
       {selectedGarage && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80"
           onClick={() => !isProcessing && setSelectedGarage(null)}
         >
           <div 

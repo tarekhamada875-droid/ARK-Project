@@ -419,10 +419,10 @@ export default function App() {
         {toast && (
           <div 
             onClick={() => setToast(null)}
-            className="fixed inset-0 z-[250] bg-slate-950/20 dark:bg-black/40 backdrop-blur-[3px] flex items-center justify-center p-4 animate-overlay-30fps cursor-pointer"
+            className="fixed inset-0 z-[250] bg-slate-950/60 dark:bg-black/75 flex items-center justify-center p-4 animate-overlay-30fps cursor-pointer"
           >
             <div 
-              className="w-full max-w-sm bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-[28px] p-6 shadow-2xl flex flex-col items-center text-center animate-popup-30fps animate-step select-none"
+              className="w-full max-w-sm bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-[28px] p-6 shadow-2xl flex flex-col items-center text-center animate-popup-30fps select-none"
             >
               <div 
                 className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 border-2 ${
@@ -531,7 +531,7 @@ export default function App() {
         )}
 
         {isWaitingForApproval && (
-          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-sm z-[20002] flex items-center justify-center p-6 text-center" dir="rtl">
+          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 z-[20002] flex items-center justify-center p-6 text-center" dir="rtl">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 max-w-sm w-full flex flex-col items-center gap-6 border-4 border-white/10 dark:border-slate-800 shadow-2xl transition-all">
               <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-2xl flex items-center justify-center animate-pulse">
                 <RefreshCw className="w-8 h-8 animate-spin" />
@@ -574,7 +574,7 @@ export default function App() {
         )}
 
         {pendingApprovalRequest && (
-          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-sm z-[20003] flex items-center justify-center p-6 text-center" dir="rtl">
+          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 z-[20003] flex items-center justify-center p-6 text-center" dir="rtl">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 max-w-sm w-full flex flex-col items-center gap-6 border border-slate-100 dark:border-slate-800 shadow-2xl transition-all relative overflow-hidden pt-10">
               <div className="space-y-2">
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-sans">تنبيه دخول جديد! ⚠️</h2>

@@ -44,7 +44,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div 
         onClick={() => !isLoading && onCancel()}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
         style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
       />
       <div 

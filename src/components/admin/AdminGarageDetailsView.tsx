@@ -342,7 +342,7 @@ export const AdminGarageDetailsView = memo(({
               <>
                 {/* Backdrop to prevent the menu from melting into the background */}
                 <div 
-                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35 backdrop-blur-[2px]" 
+                  className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35" 
                   onClick={() => setShowMenu(false)}
                 />
                 
@@ -1018,7 +1018,7 @@ export const AdminGarageDetailsView = memo(({
  
       {/* Add Staff Modal */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm transition-all" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 transition-all" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
             <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-colors">
                 <div className="p-6">
                     <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{t('إضافة موظف جديد')}</h3>
@@ -1094,7 +1094,7 @@ export const AdminGarageDetailsView = memo(({
  
       {/* Package Confirmation Overlay */}
       {pendingPackage && (
-        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
           <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-sm border-2 border-amber-400 animate-in fade-in slide-in-from-bottom-4 transition-all duration-300">
             <div className="text-center mb-6">
               <div className="w-12 h-12 bg-amber-50 dark:bg-amber-400/10 rounded-full flex items-center justify-center mx-auto mb-3 transition-colors">
@@ -1147,7 +1147,7 @@ export const AdminGarageDetailsView = memo(({
 
       {/* Switch Billing Model Confirmation Modal */}
       {showSwitchBillingConfirm && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 max-w-md w-full border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-5">
             <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto text-amber-500 border border-amber-500/20">
               <Zap className="w-7 h-7" />
@@ -1192,7 +1192,7 @@ export const AdminGarageDetailsView = memo(({
  
       {/* Staff Delete Confirmation Modal */}
       {staffToDelete && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
             <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-sm:max-w-[calc(100vw-32px)] max-w-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-colors">
                 <div className="p-6 text-center">
                     <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-colors">

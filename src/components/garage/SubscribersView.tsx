@@ -34,9 +34,10 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
     return () => unsubscribe();
   }, []);
 
+  const isSubscriptionModel = garage.billingModel === 'subscription';
   const currentBalance = garage.balance || 0;
   const commission = garage.commissionPerVehicle || 1;
-  const availableVehicles = Math.max(0, Math.floor(currentBalance / commission));
+  const availableVehicles = isSubscriptionModel ? 999999 : Math.max(0, Math.floor(currentBalance / commission));
 
   const [balanceTransition, setBalanceTransition] = useState<'increase' | 'decrease' | null>(null);
   const prevVehiclesRef = React.useRef(availableVehicles);
@@ -248,10 +249,12 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
   const handleConfirmRenew = async (type: 'week' | 'two_weeks' | 'month', costUnits: number) => {
     if (!activeSubscriberForRenew) return;
     
-    const requiredDeduction = costUnits * commission;
-    if (currentBalance < requiredDeduction) {
-      showToast(`عفواً، الرصيد لا يكفي للعملية. مطلوب ${costUnits} وحدات.`, 'error');
-      return;
+    if (!isSubscriptionModel) {
+      const requiredDeduction = costUnits * commission;
+      if (currentBalance < requiredDeduction) {
+        showToast(`عفواً، الرصيد لا يكفي للعملية. مطلوب ${costUnits} وحدات.`, 'error');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -278,7 +281,7 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
       await firestoreService.renewSubscriber(garage.id, activeSubscriberForRenew.id, costUnits, newDates);
       
       const label = type === 'week' ? 'أسبوع' : type === 'two_weeks' ? 'أسبوعين' : 'شهر واحد';
-      showToast(`تم تجديد الاشتراك بنجاح لمدة ${label} وخصم ${costUnits} وحدات`, 'success');
+      showToast(isSubscriptionModel ? `تم تجديد الاشتراك بنجاح لمدة ${label}` : `تم تجديد الاشتراك بنجاح لمدة ${label} وخصم ${costUnits} وحدات`, 'success');
       setShowRenewModal(false);
       setActiveSubscriberForRenew(null);
     } catch (err: any) {
@@ -296,7 +299,7 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
       return;
     }
 
-    if (!editingSubscriber) {
+    if (!editingSubscriber && !isSubscriptionModel) {
       if (availableVehicles < 5) {
         showToast('عفواً، لا يوجد رصيد كافٍ للعملية (الحد الأدنى 5 وحدات لإضافة مشترك)', 'error');
         return;
@@ -324,7 +327,7 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
       } else {
         try {
           await firestoreService.addSubscriber(garage.id, subscriberData);
-          showToast('تمت إضافة المشترك بنجاح وخصم 5 وحدات من رصيدك', 'success');
+          showToast(isSubscriptionModel ? 'تمت إضافة المشترك بنجاح' : 'تمت إضافة المشترك بنجاح وخصم 5 وحدات من رصيدك', 'success');
           clearDraft();
         } catch (error: any) {
           if (error?.message?.includes('INSUFFICIENT_BALANCE')) {
@@ -757,7 +760,7 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
 
       {/* Delete Subscriber Confirmation Modal */}
       {subscriberToDelete && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80">
           <div className="bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -788,7 +791,7 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
 
       {/* Renewal Options Modal */}
       {showRenewModal && activeSubscriberForRenew && (
-        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 animate-fadeIn">
           <div className="absolute inset-0" onClick={() => { setShowRenewModal(false); setActiveSubscriberForRenew(null); }} />
           <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl animate-slideUp" dir="rtl">
             

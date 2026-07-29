@@ -353,7 +353,7 @@ export const GarageDashboardView = memo(({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMenu(false)}
-              className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm z-[150] pointer-events-auto"
+              className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 z-[150] pointer-events-auto"
               style={{ willChange: 'opacity', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
             />
             
@@ -802,7 +802,7 @@ export const GarageDashboardView = memo(({
       {/* Recharge Notification Popup */}
       {showRechargePopup && latestRechargeInfo && (
         <div
-          className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-none"
+          className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 z-[110] flex items-center justify-center p-4 animate-none"
           onClick={handleCloseRechargePopup}
         >
           <div
