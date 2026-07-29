@@ -1,53 +1,71 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
+    <!-- Background Gradient -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#121316" />
-      <stop offset="100%" stop-color="#000000" />
+      <stop offset="0%" stop-color="#14151a" />
+      <stop offset="50%" stop-color="#0c0d10" />
+      <stop offset="100%" stop-color="#050507" />
     </linearGradient>
-    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399" />
-      <stop offset="100%" stop-color="#059669" />
+
+    <!-- Red Gradient for Car Accent Lines -->
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="50%" stop-color="#e11d48" />
+      <stop offset="100%" stop-color="#be123c" />
     </linearGradient>
-    <linearGradient id="carGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+
+    <!-- White/Silver Gradient for Body Swooshes -->
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#ffffff" />
       <stop offset="100%" stop-color="#cbd5e1" />
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="10" result="blur" />
+
+    <!-- Red Glow Filter -->
+    <filter id="redGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
-  <!-- Dark elegant background with rounded squircle -->
+  <!-- Dark Squircle Icon Container -->
   <rect width="512" height="512" fill="url(#bgGrad)" rx="112" />
-  
-  <!-- Subtle inner border highlight -->
-  <rect x="2" y="2" width="508" height="508" fill="none" stroke="#27272a" stroke-width="4" rx="110" />
+  <rect x="2" y="2" width="508" height="508" fill="none" stroke="#27272a" stroke-width="4" rx="110" opacity="0.8" />
 
-  <!-- Outer Garage/Gate Shield Arch -->
-  <path d="M 128 350 L 128 200 C 128 130 384 130 384 200 L 384 350" fill="none" stroke="url(#emeraldGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
+  <!-- Background Ambient Glow -->
+  <circle cx="256" cy="256" r="160" fill="#e11d48" opacity="0.08" filter="blur(40px)" />
 
-  <!-- Sleek Modern Car Silhouette (Front View) -->
-  <!-- Car Roof & Windshield -->
-  <path d="M 192 230 C 205 190 307 190 320 230 Z" fill="url(#carGrad)" opacity="0.9" />
-  
-  <!-- Car Body Main Structure -->
-  <path d="M 152 250 C 152 235 170 230 190 230 L 322 230 C 342 230 360 235 360 250 L 368 290 C 370 305 360 320 344 320 L 168 320 C 152 320 142 305 144 290 Z" fill="url(#carGrad)" />
-  
-  <!-- LED Headlights (Left & Right) -->
-  <polygon points="168,262 210,265 204,275 168,272" fill="#34d399" />
-  <polygon points="344,262 302,265 308,275 344,272" fill="#34d399" />
+  <!-- Car Silhouette Group (Centered & Scaled) -->
+  <g transform="translate(18, 32)">
+    
+    <!-- 1. Upper Roofline & Rear Spoiler (RED) -->
+    <!-- Front hood to roof crest -->
+    <path d="M 152 232 C 172 212 210 182 278 178 C 285 178 286 189 278 190 C 218 194 182 222 160 240 Z" fill="url(#redGrad)" filter="url(#redGlow)" />
+    
+    <!-- Roof top through rear glass to spoiler wing -->
+    <path d="M 288 178 C 340 182 388 200 405 238 C 418 220 435 198 448 192 L 434 206 C 418 218 400 236 388 256 C 378 226 338 192 288 188 Z" fill="url(#redGrad)" filter="url(#redGlow)" />
 
-  <!-- Front Grille & Air Intake -->
-  <rect x="220" y="280" width="72" height="22" rx="6" fill="#000000" stroke="#34d399" stroke-width="3" />
-  
-  <!-- Center Accent Bar (Garage Barrier Accent) -->
-  <rect x="232" y="288" width="48" height="6" rx="3" fill="url(#emeraldGrad)" />
+    <!-- 2. Front Hood & Headlight Sweep (SILVER/WHITE) -->
+    <path d="M 72 290 C 70 272 82 262 108 252 C 128 245 152 238 158 238 C 158 244 140 252 118 260 C 95 268 85 278 82 290 Z" fill="url(#silverGrad)" />
+    <path d="M 70 292 C 85 288 115 268 158 258 C 158 265 125 275 88 296 Z" fill="url(#silverGrad)" />
 
-  <!-- Wheels (Front Left & Right Tires Visible) -->
-  <rect x="150" y="318" width="36" height="28" rx="8" fill="#1e293b" stroke="#334155" stroke-width="3" />
-  <rect x="326" y="318" width="36" height="28" rx="8" fill="#1e293b" stroke="#334155" stroke-width="3" />
+    <!-- 3. Side Beltline & B-Pillar Window Frame (SILVER/WHITE) -->
+    <!-- Character Beltline -->
+    <path d="M 166 264 C 200 254 260 244 316 242 L 312 250 C 260 252 200 262 168 270 Z" fill="url(#silverGrad)" />
+    <!-- B-Pillar vertical stroke -->
+    <path d="M 276 194 L 270 246 L 274 246 L 280 194 Z" fill="url(#silverGrad)" opacity="0.9" />
 
-  <!-- Ground / Entry Glow Line -->
-  <rect x="136" y="376" width="240" height="10" rx="5" fill="url(#emeraldGrad)" />
+    <!-- 4. Lower Body Rocker Panel Sweep (SILVER/WHITE) -->
+    <path d="M 206 302 C 248 276 295 262 316 260 C 316 268 285 282 242 306 Z" fill="url(#silverGrad)" />
+    <!-- Rear lower diffuser notch -->
+    <path d="M 320 286 C 330 268 348 262 355 262 C 352 272 342 285 328 300 Z" fill="url(#silverGrad)" />
+
+    <!-- 5. Front Wheel Arch (RED) -->
+    <path d="M 132 312 C 132 280 152 268 188 268 C 196 268 196 278 188 278 C 160 278 144 288 144 312 Z" fill="url(#redGrad)" filter="url(#redGlow)" />
+    <path d="M 132 312 C 136 276 160 268 188 268 C 182 278 152 288 144 312 Z" fill="url(#redGrad)" />
+
+    <!-- 6. Rear Wheel Arch (RED) -->
+    <path d="M 328 312 C 328 276 352 262 390 262 C 398 262 398 272 390 272 C 362 272 342 284 342 312 Z" fill="url(#redGrad)" filter="url(#redGlow)" />
+    <path d="M 328 312 C 332 272 360 262 390 262 C 382 272 348 282 342 312 Z" fill="url(#redGrad)" />
+
+  </g>
 </svg>
