@@ -1,68 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Background Gradient -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#181a20" />
-      <stop offset="50%" stop-color="#0f1015" />
-      <stop offset="100%" stop-color="#07080a" />
-    </linearGradient>
-
-    <!-- Vivid Red Gradient for Roof & Arches -->
-    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ff2a55" />
-      <stop offset="50%" stop-color="#e11d48" />
-      <stop offset="100%" stop-color="#be123c" />
-    </linearGradient>
-
-    <!-- Pure Crisp White/Silver for Body Accents -->
-    <linearGradient id="whiteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#e2e8f0" />
-    </linearGradient>
-
-    <!-- Soft Glow Filter for Red Elements -->
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+    <!-- Squircle clip path for smooth app icon rounded corners -->
+    <clipPath id="iconClip">
+      <rect width="512" height="512" rx="112" ry="112" />
+    </clipPath>
   </defs>
 
-  <!-- Dark Premium Icon Background -->
-  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
-  <rect x="3" y="3" width="506" height="506" rx="109" fill="none" stroke="#2e323e" stroke-width="4" opacity="0.6" />
-
-  <!-- Car Silhouette Artwork (Proportionally Scaled & Centered) -->
-  <g transform="translate(32, 85)">
-    <!-- 1. RED ROOF & SPOILER (Bold & Vibrant) -->
-    <!-- Roof Arch Curve -->
-    <path d="M 145 185 C 185 130 250 115 292 115 C 342 115 390 135 412 170 C 382 142 328 132 288 132 C 242 132 185 150 145 185 Z" fill="url(#redGrad)" filter="url(#glow)" />
+  <!-- Clipped Container -->
+  <g clip-path="url(#iconClip)">
+    <!-- Left Half: Deep Black -->
+    <rect x="0" y="0" width="256" height="512" fill="#0a0a0c" />
     
-    <!-- Rear Wing / Spoiler -->
-    <path d="M 390 162 C 418 140 445 120 458 112 C 452 122 430 145 400 172 Z" fill="url(#redGrad)" filter="url(#glow)" />
-    <path d="M 445 112 L 465 125 L 428 168 L 418 158 Z" fill="url(#redGrad)" filter="url(#glow)" />
-
-    <!-- 2. RED WHEEL ARCHES -->
-    <!-- Front Wheel Arch -->
-    <path d="M 115 260 C 115 220 142 200 182 200 C 184 200 182 214 172 214 C 148 214 132 230 132 260 Z" fill="url(#redGrad)" filter="url(#glow)" />
+    <!-- Right Half: Vibrant Red -->
+    <rect x="256" y="0" width="256" height="512" fill="#ce1126" />
     
-    <!-- Rear Wheel Arch -->
-    <path d="M 322 260 C 322 220 348 200 388 200 C 390 200 388 214 378 214 C 354 214 338 230 338 260 Z" fill="url(#redGrad)" filter="url(#glow)" />
-
-    <!-- 3. CRISP WHITE BODY ACCENTS (High Contrast on Dark Background) -->
-    <!-- Front Bumper & Hood Swoosh -->
-    <path d="M 50 238 C 55 212 80 200 148 178 L 142 190 C 88 210 66 218 62 238 Z" fill="url(#whiteGrad)" />
-    <path d="M 52 240 C 78 234 108 212 150 202 L 145 212 C 102 222 72 242 52 240 Z" fill="url(#whiteGrad)" />
-
-    <!-- B-Pillar Glass Divider -->
-    <path d="M 285 134 L 278 202 L 285 202 L 292 134 Z" fill="url(#whiteGrad)" />
-
-    <!-- Middle Character / Belt Line -->
-    <path d="M 155 206 C 220 192 290 190 332 188 L 328 198 C 285 200 215 202 152 216 Z" fill="url(#whiteGrad)" />
-
-    <!-- Lower Rocker Panel Swoosh -->
-    <path d="M 198 252 C 248 218 298 210 320 208 C 318 218 288 228 242 254 Z" fill="url(#whiteGrad)" />
-
-    <!-- Rear Bumper / Diffuser Accent -->
-    <path d="M 310 238 C 348 218 402 218 412 218 C 405 228 355 228 306 248 Z" fill="url(#whiteGrad)" />
+    <!-- Center Thin White Divider Line -->
+    <line x1="256" y1="0" x2="256" y2="512" stroke="#ffffff" stroke-width="6" />
   </g>
+
+  <!-- Subtle Rim Highlight -->
+  <rect x="2" y="2" width="508" height="508" fill="none" stroke="#27272a" stroke-width="4" rx="110" opacity="0.4" />
 </svg>
