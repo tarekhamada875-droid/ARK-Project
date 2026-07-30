@@ -15,6 +15,7 @@ import { useTheme } from './utils/ThemeContext';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
+import { SplashScreen } from './components/layout/SplashScreen';
 
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { GeneralManagerDashboard } from './components/general_manager/GeneralManagerDashboard';
@@ -416,6 +417,7 @@ export default function App() {
   return (
     <div className="w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors">
       <ErrorBoundary>
+        <SplashScreen />
         {toast && (
           <div 
             onClick={() => setToast(null)}
