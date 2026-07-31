@@ -60,7 +60,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         <rect x="256" y="256" width="256" height="256" fill="#ce1126" />
 
         {/* Vertical Center Divider (White) */}
-        <line x1="256" y1="0" x2="256" y2="512" stroke="#ffffff" strokeWidth="6" />
+        <line x1="256" y1="6" x2="256" y2="506" stroke="#ffffff" strokeWidth="6" />
 
         {/* Horizontal Center Divider (White) */}
         <line x1="0" y1="256" x2="512" y2="256" stroke="#ffffff" strokeWidth="6" />
@@ -87,7 +87,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       <div className="fixed inset-0 z-[999999] pointer-events-none select-none overflow-hidden bg-black">
         {/* Left Door Panel */}
         <motion.div
-          className="absolute top-0 bottom-0 left-0 w-1/2 bg-black overflow-hidden"
+          className="absolute top-0 bottom-0 left-0 w-[calc(50%+1px)] bg-black overflow-hidden"
           initial={{ x: 0 }}
           animate={{ x: stage === 'opening' ? '-100%' : 0 }}
           transition={{
