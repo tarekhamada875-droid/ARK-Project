@@ -43,37 +43,39 @@ class SoundManager {
   }
 
   play(name: 'checkIn' | 'checkOut' | 'error' | 'setting') {
-    try {
-      this.initContext();
-      if (!this.context) return;
-      
-      const now = this.context.currentTime;
+    setTimeout(() => {
+      try {
+        this.initContext();
+        if (!this.context) return;
+        
+        const now = this.context.currentTime;
 
-      if (name === 'setting') {
-        // Soft gentle chime
-        this.createOscillator(523.25, 'sine', now, 0.15, 0.3); // C5
-        this.createOscillator(659.25, 'sine', now + 0.08, 0.25, 0.3); // E5
-        return;
-      }
-      
-      if (name === 'checkIn' || name === 'checkOut') {
-        // The one you liked (Triple High Alert) - Sharp & Clear for street
-        // Using precise scheduling to ensure zero lag
-        this.createOscillator(880, 'square', now, 0.08, 0.7);
-        this.createOscillator(880, 'square', now + 0.1, 0.08, 0.7);
-        this.createOscillator(880, 'square', now + 0.2, 0.12, 0.7);
-        return;
-      }
+        if (name === 'setting') {
+          // Soft gentle chime
+          this.createOscillator(523.25, 'sine', now, 0.15, 0.3); // C5
+          this.createOscillator(659.25, 'sine', now + 0.08, 0.25, 0.3); // E5
+          return;
+        }
+        
+        if (name === 'checkIn' || name === 'checkOut') {
+          // The one you liked (Triple High Alert) - Sharp & Clear for street
+          // Using precise scheduling to ensure zero lag
+          this.createOscillator(880, 'square', now, 0.08, 0.7);
+          this.createOscillator(880, 'square', now + 0.1, 0.08, 0.7);
+          this.createOscillator(880, 'square', now + 0.2, 0.12, 0.7);
+          return;
+        }
 
-      if (name === 'error') {
-        this.createOscillator(220, 'sawtooth', now, 0.1, 0.6);
-        this.createOscillator(233.08, 'sawtooth', now, 0.1, 0.6);
-        this.createOscillator(110, 'sawtooth', now + 0.1, 0.3, 0.7);
-        return;
+        if (name === 'error') {
+          this.createOscillator(220, 'sawtooth', now, 0.1, 0.6);
+          this.createOscillator(233.08, 'sawtooth', now, 0.1, 0.6);
+          this.createOscillator(110, 'sawtooth', now + 0.1, 0.3, 0.7);
+          return;
+        }
+      } catch (e) {
+        console.warn('Sound synthesis failed', e);
       }
-    } catch (e) {
-      console.warn('Sound synthesis failed', e);
-    }
+    }, 0);
   }
 
   resume() {

@@ -16,7 +16,7 @@
 }
 
 /* Configure Dark Mode for Tailwind v4 to work with the .dark class */
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (.dark &);
 
 /* Disable all hover states across the app completely as per user request to make taps and clicks instant like a switch */
 @custom-variant hover (&:where(.disabled-hover-state-active));

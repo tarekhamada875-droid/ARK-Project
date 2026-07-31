@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { safeDate, resolveShimmerColor } from './utils';
 import { useTheme } from './utils/ThemeContext';
+import { useLocalStorageState } from './hooks/useLocalStorage';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
@@ -133,17 +134,11 @@ export default function App() {
   } = useGarageApp();
 
   const { theme } = useTheme();
+  const [adminColor] = useLocalStorageState<string>('app_admin_color', '#10b981');
 
-  const activeColor = (() => {
-    if (view && (view.startsWith('admin_') || view === 'admin_dashboard')) {
-      try {
-        return localStorage.getItem('app_admin_color') || '#10b981';
-      } catch (e) {
-        return '#10b981';
-      }
-    }
-    return garage?.shimmerColor || '#10b981';
-  })();
+  const activeColor = (view && (view.startsWith('admin_') || view === 'admin_dashboard'))
+    ? adminColor
+    : (garage?.shimmerColor || '#10b981');
 
   const resolvedColor = resolveShimmerColor(activeColor, theme);
 

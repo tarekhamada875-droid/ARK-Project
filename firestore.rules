@@ -173,6 +173,7 @@ service cloud.firestore {
              (!('lastRefundDate' in data) || data.lastRefundDate is string) &&
              (!('lastGiftMonth' in data) || data.lastGiftMonth is string) &&
              (!('currentSessionId' in data) || data.currentSessionId == null || (data.currentSessionId is string && data.currentSessionId.size() <= 128)) &&
+             (!('shimmerColor' in data) || data.shimmerColor is string) &&
              (!('lastActive' in data) || data.lastActive == null || data.lastActive is timestamp);
     }
 

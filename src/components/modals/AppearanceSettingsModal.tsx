@@ -5,7 +5,7 @@ import { useTheme } from '../../utils/ThemeContext';
 import { firestoreService } from '../../services/firestoreService';
 import { soundManager } from '../../utils/sounds';
 import { Garage, Staff } from '../../types';
-import { isLightColor } from '../../utils';
+import { isLightColor, resolveShimmerColor } from '../../utils';
 
 interface AppearanceSettingsModalProps {
   garage?: Garage | null;
@@ -44,28 +44,21 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
   const defaultColor = adminColor || (garage?.shimmerColor || '#10b981');
   const activeColor = pendingColor !== null ? pendingColor : defaultColor;
   
-  const resolvedActiveColor = activeColor === '#ec4899' 
-    ? (theme === 'dark' ? '#faf9f6' : '#64748b') 
-    : activeColor;
-
-  const resolvedPendingColor = pendingColor !== null
-    ? (pendingColor === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : pendingColor)
-    : null;
+  const resolvedActiveColor = resolveShimmerColor(activeColor, theme);
+  const resolvedPendingColor = pendingColor !== null ? resolveShimmerColor(pendingColor, theme) : null;
 
   const handleUpdateShimmerColor = async (colorVal: string) => {
     setIsSaving(true);
     try {
       if (onUpdateAdminColor) {
         onUpdateAdminColor(colorVal);
-        soundManager.play('setting');
-        showToast('تم تحديث لون الإدارة بنجاح', 'success');
-        setPendingColor(null);
-      } else if (garage) {
-        await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
-        soundManager.play('setting');
-        showToast('تم تحديث لون إضاءة الكارت بنجاح', 'success');
-        setPendingColor(null);
       }
+      if (garage) {
+        await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
+      }
+      soundManager.play('setting');
+      showToast('تم تحديث لون الإضاءة بنجاح', 'success');
+      setPendingColor(null);
     } catch (err) {
       console.error('Failed to update shimmer color:', err);
       showToast('حدث خطأ أثناء تحديث اللون', 'error');
@@ -215,7 +208,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
                 <div className="grid grid-cols-4 gap-3 pt-2">
                   {SHIMMER_COLORS.map((item) => {
                     const isSelected = activeColor === item.value;
-                    const itemColorResolved = item.value === '#ec4899' ? (theme === 'dark' ? '#faf9f6' : '#64748b') : item.value;
+                    const itemColorResolved = resolveShimmerColor(item.value, theme);
                     return (
                       <button
                         key={item.value}
