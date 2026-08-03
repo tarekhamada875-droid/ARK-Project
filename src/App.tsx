@@ -372,6 +372,7 @@ export default function App() {
           showSubscribers={showSubscribers}
           setShowSubscribers={setShowSubscribers}
           walletNumber={walletNumber}
+          subscriptionPrices={subscriptionPrices}
         />
       );
     }

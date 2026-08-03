@@ -59,6 +59,7 @@ interface GarageDashboardViewProps {
   showSubscribers: boolean;
   setShowSubscribers: (val: boolean) => void;
   walletNumber?: string;
+  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const GarageDashboardView = memo(({
@@ -87,7 +88,8 @@ export const GarageDashboardView = memo(({
   setShowStaffStats,
   showSubscribers,
   setShowSubscribers,
-  walletNumber = "015 - 524 - 113 - 23"
+  walletNumber = "015 - 524 - 113 - 23",
+  subscriptionPrices
 }: GarageDashboardViewProps) => {
   const [showMenu, setShowMenu] = React.useState(false);
   const { theme } = useTheme();
@@ -764,6 +766,7 @@ export const GarageDashboardView = memo(({
           walletNumber={walletNumber}
           onToggleMenu={() => setShowMenu(!showMenu)}
           billingModel={garage.billingModel}
+          subscriptionPrices={subscriptionPrices}
         />
       )}
 
