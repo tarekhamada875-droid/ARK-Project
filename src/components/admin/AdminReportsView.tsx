@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart3, 
   DollarSign, 
@@ -15,6 +15,7 @@ import {
 import { Garage, Delegate } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
+import { PlateLookupModal } from '../modals/PlateLookupModal';
 
 interface AdminReportsViewProps {
   allGarages: Garage[];
@@ -25,11 +26,21 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
 
-  // Decoupled local state to prevent aggressive background real-time updates from consuming resources
+  // Decoupled local state synced with incoming props
   const [localGarages, setLocalGarages] = useState<Garage[]>(() => allGarages);
   const [localDelegates, setLocalDelegates] = useState<Delegate[]>(() => delegates);
+
+  // Keep local state in sync when allGarages or delegates props change
+  useEffect(() => {
+    setLocalGarages(allGarages);
+  }, [allGarages]);
+
+  useEffect(() => {
+    setLocalDelegates(delegates);
+  }, [delegates]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(() => new Date());
+  const [showPlateLookupModal, setShowPlateLookupModal] = useState(false);
 
   // Manual Trigger to update the reporting view
   const handleRefresh = () => {
@@ -185,6 +196,14 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
                   {t('آخر تحديث:')} {formatLastRefreshed(lastRefreshed)}
                 </span>
                 <button
+                  id="btn_open_plate_lookup"
+                  onClick={() => setShowPlateLookupModal(true)}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+                >
+                  <Car className="w-3.5 h-3.5" />
+                  <span>{t('استعلام عن لوحة')}</span>
+                </button>
+                <button
                   id="btn_manual_refresh_reports"
                   onClick={handleRefresh}
                   disabled={isRefreshing}
@@ -295,6 +314,13 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
         </section>
 
       </div>
+
+      {showPlateLookupModal && (
+        <PlateLookupModal
+          allGarages={localGarages}
+          onClose={() => setShowPlateLookupModal(false)}
+        />
+      )}
 
     </div>
   );

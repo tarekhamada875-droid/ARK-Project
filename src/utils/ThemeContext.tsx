@@ -31,15 +31,33 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const root = window.document.documentElement;
+    
+    // Instantly disable CSS transitions during class swap to prevent 200+ elements from animating simultaneously
+    root.classList.add('disable-transitions');
+    
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
-    localStorage.setItem('theme', theme);
+    
+    try {
+      localStorage.setItem('theme', theme);
+    } catch (e) {
+      console.error('Failed to save theme in localStorage', e);
+    }
 
     // Update browser theme-color meta tag for perfect status bar/address bar integration
     const metaThemeColor = window.document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', '#000000');
+      metaThemeColor.setAttribute('content', theme === 'dark' ? '#000000' : '#faf9f6');
     }
+
+    // Remove disable-transitions after browser renders the color update in 1 frame
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        root.classList.remove('disable-transitions');
+      });
+    });
+
+    return () => cancelAnimationFrame(rafId);
   }, [theme]);
 
   const toggleTheme = () => {

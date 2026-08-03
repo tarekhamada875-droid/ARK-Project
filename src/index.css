@@ -78,6 +78,16 @@
   }
 
   /* Theme transitions removed entirely for absolute maximum performance and zero stutter as chosen by user */
+  .disable-transitions,
+  .disable-transitions *,
+  .disable-transitions *::before,
+  .disable-transitions *::after {
+    -webkit-transition: none !important;
+    -moz-transition: none !important;
+    -ms-transition: none !important;
+    -o-transition: none !important;
+    transition: none !important;
+  }
 
   html, body {
     @apply w-full h-full antialiased overflow-hidden;

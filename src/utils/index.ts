@@ -169,18 +169,29 @@ export const formatPlateNumber = (val: string): string => {
 
 export const getDuration = (entryTime: any, referenceNow?: Date): string => {
   const start = entryTime ? safeDate(entryTime) : new Date();
-  const now = referenceNow || new Date();
+  const end = referenceNow ? safeDate(referenceNow) : new Date();
   
-  // If entryTime is in the future or very close to now (pending sync)
-  if (start.getTime() >= now.getTime() - 2000) return 'الآن';
+  // If entryTime is in the future or very close to end (pending sync)
+  if (start.getTime() >= end.getTime() - 2000) return 'الآن';
   
-  const diff = Math.max(0, now.getTime() - start.getTime());
+  const diff = Math.max(0, end.getTime() - start.getTime());
   const totalMinutes = Math.floor(diff / (1000 * 60));
-  const hours = Math.floor(totalMinutes / 60);
+  const totalHours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   
-  if (hours > 0) {
-    return `${hours} ساعة و ${minutes} دقيقة`;
+  if (totalHours >= 24) {
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    let result = `${days} يوم`;
+    if (hours > 0) result += ` و ${hours} ساعة`;
+    if (minutes > 0) result += ` و ${minutes} دقيقة`;
+    return result;
+  }
+
+  if (totalHours > 0) {
+    let result = `${totalHours} ساعة`;
+    if (minutes > 0) result += ` و ${minutes} دقيقة`;
+    return result;
   }
   return `${minutes} دقيقة`;
 };

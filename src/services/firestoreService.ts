@@ -25,10 +25,10 @@ import {
   increment
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon } from '../types';
+import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber } from '../types';
 import { ADMIN_PIN } from '../constants';
 
-export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon };
+export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber };
 
 /**
  * Helper to retry transient Firestore write errors automatically up to maxRetries times.
@@ -1253,6 +1253,43 @@ export const firestoreService = {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/recalculateCarsInside`);
       throw error;
+    }
+  },
+
+  getSubscriberByPlateOnce: async (garageId: string, rawPlate: string): Promise<Subscriber | null> => {
+    try {
+      const q = query(
+        collection(db, `garages/${garageId}/subscribers`),
+        where('plateNumberRaw', '==', rawPlate),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        return { id: docSnap.id, ...docSnap.data() } as Subscriber;
+      }
+      return null;
+    } catch (err) {
+      console.error('Error fetching subscriber by plate:', err);
+      return null;
+    }
+  },
+
+  getSystemLogsByPlateOnce: async (rawPlate: string): Promise<ActivityLog[]> => {
+    try {
+      const q = query(
+        collection(db, 'activity_logs'),
+        where('plateNumber', '==', rawPlate),
+        limit(50)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+      }
+      return [];
+    } catch (err) {
+      console.error('Error fetching activity logs by plate:', err);
+      return [];
     }
   }
 };

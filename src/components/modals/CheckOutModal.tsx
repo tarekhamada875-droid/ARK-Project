@@ -361,22 +361,26 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                     <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-3">
                       <div className="text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-emerald-600 dark:text-emerald-400 font-sans flex flex-col items-center justify-center gap-1 leading-tight">
                         {(() => {
-                          if (selectedVehicle.type === 'overnight') {
-                            const days = Math.floor(diffMs / 86400000);
-                            const hours = Math.floor((diffMs % 86400000) / 3600000);
-                            if (days > 0) {
-                              return (
-                                <>
-                                  <span>{days} يوم</span>
-                                  {hours > 0 && <span className="text-xs sm:text-sm md:text-base text-emerald-600 dark:text-emerald-400 font-bold">{hours} س</span>}
-                                </>
-                              );
-                            }
-                            return <span>{hours > 0 ? `${hours} س` : 'أقل من ساعة'}</span>;
+                          const totalMinutes = Math.floor(diffMs / 60000);
+                          const totalHours = Math.floor(totalMinutes / 60);
+                          const days = Math.floor(totalHours / 24);
+                          const hours = totalHours % 24;
+                          const minutes = totalMinutes % 60;
+
+                          if (days > 0) {
+                            return (
+                              <>
+                                <span>{days} يوم</span>
+                                {(hours > 0 || minutes > 0) && (
+                                  <span className="text-xs sm:text-sm md:text-base text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center gap-1.5">
+                                    {hours > 0 && <span>{hours} س</span>}
+                                    {minutes > 0 && <span>{minutes} د</span>}
+                                  </span>
+                                )}
+                              </>
+                            );
                           }
 
-                          const hours = Math.floor(diffMs / 3600000);
-                          const minutes = Math.floor((diffMs % 3600000) / 60000);
                           if (hours > 0) {
                             return (
                               <>
@@ -385,6 +389,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
                               </>
                             );
                           }
+
                           return <span>{minutes} د</span>;
                         })()}
                       </div>
