@@ -767,6 +767,7 @@ export const GarageDashboardView = memo(({
           onToggleMenu={() => setShowMenu(!showMenu)}
           billingModel={garage.billingModel}
           subscriptionPrices={subscriptionPrices}
+          referralBonusBalance={garage.referralBonusBalance || 0}
         />
       )}
 

@@ -1469,6 +1469,9 @@ export function useGarageApp() {
     const commissionPerVehicle = 1;
     const billingModel = formData.get('billingModel') as 'subscription' | 'commission' || 'commission';
     const subscriptionType = formData.get('subscriptionType') as 'weekly' | 'monthly' || 'weekly';
+    const referredByGarageId = (formData.get('referredByGarageId') as string || '').trim();
+    const referringGarage = referredByGarageId ? allGarages.find(g => g.id === referredByGarageId) : null;
+    const referredByGarageName = referringGarage ? referringGarage.name : null;
 
     let initialBalance = 0;
     let initialCars = 0;
@@ -1534,7 +1537,7 @@ export function useGarageApp() {
       const actualCars = isPending ? 0 : initialCars;
       const actualRevenue = isPending ? 0 : initialRevenue;
 
-      await firestoreService.createGarage({
+      const newGarageDoc = await firestoreService.createGarage({
         name,
         phone,
         pin,
@@ -1552,8 +1555,18 @@ export function useGarageApp() {
         lastBalanceDeduction: serverTimestamp(),
         createdByDelegateId: delegate?.id || null,
         createdByDelegateName: delegate?.name || null,
+        referredByGarageId: referredByGarageId || null,
+        referredByGarageName: referredByGarageName || null,
         status: isPending ? 'pending' : 'approved'
       });
+
+      if (!isPending && newGarageDoc && newGarageDoc.id && (actualBalance > 0 || actualRevenue > 0)) {
+        try {
+          await firestoreService.processReferralRewardForRecharge(newGarageDoc.id);
+        } catch (e) {
+          console.error('Failed to award initial referral reward:', e);
+        }
+      }
 
       if (!isPending && delegate && delegate.id) {
         await firestoreService.updateDelegate(delegate.id, {

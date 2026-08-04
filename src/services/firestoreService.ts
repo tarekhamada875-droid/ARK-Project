@@ -94,7 +94,7 @@ export const firestoreService = {
 
   rechargeGarage: async (garageId: string, amount: number, carsCount: number, revenueAmount: number) => {
     try {
-      return await withRetry(async () => {
+      const res = await withRetry(async () => {
         const batch = writeBatch(db);
         const garageRef = doc(db, 'garages', garageId);
         
@@ -108,9 +108,85 @@ export const firestoreService = {
 
         return await batch.commit();
       });
+
+      // Automatically trigger 6-month referral reward check if eligible
+      try {
+        await firestoreService.processReferralRewardForRecharge(garageId);
+      } catch (err) {
+        console.error('Failed processing referral reward during recharge:', err);
+      }
+
+      return res;
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/recharge`);
       throw error;
+    }
+  },
+
+  processReferralRewardForRecharge: async (garageId: string) => {
+    try {
+      await withRetry(async () => {
+        const garageRef = doc(db, 'garages', garageId);
+        const garageSnap = await getDoc(garageRef);
+        if (!garageSnap.exists()) return;
+        const garageData = garageSnap.data() as Garage;
+
+        // Must have a valid referring garage
+        if (!garageData.referredByGarageId) return;
+
+        // Check if within 6 months (183 days) of creation
+        const createdAt = garageData.createdAt;
+        let createdAtDate = new Date();
+        if (createdAt) {
+          if (typeof createdAt.toDate === 'function') {
+            createdAtDate = createdAt.toDate();
+          } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+            createdAtDate = new Date(createdAt);
+          } else if (createdAt.seconds) {
+            createdAtDate = new Date(createdAt.seconds * 1000);
+          }
+        }
+
+        const diffMs = Date.now() - createdAtDate.getTime();
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        if (diffDays > 183) return; // Expired 6-month window
+        if ((garageData.referralRewardMonthsCount || 0) >= 6) return; // Cap at 6 total monthly payments
+
+        // Check if bonus was already awarded for this month
+        const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+        if (garageData.lastReferralRewardMonth === currentMonth) return;
+
+        // Referrer garage lookup
+        const referrerRef = doc(db, 'garages', garageData.referredByGarageId);
+        const referrerSnap = await getDoc(referrerRef);
+        if (referrerSnap.exists()) {
+          const referrerData = referrerSnap.data() as Garage;
+          await updateDoc(referrerRef, {
+            referralBonusBalance: increment(50)
+          });
+
+          // Log referral bonus transaction for referrer
+          const logRef = doc(collection(db, 'activity_logs'));
+          await setDoc(logRef, {
+            garageId: referrerData.id,
+            garageName: referrerData.name,
+            staffId: null,
+            staffName: 'النظام (مكافأة إحالة تلقائية)',
+            actionType: 'commission_payment',
+            plateNumber: `مكافأة ترشيح جراج (${garageData.name}) - شهر ${currentMonth}`,
+            timestamp: serverTimestamp(),
+            amount: 50
+          });
+        }
+
+        // Mark bonus as awarded for this month
+        await updateDoc(garageRef, {
+          lastReferralRewardMonth: currentMonth,
+          referralRewardMonthsCount: increment(1)
+        });
+      });
+    } catch (error) {
+      console.error('Error in processReferralRewardForRecharge:', error);
     }
   },
 
@@ -1153,7 +1229,15 @@ export const firestoreService = {
           packageId: request.packageId
         });
 
-        return await batch.commit();
+        const res = await batch.commit();
+
+        try {
+          await firestoreService.processReferralRewardForRecharge(request.garageId);
+        } catch (err) {
+          console.error('Failed processing referral reward after recharge approval:', err);
+        }
+
+        return res;
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `recharge_requests/${request.id}/approve`);

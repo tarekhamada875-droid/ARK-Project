@@ -1666,7 +1666,7 @@ export const AdminDashboard = memo(({
               >
                 <span>{t('طلبات الشحن')}</span>
                 {rechargeRequests.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-500 text-white animate-pulse shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-500 text-white shrink-0">
                     {rechargeRequests.length}
                   </span>
                 )}
@@ -1681,7 +1681,7 @@ export const AdminDashboard = memo(({
               >
                 <span>{t('إنشاء الجراجات')}</span>
                 {pendingGarages.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-500 text-white animate-pulse shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-500 text-white shrink-0">
                     {pendingGarages.length}
                   </span>
                 )}
@@ -2729,6 +2729,25 @@ export const AdminDashboard = memo(({
                         </button>
                       </div>
                     </div>
+                  </div>
+
+                  {/* الجراج المُرشِّح (اختياري) */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">
+                      {t('الجراج المُرشِّح / تمت الإحالة بواسطة (اختياري)')}
+                    </label>
+                    <select
+                      name="referredByGarageId"
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 text-center transition-all"
+                      dir="rtl"
+                    >
+                      <option value="">{t('بدون ترشيح / مباشر')}</option>
+                      {allGarages.filter(g => g.status !== 'pending').map(g => (
+                        <option key={g.id} value={g.id}>
+                          {g.name} ({g.phone || t('بدون هاتف')})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <button 

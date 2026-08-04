@@ -22,6 +22,11 @@
         "lastOnlineCheck": { "type": "string", "format": "date-time", "description": "Last time the garage was confirmed online" },
         "monthlyGiftAmount": { "type": "number", "description": "Amount of gift balance added monthly" },
         "lastGiftMonth": { "type": "string", "description": "Last month the gift was awarded (YYYY-MM)" },
+        "referralBonusBalance": { "type": "number", "description": "Total cash bonus balance from referring garages" },
+        "referredByGarageId": { "type": "string", "description": "ID of referring garage" },
+        "referredByGarageName": { "type": "string", "description": "Name of referring garage" },
+        "lastReferralRewardMonth": { "type": "string", "description": "Last month referral bonus was awarded (YYYY-MM)" },
+        "referralRewardMonthsCount": { "type": "number", "description": "Count of months referral bonus was awarded" },
         "activePlates": { "type": "object", "description": "Map of currently active plate numbers to their vehicle IDs" }
       },
       "required": ["name", "phone", "hourlyRate", "overnightRate", "subscriptionExpiry", "subscriptionDays"]

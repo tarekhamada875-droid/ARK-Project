@@ -205,9 +205,62 @@ export const AdminDelegateDetailsView = ({
     }, 0);
   };
 
+  // Monthly calculations logic
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>('current');
+
+  const getCurrentMonthKey = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  };
+
+  const currentMonthKey = getCurrentMonthKey();
+
+  const formatMonthName = (key: string) => {
+    if (key === 'all') return adminLang === 'en' ? 'All Time' : 'جميع الأوقات';
+    if (!key) return '';
+    const [yearStr, monthStr] = key.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10) - 1;
+    const d = new Date(year, month, 1);
+    if (isNaN(d.getTime())) return key;
+    return d.toLocaleDateString(adminLang === 'en' ? 'en-US' : 'ar-EG', { month: 'long', year: 'numeric' });
+  };
+
+  // Unique list of months with recharge activity
+  const availableMonths = React.useMemo(() => {
+    const monthsSet = new Set<string>();
+    monthsSet.add(currentMonthKey);
+    recharges.forEach(log => {
+      const d = safeDate(log.timestamp);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        monthsSet.add(`${y}-${m}`);
+      }
+    });
+    return Array.from(monthsSet).sort().reverse();
+  }, [recharges, currentMonthKey]);
+
+  const activeMonthKey = selectedMonthKey === 'current' ? currentMonthKey : selectedMonthKey;
+
+  // Filtered recharges based on selected month or all time
+  const activeMonthLogs = React.useMemo(() => {
+    if (activeMonthKey === 'all') return recharges;
+    return recharges.filter(log => {
+      const d = safeDate(log.timestamp);
+      if (isNaN(d.getTime())) return false;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return key === activeMonthKey;
+    });
+  }, [recharges, activeMonthKey]);
+
+  const selectedMonthTotal = sumRechargeLogs(activeMonthLogs);
   const allTimeTotal = sumRechargeLogs(recharges);
 
-  const currentCycleTotal = (() => {
+  // Unsettled total since last manual settlement
+  const unsettledCycleTotal = (() => {
     if (!delegate.lastSettledAt) {
       return typeof delegate.totalRechargedAmount === 'number' ? delegate.totalRechargedAmount : historyTotal;
     }
@@ -216,18 +269,19 @@ export const AdminDelegateDetailsView = ({
     return sumRechargeLogs(filteredLogs);
   })();
 
-  const totalRecharged = currentCycleTotal;
+  const totalRecharged = selectedMonthTotal;
   const commissionRateValue = parseFloat(rateInput) || 0;
   const commissionValue = isNaN(totalRecharged * commissionRateValue) ? 0 : (totalRecharged * commissionRateValue) / 100;
+  const allTimeCommission = isNaN(allTimeTotal * commissionRateValue) ? 0 : (allTimeTotal * commissionRateValue) / 100;
 
   const handleSettleAccount = () => {
     setConfirmDialog({
       isOpen: true,
-      title: t('تصفية وتجديد دورة الحساب'),
+      title: t('تصفية الحساب يدويًا'),
       message: adminLang === 'en'
-        ? `Are you sure you want to settle current accounts of delegate "${delegate.name}" and start a new billing cycle? Only current recharges and due commissions will be reset, without deleting older history.`
-        : `هل أنت متأكد من تصفية المبالغ الحالية للمندوب "${delegate.name}" وبدء دورة حسابية جديدة لشهر جديد؟ سيتم تصفير المبالغ والعمولات المستحقة الحالية فقط دون حذف سجل الشحن القديم.`,
-      confirmText: t('تأكيد ودورة جديدة'),
+        ? `Are you sure you want to mark current accounts of delegate "${delegate.name}" as settled? This will record a manual settlement timestamp.`
+        : `هل أنت متأكد من تصفية الحساب الحالي للمندوب "${delegate.name}"؟ سيتم تسجيل تاريخ التسوية اليدوية مع حفظ كافة السجلات التاريخية.`,
+      confirmText: t('تصفية وتسوية الآن'),
       cancelText: t('تراجع'),
       type: 'warning',
       onConfirm: async () => {
@@ -438,16 +492,59 @@ export const AdminDelegateDetailsView = ({
             </div>
           </div>
 
+          {/* Automatic Monthly Filter Header */}
+          <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+              <div>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span>{t('تجميع إحصائيات الشحن والعمولات شهرياً (تلقائي)')}</span>
+                </h3>
+                <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                  {t('يتم احتساب المبيعات والعمولة تلقائياً لكل شهر ميلادي بدون الحاجة لإعادة التعيين')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="text-xs font-bold text-slate-400 shrink-0">{t('الفترة:')}</span>
+              <select
+                value={selectedMonthKey}
+                onChange={(e) => setSelectedMonthKey(e.target.value)}
+                className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-black text-xs px-3 py-2 rounded-xl outline-none focus:border-amber-400 transition-colors cursor-pointer"
+              >
+                <option value="current">
+                  {t('الشهر الحالي')} ({formatMonthName(currentMonthKey)})
+                </option>
+                {availableMonths.filter(m => m !== currentMonthKey).map(m => (
+                  <option key={m} value={m}>
+                    {formatMonthName(m)}
+                  </option>
+                ))}
+                <option value="all">
+                  {t('جميع الأوقات (التاريخ الكلي)')}
+                </option>
+              </select>
+            </div>
+          </div>
+
           {/* Commission & Stats Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Total Stats */}
             <div className="bg-slate-900 dark:bg-slate-900 rounded-2xl p-8 text-white space-y-6 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                  <Wallet className="w-5 h-5 text-emerald-400" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">
+                    {selectedMonthKey === 'all' ? t('إجمالي المبيعات الكلي') : `${t('مبيعات')} ${formatMonthName(activeMonthKey)}`}
+                  </h3>
                 </div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">{t('عمليات الشحن للدورة الحالية')}</h3>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <div>
@@ -457,28 +554,31 @@ export const AdminDelegateDetailsView = ({
                     </span>
                     <span className="text-lg font-bold text-slate-400">{t('ج.م')}</span>
                   </div>
-                  <p className="text-slate-500 text-[10px] font-bold mt-2 uppercase tracking-[0.2em]">CURRENT CYCLE VOLUME</p>
+                  <p className="text-slate-500 text-[10px] font-bold mt-2 uppercase tracking-[0.2em]">
+                    {selectedMonthKey === 'all' ? 'ALL TIME RECHARGE VOLUME' : `${formatMonthName(activeMonthKey).toUpperCase()} VOLUME`}
+                  </p>
                 </div>
               </div>
               
               <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 block">
-                    {delegate.lastSettledAt 
-                      ? `${t('آخر تجديد:')} ${adminLang === 'en' ? safeDate(delegate.lastSettledAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : safeDate(delegate.lastSettledAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                      : `${t('آخر تجديد:')} ${t('لم يتم التجديد من قبل')}`}
+                    {t('إجمالي التاريخ الكلي:')} {formatCurrency(allTimeTotal)} {t('ج.م')} ({t('العمولات:')} {formatCurrency(allTimeCommission)} {t('ج.م')})
                   </span>
-                  <span className="text-[10px] font-bold text-slate-400 block">
-                    {t('إجمالي التاريخ الكلي:')} {formatCurrency(allTimeTotal)} {t('ج.م')}
-                  </span>
+                  {delegate.lastSettledAt && (
+                    <span className="text-[10px] font-bold text-slate-400 block">
+                      {t('آخر تسوية يدويّة:')} {adminLang === 'en' ? safeDate(delegate.lastSettledAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : safeDate(delegate.lastSettledAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })} ({t('حجم غير مسوى:')} {formatCurrency(unsettledCycleTotal)} {t('ج.م')})
+                    </span>
+                  )}
                 </div>
                 
                 <button
                   onClick={handleSettleAccount}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all outline-none leading-none select-none h-9 mt-1 sm:mt-0 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-amber-400 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all outline-none leading-none select-none h-9 mt-1 sm:mt-0 border border-slate-700 cursor-pointer"
+                  title={t('تسوية وتصفية الحساب يدويًا')}
                 >
                   <RotateCw className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>{t('تجديد الحساب لشهر جديد')}</span>
+                  <span>{t('تصفية يدويّة')}</span>
                 </button>
               </div>
             </div>

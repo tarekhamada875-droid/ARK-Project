@@ -58,6 +58,11 @@ export interface Garage {
   checkOutSound?: string;
   monthlyGiftAmount?: number;
   isMonthlyGiftEnabled?: boolean;
+  referralBonusBalance?: number; // Cash bonus balance in EGP earned from referring other garages
+  referredByGarageId?: string | null; // ID of referring garage
+  referredByGarageName?: string | null; // Name of referring garage
+  lastReferralRewardMonth?: string; // YYYY-MM format of last month bonus was awarded
+  referralRewardMonthsCount?: number; // Number of months bonus has been awarded (up to 6)
   lastGiftMonth?: string; // YYYY-MM
   shimmerColor?: string;
   lastGiftAwardedAt?: any; // Timestamp

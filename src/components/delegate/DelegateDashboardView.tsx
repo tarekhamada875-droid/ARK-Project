@@ -130,8 +130,73 @@ export const DelegateDashboardView = memo(({
   };
 
   // Performance and statistics calculations
-  const totalRechargedAmount = delegate.totalRechargedAmount || 0;
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedPerformanceMonth, setSelectedPerformanceMonth] = useState<string>('current');
+
+  const formatDelegateMonthName = (key: string) => {
+    if (key === 'all') return 'جميع الأوقات';
+    if (!key) return '';
+    const [yearStr, monthStr] = key.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10) - 1;
+    const d = new Date(year, month, 1);
+    if (isNaN(d.getTime())) return key;
+    return d.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+  };
+
+  const approvedRequests = React.useMemo(() => {
+    return delegateRequests.filter(r => r.status === 'approved');
+  }, [delegateRequests]);
+
+  const availablePerformanceMonths = React.useMemo(() => {
+    const monthsSet = new Set<string>();
+    monthsSet.add(currentMonthKey);
+    approvedRequests.forEach(req => {
+      const d = safeDate(req.createdAt || req.resolvedAt);
+      if (!isNaN(d.getTime())) {
+        monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+    });
+    return Array.from(monthsSet).sort().reverse();
+  }, [approvedRequests, currentMonthKey]);
+
+  const activePerfMonthKey = selectedPerformanceMonth === 'current' ? currentMonthKey : selectedPerformanceMonth;
+
+  const currentMonthRechargedSum = React.useMemo(() => {
+    return approvedRequests.reduce((acc, req) => {
+      const d = safeDate(req.createdAt || req.resolvedAt);
+      if (isNaN(d.getTime())) return acc;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (key === currentMonthKey) {
+        return acc + (req.revenueAmount || req.amount || 0);
+      }
+      return acc;
+    }, 0);
+  }, [approvedRequests, currentMonthKey]);
+
+  const activeMonthRechargedSum = React.useMemo(() => {
+    if (activePerfMonthKey === 'all') {
+      const requestsSum = approvedRequests.reduce((acc, req) => acc + (req.revenueAmount || req.amount || 0), 0);
+      return Math.max(requestsSum, delegate.totalRechargedAmount || 0);
+    }
+    return approvedRequests.reduce((acc, req) => {
+      const d = safeDate(req.createdAt || req.resolvedAt);
+      if (isNaN(d.getTime())) return acc;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (key === activePerfMonthKey) {
+        return acc + (req.revenueAmount || req.amount || 0);
+      }
+      return acc;
+    }, 0);
+  }, [approvedRequests, activePerfMonthKey, delegate.totalRechargedAmount]);
+
   const commissionRate = delegate.commissionRate || 0;
+
+  const totalRechargedAmount = activePerfMonthKey === currentMonthKey 
+    ? (currentMonthRechargedSum > 0 ? currentMonthRechargedSum : (delegate.totalRechargedAmount || 0))
+    : activeMonthRechargedSum;
+
   const commissionValue = (totalRechargedAmount * commissionRate) / 100;
 
   const sortedRequests = React.useMemo(() => {
@@ -366,6 +431,38 @@ export const DelegateDashboardView = memo(({
         ) : (
           /* Performance Report View */
           <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
+            {/* Monthly Auto Filter Banner */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white">إحصائيات العمولات والمبيعات الشهرية (تلقائي)</h4>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">تتم المتابعة والاحتساب أوتوماتيكياً لكل شهر ميلادي بدون الحاجة لتصفية يدوية</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs font-bold text-slate-400 shrink-0">الفترة:</span>
+                <select
+                  value={selectedPerformanceMonth}
+                  onChange={(e) => setSelectedPerformanceMonth(e.target.value)}
+                  className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-black text-xs px-3 py-2 rounded-xl outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                >
+                  <option value="current">
+                    الشهر الحالي ({formatDelegateMonthName(currentMonthKey)})
+                  </option>
+                  {availablePerformanceMonths.filter(m => m !== currentMonthKey).map(m => (
+                    <option key={m} value={m}>
+                      {formatDelegateMonthName(m)}
+                    </option>
+                  ))}
+                  <option value="all">
+                    جميع الأوقات (التاريخ الكلي)
+                  </option>
+                </select>
+              </div>
+            </div>
+
             {/* Stat Cards Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               

@@ -19,7 +19,8 @@ import {
   Sun,
   Moon,
   MoreVertical,
-  Check
+  Check,
+  Gift
 } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -40,6 +41,7 @@ interface AdminGarageDetailsViewProps {
   setIsLoading: (loading: boolean) => void;
   packages: Package[];
   subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  allGarages?: Garage[];
 }
 
 export const AdminGarageDetailsView = memo(({
@@ -53,7 +55,8 @@ export const AdminGarageDetailsView = memo(({
   isLoading,
   setIsLoading,
   packages,
-  subscriptionPrices = { weekly: 800, monthly: 3000 }
+  subscriptionPrices = { weekly: 800, monthly: 3000 },
+  allGarages = []
 }: AdminGarageDetailsViewProps) => {
   const [showClearBalanceConfirm, setShowClearBalanceConfirm] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -78,6 +81,45 @@ export const AdminGarageDetailsView = memo(({
 
   const [monthlyGiftInput, setMonthlyGiftInput] = useState<string>(String(selectedGarageForDetails.monthlyGiftAmount || 0));
   const [isSavingGift, setIsSavingGift] = useState(false);
+
+  const [referralBonusInput, setReferralBonusInput] = useState<string>(String(selectedGarageForDetails.referralBonusBalance || 0));
+  const [isSavingReferralBonus, setIsSavingReferralBonus] = useState(false);
+
+  React.useEffect(() => {
+    setReferralBonusInput(String(selectedGarageForDetails.referralBonusBalance || 0));
+  }, [selectedGarageForDetails.referralBonusBalance]);
+
+  const handleAddReferralBonus = async (amount: number) => {
+    setIsSavingReferralBonus(true);
+    try {
+      const current = selectedGarageForDetails.referralBonusBalance || 0;
+      const updated = current + amount;
+      await firestoreService.updateGarage(selectedGarageForDetails.id, {
+        referralBonusBalance: updated
+      });
+      setReferralBonusInput(String(updated));
+      showToast(adminLang === 'en' ? `Added ${amount} EGP referral reward` : `تمت إضافة مكافأة ترشيح جراج (+${amount} ج.م) بنجاح`);
+    } catch (error) {
+      showToast(adminLang === 'en' ? 'Failed to update reward balance' : 'حدث خطأ أثناء تحديث المكافأة', 'error');
+    } finally {
+      setIsSavingReferralBonus(false);
+    }
+  };
+
+  const handleSaveReferralBonus = async () => {
+    setIsSavingReferralBonus(true);
+    try {
+      const val = Math.max(0, parseFloat(referralBonusInput) || 0);
+      await firestoreService.updateGarage(selectedGarageForDetails.id, {
+        referralBonusBalance: val
+      });
+      showToast(adminLang === 'en' ? 'Referral reward balance saved' : 'تم حفظ رصيد مكافآت الإحالة بنجاح');
+    } catch (error) {
+      showToast(adminLang === 'en' ? 'Failed to save reward balance' : 'حدث خطأ أثناء حفظ المكافأة', 'error');
+    } finally {
+      setIsSavingReferralBonus(false);
+    }
+  };
 
   const [showSwitchBillingConfirm, setShowSwitchBillingConfirm] = useState(false);
   const [targetBillingModel, setTargetBillingModel] = useState<'commission' | 'subscription'>(
@@ -245,6 +287,12 @@ export const AdminGarageDetailsView = memo(({
       }
 
       await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
+
+      try {
+        await firestoreService.processReferralRewardForRecharge(selectedGarageForDetails.id);
+      } catch (err) {
+        console.error('Error processing referral reward on manual recharge:', err);
+      }
 
       await firestoreService.addActivityLog({
         garageId: selectedGarageForDetails.id,
@@ -720,6 +768,156 @@ export const AdminGarageDetailsView = memo(({
             }`}>
               {selectedGarageForDetails.lastGiftMonth === new Date().toISOString().slice(0, 7) ? t('تم إرسال هدية هذا الشهر ✓') : t('في انتظار أول الشهر')}
             </span>
+          </div>
+        </div>
+
+        {/* Referral Cash Reward Config Card */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Gift className="w-4 h-4 text-emerald-500" />
+              {t('نظام مكافآت الإحالة التلقائي (50 ج.م شهرياً لمدة 6 شهور)')}
+            </h4>
+            <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/80">
+              {t('إجمالي رصيد المكافآت المُحصلة')}: {selectedGarageForDetails.referralBonusBalance || 0} {t('ج.م')}
+            </span>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+            <p className="font-bold text-slate-900 dark:text-white mb-1">💡 كيف يعمل نظام الإحالة التلقائي:</p>
+            <p>
+              يحصل هذا الجراج تلقائياً على <strong>50 جنيه مصري</strong> رصيد مكافأة عن كل جراج قام بترشيحه في كل مرة يقوم فيها الجراج المُرشَّح بالشحن، وتستمر المكافأة شهرياً لمدة <strong>6 شهور</strong> من تاريخ تسجيل الجراج المُرشَّح.
+            </p>
+          </div>
+
+          {/* Section: Who referred this garage */}
+          <div className="border border-slate-100 dark:border-slate-800 p-4 rounded-xl space-y-2 bg-slate-50/50 dark:bg-slate-800/30">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              {t('تم ترشيح هذا الجراج بواسطة:')}
+            </label>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedGarageForDetails.referredByGarageId || ''}
+                onChange={async (e) => {
+                  const refId = e.target.value;
+                  const refGarage = allGarages.find(g => g.id === refId);
+                  try {
+                    await firestoreService.updateGarage(selectedGarageForDetails.id, {
+                      referredByGarageId: refId || null,
+                      referredByGarageName: refGarage ? refGarage.name : null
+                    });
+                    showToast('تم تحديث الجراج المُرشِّح بنجاح');
+                  } catch (err) {
+                    showToast('فشل تحديث البيانات', 'error');
+                  }
+                }}
+                className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+              >
+                <option value="">{t('غير مُرشَّح من جراج آخر (مباشر)')}</option>
+                {allGarages
+                  .filter(g => g.id !== selectedGarageForDetails.id && g.status !== 'pending')
+                  .map(g => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.phone || 'بدون هاتف'})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Section: Garages referred BY this garage */}
+          <div className="space-y-3">
+            <h5 className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
+              <span>{t('الجراجات التي قام بترشيحها هذا الجراج')}</span>
+              <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[10px] font-black">
+                {allGarages.filter(g => g.referredByGarageId === selectedGarageForDetails.id).length} {t('جراج')}
+              </span>
+            </h5>
+
+            {allGarages.filter(g => g.referredByGarageId === selectedGarageForDetails.id).length === 0 ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500 py-3 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                لم يقم هذا الجراج بترشيح أي جراجات أخرى حتى الآن.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {allGarages
+                  .filter(g => g.referredByGarageId === selectedGarageForDetails.id)
+                  .map(refG => {
+                    const currentMonth = new Date().toISOString().slice(0, 7);
+                    const isAwardedThisMonth = refG.lastReferralRewardMonth === currentMonth;
+                    
+                    let createdAtDate = new Date();
+                    if (refG.createdAt) {
+                      if (typeof refG.createdAt.toDate === 'function') createdAtDate = refG.createdAt.toDate();
+                      else if (refG.createdAt.seconds) createdAtDate = new Date(refG.createdAt.seconds * 1000);
+                      else createdAtDate = new Date(refG.createdAt);
+                    }
+                    const diffMs = Date.now() - createdAtDate.getTime();
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    const isExpired = diffDays > 183 || (refG.referralRewardMonthsCount || 0) >= 6;
+
+                    return (
+                      <div key={refG.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl gap-2 border border-slate-100 dark:border-slate-800">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{refG.name}</p>
+                          <p className="text-[10px] text-slate-400 font-mono" dir="ltr">{refG.phone || 'بدون هاتف'}</p>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            (الشهور: {refG.referralRewardMonthsCount || 0} من 6)
+                          </span>
+                          {isExpired ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                              انتهت الـ 6 شهور
+                            </span>
+                          ) : isAwardedThisMonth ? (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400">
+                              تمت إضافة 50 ج هذا الشهر ✓
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400">
+                              في انتظار شحن الجراج هذا الشهر
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
+          {/* Manual adjustment fallback */}
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
+            <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">
+              {t('تعديل يدوياً إجمالي رصيد المكافآت (في حالة التصحيح أو التسوية)')}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={referralBonusInput}
+                onChange={(e) => setReferralBonusInput(e.target.value)}
+                className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-xl px-4 py-2 text-sm font-black text-emerald-600 dark:text-emerald-400 focus:border-emerald-500 text-center outline-none transition-all"
+                placeholder="0"
+              />
+              <button
+                type="button"
+                disabled={isSavingReferralBonus}
+                onClick={() => handleAddReferralBonus(50)}
+                className="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all disabled:opacity-40"
+              >
+                +50 ج.م
+              </button>
+              <button
+                type="button"
+                disabled={isSavingReferralBonus || String(selectedGarageForDetails.referralBonusBalance || 0) === referralBonusInput}
+                onClick={handleSaveReferralBonus}
+                className="shrink-0 px-4 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-xl font-bold text-xs transition-all disabled:opacity-40"
+              >
+                {isSavingReferralBonus ? <Loader2 className="w-4 h-4 animate-spin" /> : t('حفظ الرصيد')}
+              </button>
+            </div>
           </div>
         </div>
 

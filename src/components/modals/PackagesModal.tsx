@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Package } from '../../types';
-import { X, Menu, Tag } from 'lucide-react';
+import { X, Menu, Tag, Gift } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -10,6 +10,7 @@ interface PackagesModalProps {
   onToggleMenu?: () => void;
   billingModel?: 'subscription' | 'commission';
   subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  referralBonusBalance?: number;
 }
 
 export const PackagesModal: React.FC<PackagesModalProps> = ({ 
@@ -19,7 +20,8 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
   walletNumber = "015 - 524 - 113 - 23", 
   onToggleMenu,
   billingModel = 'commission',
-  subscriptionPrices = { weekly: 800, monthly: 3000 }
+  subscriptionPrices = { weekly: 800, monthly: 3000 },
+  referralBonusBalance = 0
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -97,7 +99,39 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
       {/* Content */}
       <div className="p-6 overflow-y-auto custom-scrollbar-slate stable-scrollbar flex-1">
         <div className="max-w-xl mx-auto w-full">
-          <div className="mb-8 p-4 sm:p-8 bg-slate-900 dark:bg-slate-900 rounded-[2rem] border-4 border-amber-500 dark:border-amber-500/50 flex flex-col items-center text-center gap-4 relative overflow-hidden">
+          {/* Referral Reward Banner - First at the top */}
+          <div className="mb-6 p-5 bg-gradient-to-br from-emerald-950/90 via-slate-900 to-slate-900 rounded-2xl border border-emerald-500/40 text-right shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="flex items-center justify-between gap-4 mb-3">
+              {/* Right side: Icon + Title */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Gift className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    المكافأة
+                  </h3>
+                </div>
+              </div>
+
+              {/* Left side: Large Balance in Off-White */}
+              <div className="text-left shrink-0">
+                <span className="block text-[10px] font-bold text-slate-400 mb-0.5">رصيد مكافآتك</span>
+                <span className="text-3xl sm:text-4xl font-black text-slate-100 font-mono tracking-tight">
+                  {referralBonusBalance} <span className="text-xs font-bold text-slate-300">ج.م</span>
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 font-medium leading-relaxed pt-3 border-t border-emerald-500/15">
+              رشّح أي صاحب جراج آخر للاشتراك معنا، واحصل على <strong className="text-emerald-400 font-black">50 جنيه مكافأة</strong> رصيداً في حسابك عند أول شحن ليه و لمدة 6 شهور!
+            </p>
+          </div>
+
+          {/* Wallet Number Card */}
+          <div className="mb-6 p-4 sm:p-8 bg-slate-900 dark:bg-slate-900 rounded-[2rem] border-4 border-amber-500 dark:border-amber-500/50 flex flex-col items-center text-center gap-4 relative overflow-hidden">
              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-amber-400/10 via-transparent to-transparent opacity-50" />
              <div className="relative z-10 w-full">
                 <p className="text-sm font-black text-amber-500 uppercase tracking-[0.2em] mb-4">رقم المحفظة</p>

@@ -324,6 +324,7 @@ export default function App() {
           setIsLoading={setIsLoading}
           packages={sortedPackages}
           subscriptionPrices={subscriptionPrices}
+          allGarages={allGarages}
         />
       );
     }
@@ -386,6 +387,7 @@ export default function App() {
           walletNumber={walletNumber}
           billingModel={garage.billingModel}
           subscriptionPrices={subscriptionPrices}
+          referralBonusBalance={garage.referralBonusBalance || 0}
         />
       );
     }
