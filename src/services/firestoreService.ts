@@ -900,16 +900,28 @@ export const firestoreService = {
   },
 
   addPackage: async (pkg: Omit<Package, 'id' | 'createdAt' | 'isActive'>): Promise<void> => {
-    await withRetry(() => addDoc(collection(db, 'packages'), {
-      ...pkg,
+    const pkgData: Record<string, any> = {
+      name: pkg.name,
+      price: pkg.price,
+      vehiclesCount: pkg.vehiclesCount,
       isActive: true,
       createdAt: serverTimestamp()
-    }));
+    };
+    if (pkg.discountType !== undefined) pkgData.discountType = pkg.discountType;
+    if (pkg.discountValue !== undefined) pkgData.discountValue = pkg.discountValue;
+
+    await withRetry(() => addDoc(collection(db, 'packages'), pkgData));
   },
 
   updatePackage: async (id: string, data: Partial<Package>): Promise<void> => {
     const docRef = doc(db, 'packages', id);
-    await withRetry(() => updateDoc(docRef, data));
+    const cleanData: Record<string, any> = {};
+    Object.keys(data).forEach(key => {
+      if ((data as any)[key] !== undefined) {
+        cleanData[key] = (data as any)[key];
+      }
+    });
+    await withRetry(() => updateDoc(docRef, cleanData));
   },
 
   deletePackage: async (id: string): Promise<void> => {

@@ -71,6 +71,7 @@ export interface Garage {
   recentExits?: any[];
   createdByDelegateId?: string | null;
   createdByDelegateName?: string | null;
+  hasMonthlySubscribers?: boolean;
   status?: 'pending' | 'approved' | 'rejected';
 }
 

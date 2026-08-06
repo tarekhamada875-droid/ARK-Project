@@ -694,6 +694,43 @@ export const AdminGarageDetailsView = memo(({
           </div>
         </div>
 
+        {/* Monthly Subscribers Surcharge (+25%) Config */}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1 text-right">
+              <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                {t('خدمة المشتركين الشهريين / الإيواء')}
+              </h4>
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 leading-relaxed">
+                {t('عند تفعيل هذا الخيار يتم زيادة 25% تلقائياً على قيمة أية باقة أو اشتراك بالجراج.')}
+              </p>
+            </div>
+            <button 
+              type="button"
+              onClick={async () => {
+                const newState = !selectedGarageForDetails.hasMonthlySubscribers;
+                try {
+                  await firestoreService.updateGarage(selectedGarageForDetails.id, { hasMonthlySubscribers: newState });
+                  setSelectedGarageForDetails({ ...selectedGarageForDetails, hasMonthlySubscribers: newState });
+                  showToast(newState ? t('تم تفعيل خدمة المشتركين الشهريين (+25% زيادة على الباقة)') : t('تم إيقاف خدمة المشتركين الشهريين'));
+                } catch (e) {
+                  showToast(t('حدث خطأ أثناء حفظ الإعداد'), 'error');
+                }
+              }}
+              className={`w-16 h-8 rounded-full p-1 transition-all duration-300 relative shrink-0 mr-4 ${
+                selectedGarageForDetails.hasMonthlySubscribers 
+                  ? 'bg-purple-600' 
+                  : 'bg-slate-200 dark:bg-slate-800'
+              }`}
+            >
+              <div className={`w-6 h-6 bg-white rounded-full transition-all duration-300 transform ${
+                selectedGarageForDetails.hasMonthlySubscribers ? '-translate-x-8' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+        </div>
+
         {/* Monthly Gift Config */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
           <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
@@ -1160,10 +1197,18 @@ export const AdminGarageDetailsView = memo(({
                                             : Math.max(0, pkg.price - pkg.discountValue!))
                                         : pkg.price;
                                     
+                                    const basePrice = hasDiscount ? discountedPrice : pkg.price;
+                                    const effectivePrice = selectedGarageForDetails.hasMonthlySubscribers
+                                        ? Math.round(basePrice * 1.25)
+                                        : basePrice;
+                                    const originalDisplayPrice = selectedGarageForDetails.hasMonthlySubscribers
+                                        ? Math.round(pkg.price * 1.25)
+                                        : pkg.price;
+
                                     return (
                                         <button
                                             key={pkg.id}
-                                            onClick={() => setPendingPackage(pkg)}
+                                            onClick={() => setPendingPackage({ ...pkg, price: effectivePrice })}
                                             className={`group relative rounded-2xl border-2 flex flex-col items-center overflow-hidden transition-all outline-none cursor-pointer ${
                                                 isPremium 
                                                 ? 'bg-slate-900 dark:bg-slate-950 border-slate-900 dark:border-slate-800 text-white' 
@@ -1172,6 +1217,12 @@ export const AdminGarageDetailsView = memo(({
                                                 : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-slate-100'
                                             }`}
                                         >
+                                            {selectedGarageForDetails.hasMonthlySubscribers && (
+                                              <span className="absolute top-2 right-2 bg-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
+                                                +25% شهريين
+                                              </span>
+                                            )}
+
                                             <div className="w-full bg-slate-950 dark:bg-slate-900 py-2 px-3 flex items-center justify-center border-b border-white/5 dark:border-slate-800 transition-colors">
                                               <span className="text-[10px] font-black text-white dark:text-slate-400 uppercase tracking-[0.15em]">
                                                 {pkg.name || t('باقة شحن')}
@@ -1189,11 +1240,11 @@ export const AdminGarageDetailsView = memo(({
                                                 <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105 flex flex-col items-center">
                                                     {hasDiscount ? (
                                                         <>
-                                                            <span>{discountedPrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
-                                                            <span className="text-[10px] line-through opacity-70">{pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                            <span>{effectivePrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                            <span className="text-[10px] line-through opacity-70">{originalDisplayPrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
                                                         </>
                                                     ) : (
-                                                        <span>{pkg.price} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
+                                                        <span>{effectivePrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -1322,6 +1373,15 @@ export const AdminGarageDetailsView = memo(({
                 </p>
               </div>
             </div>
+
+            {selectedGarageForDetails.hasMonthlySubscribers && (
+              <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
+                <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  {t('تتضمن زيادة 25% لحساب المشتركين الشهريين')}
+                </p>
+              </div>
+            )}
  
             <div className="flex gap-3">
               <button

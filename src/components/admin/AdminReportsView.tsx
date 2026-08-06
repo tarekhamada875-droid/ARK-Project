@@ -231,7 +231,24 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar-slate divide-y divide-slate-100 dark:divide-slate-800/60 font-sans">
             {filteredGarageStats.map((g, index) => {
               const checkedOutCount = g.totalVehiclesOut || 0;
-              const remainingBalance = g.balance || 0;
+              const isSub = g.billingModel === 'subscription';
+              let remainingDisplay = '';
+              let remainingLabel = t('الرصيد');
+
+              if (isSub) {
+                remainingLabel = t('الاشتراك');
+                if (g.balanceExpiry) {
+                  const expiryDate = g.balanceExpiry.toDate ? g.balanceExpiry.toDate() : new Date(g.balanceExpiry);
+                  const diff = expiryDate.getTime() - Date.now();
+                  const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                  remainingDisplay = `${days} ${t('يوم')}`;
+                } else {
+                  remainingDisplay = `${g.balanceDays || 0} ${t('يوم')}`;
+                }
+              } else {
+                remainingDisplay = `${g.balance || 0} ${t('ج.م')}`;
+              }
+
               const activeCarsCount = typeof g.carsInside === 'number' ? Math.max(0, g.carsInside) : (g.activePlates ? Object.keys(g.activePlates).length : 0);
               
               return (
@@ -255,7 +272,7 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
 
                   <div className={`font-mono shrink-0 ${adminLang === 'en' ? 'text-right' : 'text-left'}`}>
                     <span className="text-xs font-black text-amber-500 block">
-                      {remainingBalance} <span className="text-[8px] font-bold font-sans text-slate-400">{t('الرصيد')}</span>
+                      {remainingDisplay} <span className="text-[8px] font-bold font-sans text-slate-400">{remainingLabel}</span>
                     </span>
                     <span className="text-[9px] font-bold text-slate-400 block mt-1">
                       {t('الأرباح الإجمالية')}: {(g.totalRevenue || 0).toLocaleString(adminLang === 'en' ? 'en-US' : 'ar-EG')} {t('ج.م')}

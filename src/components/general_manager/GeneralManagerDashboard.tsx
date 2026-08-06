@@ -236,9 +236,22 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
                 </div>
 
                 <div className="text-left shrink-0">
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">الرصيد الحالي</p>
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">
+                    {selectedGarage.billingModel === 'subscription' ? 'الاشتراك المتبقي' : 'الرصيد الحالي'}
+                  </p>
                   <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    {selectedGarage.balance || 0} <span className="text-[11px] font-bold text-slate-500">ج.م</span>
+                    {selectedGarage.billingModel === 'subscription' ? (
+                      (() => {
+                        if (!selectedGarage.balanceExpiry) return `${selectedGarage.balanceDays || 0} يوم`;
+                        const expiry = selectedGarage.balanceExpiry;
+                        const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                        const diff = expiryDate.getTime() - Date.now();
+                        const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                        return `${days} يوم`;
+                      })()
+                    ) : (
+                      <>{selectedGarage.balance || 0} <span className="text-[11px] font-bold text-slate-500">ج.م</span></>
+                    )}
                   </p>
                 </div>
               </div>

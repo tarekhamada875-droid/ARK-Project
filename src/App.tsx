@@ -388,6 +388,7 @@ export default function App() {
           billingModel={garage.billingModel}
           subscriptionPrices={subscriptionPrices}
           referralBonusBalance={garage.referralBonusBalance || 0}
+          hasMonthlySubscribers={garage.hasMonthlySubscribers}
         />
       );
     }

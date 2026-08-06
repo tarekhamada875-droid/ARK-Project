@@ -413,45 +413,47 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
       {/* Main Content */}
       <main className={`flex-1 w-full max-w-4xl mx-auto p-4 sm:p-6 pb-[120px] stable-scrollbar ${showAddModal || showRenewModal ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         {/* Summary Bar (Balance Card) */}
-        <div className="flex gap-4 shrink-0 w-full select-none mb-5">
-          <div className={`flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 ${
-            balanceTransition === 'decrease'
-              ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)]'
-              : balanceTransition === 'increase'
-              ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)]'
-              : 'border-slate-200 dark:border-slate-800'
-          }`}>
-            {/* Moving Arrows overlay */}
-            <MovingBalanceArrows transitionType={balanceTransition} />
+        {!isSubscriptionModel && (
+          <div className="flex gap-4 shrink-0 w-full select-none mb-5">
+            <div className={`flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 ${
+              balanceTransition === 'decrease'
+                ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)]'
+                : balanceTransition === 'increase'
+                ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)]'
+                : 'border-slate-200 dark:border-slate-800'
+            }`}>
+              {/* Moving Arrows overlay */}
+              <MovingBalanceArrows transitionType={balanceTransition} />
 
-            <div className="py-1 flex items-center justify-center overflow-visible z-10">
-              <div className={`text-4xl md:text-7xl font-extrabold font-mono tracking-tight transition-colors duration-300 ${
-                balanceTransition === 'decrease'
-                  ? 'text-red-600 dark:text-red-400'
-                  : balanceTransition === 'increase'
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : availableVehicles < 50
-                  ? 'text-red-500'
-                  : 'text-slate-900 dark:text-slate-100'
-              }`}>
-                <AnimatedCounter value={availableVehicles} disableColorChange={true} />
+              <div className="py-1 flex items-center justify-center overflow-visible z-10">
+                <div className={`text-4xl md:text-7xl font-extrabold font-mono tracking-tight transition-colors duration-300 ${
+                  balanceTransition === 'decrease'
+                    ? 'text-red-600 dark:text-red-400'
+                    : balanceTransition === 'increase'
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : availableVehicles < 50
+                    ? 'text-red-500'
+                    : 'text-slate-900 dark:text-slate-100'
+                }`}>
+                  <AnimatedCounter value={availableVehicles} disableColorChange={true} />
+                </div>
               </div>
+              {availableVehicles < 50 && (
+                <p className={`text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ${
+                  balanceTransition === 'decrease'
+                    ? 'text-red-600 dark:text-red-400'
+                    : balanceTransition === 'increase'
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : availableVehicles <= 0
+                    ? 'text-red-500'
+                    : 'text-red-400'
+                }`}>
+                  {availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص'}
+                </p>
+              )}
             </div>
-            {availableVehicles < 50 && (
-              <p className={`text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ${
-                balanceTransition === 'decrease'
-                  ? 'text-red-600 dark:text-red-400'
-                  : balanceTransition === 'increase'
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : availableVehicles <= 0
-                  ? 'text-red-500'
-                  : 'text-red-400'
-              }`}>
-                {availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص'}
-              </p>
-            )}
           </div>
-        </div>
+        )}
 
         {/* Add Subscriber Button */}
         <button

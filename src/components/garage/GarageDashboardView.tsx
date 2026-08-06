@@ -336,7 +336,7 @@ export const GarageDashboardView = memo(({
                     : 'bg-slate-900 dark:bg-slate-800 text-white border-slate-900 dark:border-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700'
                 }`}
               >
-                {((subscribersCount > 0 && !isSubscription) || hasNewRecharge) && !showMenu && (
+                {(subscribersCount > 0 || hasNewRecharge) && !showMenu && (
                   <span className={`absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${hasNewRecharge ? 'bg-emerald-500' : 'bg-red-500'}`} />
                 )}
                 {showMenu ? <X className="w-6 h-6 stroke-[3]" /> : <Menu className="w-6 h-6 stroke-[3]" />}
@@ -405,7 +405,7 @@ export const GarageDashboardView = memo(({
                 
                 {/* Menu Options Group */}
                 <div className="space-y-2">
-                  {!currentStaff && !isSubscription && (
+                  {!currentStaff && (
                     <button 
                       onClick={() => navigateTo('subscribers')}
                       className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
@@ -768,6 +768,7 @@ export const GarageDashboardView = memo(({
           billingModel={garage.billingModel}
           subscriptionPrices={subscriptionPrices}
           referralBonusBalance={garage.referralBonusBalance || 0}
+          hasMonthlySubscribers={garage.hasMonthlySubscribers}
         />
       )}
 

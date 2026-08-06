@@ -113,14 +113,15 @@ export const AdminDashboard = memo(({
   const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
   const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
   const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
-  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'monthly' }>({
+  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'monthly'; hasMonthlySubscribers: boolean }>({
     name: '',
     hourlyRate: '',
     overnightRate: '',
     phone: '',
     initialPackageId: '',
     billingModel: 'commission',
-    subscriptionType: 'weekly'
+    subscriptionType: 'weekly',
+    hasMonthlySubscribers: false
   });
 
   const [editingSupervisorPinId, setEditingSupervisorPinId] = React.useState<string | null>(null);
@@ -1973,13 +1974,16 @@ export const AdminDashboard = memo(({
                     }
 
                     try {
-                      await firestoreService.addPackage({ 
-                        name, 
-                        price, 
-                        vehiclesCount: count,
-                        discountType: discountVal > 0 ? 'percentage' : undefined,
-                        discountValue: discountVal > 0 ? discountVal : undefined
-                      });
+                      const pkgData: Omit<Package, 'id' | 'createdAt' | 'isActive'> = {
+                        name,
+                        price,
+                        vehiclesCount: count
+                      };
+                      if (discountVal > 0) {
+                        pkgData.discountType = 'percentage';
+                        pkgData.discountValue = discountVal;
+                      }
+                      await firestoreService.addPackage(pkgData);
                       form.reset();
                       showToast(t('تم إضافة الباقة بنجاح'));
                     } catch (err) {
@@ -2588,7 +2592,7 @@ export const AdminDashboard = memo(({
                   onSubmit={async (e) => {
                     await handleAddGarage(e);
                     // Clear form on success
-                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', billingModel: 'commission', subscriptionType: 'weekly' });
+                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', billingModel: 'commission', subscriptionType: 'weekly', hasMonthlySubscribers: false });
                   }}
                   className="space-y-6"
                 >
@@ -2691,6 +2695,24 @@ export const AdminDashboard = memo(({
                       </select>
                     </div>
                   )}
+
+                  {/* Monthly Subscribers Surcharge Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-900 dark:text-white block">{t('يتضمن مشتركين شهريين / إيواء')}</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{t('إضافة 25% زيادة تلقائياً على سعر أية باقة/اشتراك')}</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input 
+                        type="checkbox"
+                        name="hasMonthlySubscribers"
+                        checked={garageForm.hasMonthlySubscribers}
+                        onChange={(e) => setGarageForm({ ...garageForm, hasMonthlySubscribers: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">

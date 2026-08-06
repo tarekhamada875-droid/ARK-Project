@@ -11,6 +11,7 @@ interface PackagesModalProps {
   billingModel?: 'subscription' | 'commission';
   subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
   referralBonusBalance?: number;
+  hasMonthlySubscribers?: boolean;
 }
 
 export const PackagesModal: React.FC<PackagesModalProps> = ({ 
@@ -21,7 +22,8 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
   onToggleMenu,
   billingModel = 'commission',
   subscriptionPrices = { weekly: 800, monthly: 3000 },
-  referralBonusBalance = 0
+  referralBonusBalance = 0,
+  hasMonthlySubscribers = false
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -145,12 +147,18 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
 
           <div className="flex flex-col">
             {(() => {
+              const baseWeekly = hasMonthlySubscribers ? Math.round(subscriptionPrices.weekly * 1.25) : subscriptionPrices.weekly;
+              const baseMonthly = hasMonthlySubscribers ? Math.round(subscriptionPrices.monthly * 1.25) : subscriptionPrices.monthly;
+
               const displayPackages = isSub 
                 ? [
-                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage' as const, discountValue: subscriptionPrices.weeklyDiscount },
-                    { id: 'monthly_sub', name: 'اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage' as const, discountValue: subscriptionPrices.monthlyDiscount }
+                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: baseWeekly, vehiclesCount: 7, discountType: 'percentage' as const, discountValue: subscriptionPrices.weeklyDiscount },
+                    { id: 'monthly_sub', name: 'اشتراك شهري', price: baseMonthly, vehiclesCount: 30, discountType: 'percentage' as const, discountValue: subscriptionPrices.monthlyDiscount }
                   ]
-                : [...packages].sort((a, b) => a.price - b.price);
+                : packages.map(p => ({
+                    ...p,
+                    price: hasMonthlySubscribers ? Math.round(p.price * 1.25) : p.price
+                  })).sort((a, b) => a.price - b.price);
 
               const basePackage = !isSub ? displayPackages[0] : null;
               const baseRate = basePackage ? basePackage.price / basePackage.vehiclesCount : 0;
@@ -172,7 +180,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
                   ratePerVehicle = (effectivePrice / pkg.vehiclesCount).toFixed(2);
                   if (pkg.id === 'monthly_sub') {
                     // Monthly subscription compared to weekly subscription daily rate
-                    const weeklyDailyRate = subscriptionPrices.weekly / 7;
+                    const weeklyDailyRate = baseWeekly / 7;
                     const expectedPrice = 30 * weeklyDailyRate;
                     savings = Math.round(expectedPrice - effectivePrice);
                   }

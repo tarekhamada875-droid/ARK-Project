@@ -724,6 +724,18 @@ export const DelegateDashboardView = memo(({
                 </div>
               )}
 
+              {/* Monthly Subscribers Toggle */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+                <div className="space-y-0.5 text-right">
+                  <label className="text-xs font-black text-slate-900 dark:text-white block">مشتركين شهريين / إيواء</label>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة 25% تلقائياً على الاشتراك/الباقة</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" name="hasMonthlySubscribers" className="sr-only peer" />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
               {/* Step 4: Contact */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">رقم الموبايل (اختياري)</label>
@@ -893,12 +905,16 @@ export const DelegateDashboardView = memo(({
                             : Math.max(0, pkg.price - pkg.discountValue!))
                         : pkg.price;
 
+                      const baseDiscounted = hasDiscount ? discountedPrice : pkg.price;
+                      const effectivePrice = selectedGarage.hasMonthlySubscribers ? Math.round(baseDiscounted * 1.25) : baseDiscounted;
+                      const displayOriginal = selectedGarage.hasMonthlySubscribers ? Math.round(pkg.price * 1.25) : pkg.price;
+
                       return (
                         <button
                           key={pkg.id}
                           onClick={() => {
                             if (isProcessing) return;
-                            setPendingPackage(pkg);
+                            setPendingPackage({ ...pkg, price: effectivePrice });
                           }}
                           className="flex-none w-[160px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-5 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group relative overflow-hidden"
                         >
@@ -906,6 +922,12 @@ export const DelegateDashboardView = memo(({
                             <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
                               <Tag className="w-2.5 h-2.5" />
                               {pkg.discountType === 'percentage' ? `%${pkg.discountValue}` : `${pkg.discountValue}ج`}
+                            </span>
+                          )}
+
+                          {selectedGarage.hasMonthlySubscribers && (
+                            <span className="absolute top-2 left-2 bg-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
+                              +25%
                             </span>
                           )}
 
@@ -923,11 +945,11 @@ export const DelegateDashboardView = memo(({
                           <div className="mt-6 bg-emerald-600 text-white w-full py-2.5 rounded-2xl font-black text-sm font-mono flex flex-col items-center">
                             {hasDiscount ? (
                               <>
-                                <span>{discountedPrice} ج.م</span>
-                                <span className="text-[9px] line-through opacity-70">{pkg.price} ج.م</span>
+                                <span>{effectivePrice} ج.م</span>
+                                <span className="text-[9px] line-through opacity-70">{displayOriginal} ج.م</span>
                               </>
                             ) : (
-                              <span>{pkg.price} ج.م</span>
+                              <span>{effectivePrice} ج.م</span>
                             )}
                           </div>
                         </button>
@@ -1058,6 +1080,15 @@ export const DelegateDashboardView = memo(({
                           </p>
                         </div>
                       </div>
+
+                      {selectedGarage.hasMonthlySubscribers && (
+                        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
+                          <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 shrink-0" />
+                            يتضمن زيادة 25% لحساب المشتركين الشهريين
+                          </p>
+                        </div>
+                      )}
 
                       <div className="flex gap-3">
                         <button

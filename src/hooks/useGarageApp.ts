@@ -1067,6 +1067,10 @@ export function useGarageApp() {
         revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
       }
 
+      if (g.hasMonthlySubscribers) {
+        revenueIncrement = Math.round(revenueIncrement * 1.25);
+      }
+
       const rechargePayload: any = {
         garageId: garageId,
         garageName: g.name,
@@ -1469,6 +1473,8 @@ export function useGarageApp() {
     const commissionPerVehicle = 1;
     const billingModel = formData.get('billingModel') as 'subscription' | 'commission' || 'commission';
     const subscriptionType = formData.get('subscriptionType') as 'weekly' | 'monthly' || 'weekly';
+    const hasMonthlySubscribersRaw = formData.get('hasMonthlySubscribers');
+    const hasMonthlySubscribers = hasMonthlySubscribersRaw === 'true' || hasMonthlySubscribersRaw === 'on' || hasMonthlySubscribersRaw === '1';
     const referredByGarageId = (formData.get('referredByGarageId') as string || '').trim();
     const referringGarage = referredByGarageId ? allGarages.find(g => g.id === referredByGarageId) : null;
     const referredByGarageName = referringGarage ? referringGarage.name : null;
@@ -1481,14 +1487,29 @@ export function useGarageApp() {
     if (billingModel === 'subscription') {
       const days = subscriptionType === 'weekly' ? 7 : 30;
       expiryDate.setDate(expiryDate.getDate() + days);
-      initialRevenue = subscriptionType === 'weekly' ? subscriptionPrices.weekly : subscriptionPrices.monthly;
+      let baseSubPrice = subscriptionType === 'weekly' ? subscriptionPrices.weekly : subscriptionPrices.monthly;
+      const subDiscount = subscriptionType === 'weekly' ? subscriptionPrices.weeklyDiscount : subscriptionPrices.monthlyDiscount;
+      if (subDiscount && subDiscount > 0) {
+        baseSubPrice = Math.round(baseSubPrice * (1 - subDiscount / 100));
+      }
+      initialRevenue = hasMonthlySubscribers ? Math.round(baseSubPrice * 1.25) : baseSubPrice;
       initialCars = 9999;
     } else {
       expiryDate.setFullYear(expiryDate.getFullYear() + 10);
       const selectedPkg = packages.find(p => p.id === initialPackageId);
       initialBalance = selectedPkg ? (selectedPkg.vehiclesCount * commissionPerVehicle) : 0;
       initialCars = selectedPkg ? selectedPkg.vehiclesCount : 0;
-      initialRevenue = selectedPkg ? selectedPkg.price : 0;
+      if (selectedPkg) {
+        let basePkgPrice = selectedPkg.price;
+        if (selectedPkg.discountValue && selectedPkg.discountValue > 0) {
+          basePkgPrice = selectedPkg.discountType === 'percentage'
+            ? Math.round(selectedPkg.price * (1 - selectedPkg.discountValue / 100))
+            : Math.max(0, selectedPkg.price - selectedPkg.discountValue);
+        }
+        initialRevenue = hasMonthlySubscribers ? Math.round(basePkgPrice * 1.25) : basePkgPrice;
+      } else {
+        initialRevenue = 0;
+      }
     }
 
     if (phone && (phone.length < 3 || phone.length > 20)) {
@@ -1557,6 +1578,7 @@ export function useGarageApp() {
         createdByDelegateName: delegate?.name || null,
         referredByGarageId: referredByGarageId || null,
         referredByGarageName: referredByGarageName || null,
+        hasMonthlySubscribers: hasMonthlySubscribers,
         status: isPending ? 'pending' : 'approved'
       });
 
