@@ -438,6 +438,7 @@ service cloud.firestore {
       allow update: if isValidId(garageId) && isSignedIn() && (
         isAdmin() || 
         isSupervisor() ||
+        (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['currentSessionId', 'lastActive'])) ||
         // Delegate can update balance, totalAdminRevenue, isLocked etc
         (isDelegate() && incoming().diff(existing()).affectedKeys().hasAny(['balance', 'totalAdminRevenue', 'isLocked'])) ||
         // Standard garage update

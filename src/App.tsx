@@ -8,7 +8,6 @@ import {
   CheckCircle2, 
   XCircle, 
   Shield,
-  RefreshCw,
 } from 'lucide-react';
 import { safeDate, resolveShimmerColor } from './utils';
 import { useTheme } from './utils/ThemeContext';
@@ -16,7 +15,6 @@ import { useLocalStorageState } from './hooks/useLocalStorage';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
-import { SplashScreen } from './components/layout/SplashScreen';
 
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { GeneralManagerDashboard } from './components/general_manager/GeneralManagerDashboard';
@@ -106,9 +104,6 @@ export default function App() {
     subscriberWarningPlate,
     setSubscriberWarningPlate,
     pendingCheckInType,
-    isWaitingForApproval,
-    setIsWaitingForApproval,
-    pendingApprovalRequest,
     now,
     showOfflineScreen,
     inputRef,
@@ -128,9 +123,7 @@ export default function App() {
     updateGarageRate,
     createNewGarage,
     addDelegate,
-    removeDelegate,
-    handleAcceptApprovalRequest,
-    handleRejectApprovalRequest
+    removeDelegate
   } = useGarageApp();
 
   const { theme } = useTheme();
@@ -413,10 +406,21 @@ export default function App() {
     return <OfflineView />;
   }
 
+  // --- Initial Loading State ---
+  if (!isAuthReady) {
+    return (
+      <div className="w-full h-full min-h-screen bg-[#faf9f6] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center font-sans" dir="rtl">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-slate-600 dark:text-slate-300 font-bold text-sm animate-pulse">
+          جاري تحميل البيانات...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors">
       <ErrorBoundary>
-        <SplashScreen />
         {toast && (
           <div 
             onClick={() => setToast(null)}
@@ -531,86 +535,7 @@ export default function App() {
           />
         )}
 
-        {isWaitingForApproval && (
-          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 z-[20002] flex items-center justify-center p-6 text-center" dir="rtl">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 max-w-sm w-full flex flex-col items-center gap-6 border-4 border-white/10 dark:border-slate-800 shadow-2xl transition-all">
-              <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-2xl flex items-center justify-center animate-pulse">
-                <RefreshCw className="w-8 h-8 animate-spin" />
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">جاري طلب الإذن...</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
-                  الحساب مفتوح على جهاز آخر. جاري إرسال طلب للموافقة على تبديل الخدمة إلى هذا الجهاز.
-                </p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
-                  برجاء إبقاء هذه الشاشة مفتوحة...
-                </p>
-              </div>
-              <div className="flex flex-col gap-2.5 w-full">
-                <button 
-                  onClick={() => {
-                    if (typeof (window as any)._forceTakeoverSession === 'function') {
-                      (window as any)._forceTakeoverSession();
-                    }
-                  }}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-2xl font-black text-sm transition-all shadow-md active:scale-[0.98]"
-                >
-                  ⚡ سحب الجلسة والدخول مباشرة
-                </button>
-                <button 
-                  onClick={() => {
-                    if (typeof (window as any)._cancelSessionRequest === 'function') {
-                      (window as any)._cancelSessionRequest();
-                    } else {
-                      setIsWaitingForApproval(false);
-                    }
-                  }}
-                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-2xl font-bold text-xs transition-all"
-                >
-                  إلغاء الطلب
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {pendingApprovalRequest && (
-          <div className="fixed inset-0 bg-slate-900/90 dark:bg-slate-950/95 z-[20003] flex items-center justify-center p-6 text-center" dir="rtl">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 max-w-sm w-full flex flex-col items-center gap-6 border border-slate-100 dark:border-slate-800 shadow-2xl transition-all relative overflow-hidden pt-10">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-sans">تنبيه دخول جديد! ⚠️</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
-                  هناك جهاز جديد يحاول تسجيل الدخول إلى هذا الحساب حالياً.
-                </p>
-                <div className="bg-amber-50 dark:bg-amber-950/40 p-4 rounded-2xl border border-amber-200/50 dark:border-amber-900/30 text-right">
-                  <p className="text-xs font-black text-amber-800 dark:text-amber-400 flex items-center gap-2">
-                    <span>📱 جهاز جديد يحتاج لموافقتك</span>
-                  </p>
-                  <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">
-                    إذا قبلت، فسيتم تسجيل الخروج من هذا الجهاز ونقل العمل للجهاز الجديد فوراً.
-                  </p>
-                </div>
-                <p className="text-sm font-black text-slate-900 dark:text-white mt-4">
-                  هل تريد السماح للجهاز الجديد بالدخول وتكملة العمل هناك؟
-                </p>
-              </div>
-              <div className="flex gap-3 w-full mt-2">
-                <button 
-                  onClick={handleAcceptApprovalRequest}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
-                >
-                  نعم، قبول
-                </button>
-                <button 
-                  onClick={handleRejectApprovalRequest}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all"
-                >
-                  رفض
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
       {renderView()}
       </ErrorBoundary>

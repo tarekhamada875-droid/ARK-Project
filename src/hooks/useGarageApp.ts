@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Timestamp, serverTimestamp, onSnapshot, doc, collection, query, where, limit, getDocs, getDoc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { Timestamp, serverTimestamp, onSnapshot, doc, collection, query, where, limit, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { APP_TEXT, ADMIN_PIN } from '../constants';
@@ -119,14 +119,6 @@ export function useGarageApp() {
   const [subscriberWarningPlate, setSubscriberWarningPlate] = useState('');
   const [pendingCheckInType, setPendingCheckInType] = useState<'hourly' | 'overnight' | null>(null);
 
-  const [isWaitingForApproval, setIsWaitingForApproval] = useState<boolean>(false);
-  const [pendingApprovalRequest, setPendingApprovalRequest] = useState<{
-    id: string;
-    collection: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers';
-    pendingSessionId: string;
-    name: string;
-  } | null>(null);
-
   const { now, serverTimeOffset, setServerTimeOffset, fetchServerTimeOffset } = useServerTime();
   const { isOnline, showOfflineScreen } = useOnlineStatus();
   
@@ -227,6 +219,15 @@ export function useGarageApp() {
 
   const handleLogout = useCallback(async (isRemoteKicked: boolean = false) => {
     try {
+      if (!isRemoteKicked) {
+        const clearSessionPromises: Promise<any>[] = [];
+        if (garage) clearSessionPromises.push(firestoreService.updateSession('garages', garage.id, null));
+        if (currentStaff) clearSessionPromises.push(firestoreService.updateSession('staff', currentStaff.id, null));
+        if (delegate) clearSessionPromises.push(firestoreService.updateSession('delegates', delegate.id, null));
+        if (currentSupervisor) clearSessionPromises.push(firestoreService.updateSession('supervisors', currentSupervisor.id, null));
+        if (currentGeneralManager) clearSessionPromises.push(firestoreService.updateSession('general_managers', currentGeneralManager.id, null));
+        await Promise.all(clearSessionPromises).catch(err => console.warn('Clear session failed:', err));
+      }
       if (auth.currentUser) {
         const myUid = auth.currentUser.uid;
         await Promise.all([
@@ -237,13 +238,6 @@ export function useGarageApp() {
           deleteDoc(doc(db, 'garage_sessions', myUid)),
           deleteDoc(doc(db, 'staff_sessions', myUid)),
         ]).catch(err => console.warn('Clean security sessions failed:', err));
-      }
-      if (!isRemoteKicked) {
-        if (garage) firestoreService.updateSession('garages', garage.id, null);
-        if (currentStaff) firestoreService.updateSession('staff', currentStaff.id, null);
-        if (delegate) firestoreService.updateSession('delegates', delegate.id, null);
-        if (currentSupervisor) firestoreService.updateSession('supervisors', currentSupervisor.id, null);
-        if (currentGeneralManager) firestoreService.updateSession('general_managers', currentGeneralManager.id, null);
       }
       await signOut(auth);
     } catch (e) {
@@ -264,8 +258,6 @@ export function useGarageApp() {
       setStaffList([]);
       setLoginPhone('');
       setAdminPin('');
-      setPendingApprovalRequest(null);
-      setIsWaitingForApproval(false);
       setView('login');
       setShowLogoutConfirm(false);
     }
@@ -534,12 +526,6 @@ export function useGarageApp() {
       }
       const data = snapshot.data();
 
-      if (data.currentSessionId && data.currentSessionId !== sessionId) {
-        showToast('تم تسجيل الدخول من جهاز آخر وإغلاق الجلسة هنا.', 'error');
-        handleLogout(true);
-        return;
-      }
-      
       let currentOffset = serverTimeOffset;
       if (!snapshot.metadata.hasPendingWrites && data.lastActive) {
         const d = safeDate(data.lastActive);
@@ -550,28 +536,11 @@ export function useGarageApp() {
       }
     });
 
-    const unsubRequests = onSnapshot(doc(db, 'login_requests', id), (snapshot) => {
-      if (snapshot.exists()) {
-        const reqData = snapshot.data();
-        if (reqData.status === 'pending' && reqData.pendingSessionId !== sessionId) {
-          setPendingApprovalRequest({
-            id: id!,
-            collection: collectionName!,
-            pendingSessionId: reqData.pendingSessionId,
-            name: reqData.pendingSessionName || 'مستخدم جديد'
-          });
-          return;
-        }
-      }
-      setPendingApprovalRequest(null);
-    });
-
     syncSession();
     heartbeatTimer = setInterval(syncSession, 120000);
 
     return () => {
       unsubscribe();
-      unsubRequests();
       if (heartbeatTimer) clearInterval(heartbeatTimer);
     };
   }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, currentGeneralManager?.id, sessionId]);
@@ -601,138 +570,6 @@ export function useGarageApp() {
   }, [newPlateNumber, vehicles, garage, view, showCheckOutModal]);
   */
 
-  const initiateSessionRequest = useCallback(async (
-    collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers',
-    id: string,
-    _targetData: any,
-    onSuccess: () => Promise<void> | void
-  ) => {
-    try {
-      setIsWaitingForApproval(true);
-      
-      await setDoc(doc(db, 'login_requests', id), {
-        pendingSessionId: sessionId,
-        status: 'pending',
-        timestamp: serverTimestamp(),
-        pendingSessionName: _targetData.name || 'مستخدم جديد',
-        collectionName
-      });
-
-      let timeoutTimer: any = null;
-
-      const unsub = onSnapshot(doc(db, 'login_requests', id), async (snapshot) => {
-        if (!snapshot.exists()) return;
-        const data = snapshot.data();
-        if (data.pendingSessionId !== sessionId) return;
-
-        if (data.status === 'approved') {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          unsub();
-          setIsWaitingForApproval(false);
-          await deleteDoc(doc(db, 'login_requests', id)).catch(err => console.error(err));
-          await onSuccess();
-        } else if (data.status === 'rejected') {
-          if (timeoutTimer) clearTimeout(timeoutTimer);
-          unsub();
-          setIsWaitingForApproval(false);
-          showToast('تم رفض طلب تسجيل الدخول من الجهاز النشط حالياً.', 'error');
-          await deleteDoc(doc(db, 'login_requests', id)).catch(err => console.error(err));
-        }
-      });
-
-      timeoutTimer = setTimeout(async () => {
-        unsub();
-        setIsWaitingForApproval(false);
-        showToast('انتهت مهلة الانتظار. يرجى المحاولة لاحقاً أو التأكد من استجابة الجهاز المعني.', 'error');
-        try {
-          const docRef = doc(db, 'login_requests', id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().pendingSessionId === sessionId) {
-            await deleteDoc(docRef).catch(err => console.error(err));
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }, 45000);
-
-      (window as any)._cancelSessionRequest = async () => {
-        clearTimeout(timeoutTimer);
-        unsub();
-        setIsWaitingForApproval(false);
-        try {
-          const docRef = doc(db, 'login_requests', id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().pendingSessionId === sessionId) {
-            await deleteDoc(docRef).catch(err => console.error(err));
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      };
-
-      (window as any)._forceTakeoverSession = async () => {
-        clearTimeout(timeoutTimer);
-        unsub();
-        setIsWaitingForApproval(false);
-        setIsLoading(true);
-        try {
-          await setDoc(doc(db, 'login_requests', id), {
-            status: 'approved'
-          }, { merge: true }).catch(err => console.warn(err));
-          await deleteDoc(doc(db, 'login_requests', id)).catch(err => console.warn(err));
-          await onSuccess();
-        } catch (err) {
-          console.error('Failed to force takeover:', err);
-          showToast('فشل سحب الجلسة. يرجى إعادة المحاولة.', 'error');
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-    } catch (err) {
-      console.error('Failed to initiate request:', err);
-      setIsWaitingForApproval(false);
-      showToast('عفواً، فشل إرسال طلب تسجيل الدخول إلى الجهاز المعني.', 'error');
-    }
-  }, [sessionId, showToast]);
-
-  const handleAcceptApprovalRequest = useCallback(async () => {
-    if (!pendingApprovalRequest) return;
-    const { id, collection: col, pendingSessionId } = pendingApprovalRequest;
-    try {
-      await setDoc(doc(db, 'login_requests', id), {
-        status: 'approved'
-      }, { merge: true });
-
-      await updateDoc(doc(db, col, id), {
-        currentSessionId: pendingSessionId
-      });
-
-      showToast('تم قبول طلب الدخول بنجاح.', 'success');
-      setPendingApprovalRequest(null);
-      await handleLogout(true);
-    } catch (err) {
-      console.error('Failed to accept session request:', err);
-      showToast('حدث خطأ أثناء الموافقة على الدخول الجديد.', 'error');
-    }
-  }, [pendingApprovalRequest, showToast, handleLogout]);
-
-  const handleRejectApprovalRequest = useCallback(async () => {
-    if (!pendingApprovalRequest) return;
-    const { id } = pendingApprovalRequest;
-    try {
-      await setDoc(doc(db, 'login_requests', id), {
-        status: 'rejected'
-      }, { merge: true });
-
-      setPendingApprovalRequest(null);
-      showToast('تم رفض محاولة الدخول وإبقاء الحساب نشطاً هنا.', 'success');
-    } catch (err) {
-      console.error('Failed to reject session request:', err);
-      showToast('حدث خطأ أثناء رفض الدخول الجديد.', 'error');
-    }
-  }, [pendingApprovalRequest, showToast]);
-
   const handleGarageLogin = useCallback(async () => {
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى المحاولة عند عودة النت.', 'error');
@@ -759,7 +596,6 @@ export function useGarageApp() {
     }
 
     setIsLoading(true);
-    const minLoadingDelay = new Promise(resolve => setTimeout(resolve, 5000));
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30 * 1000));
 
     try {
@@ -782,21 +618,20 @@ export function useGarageApp() {
         if (!gmSnap.empty) {
           const gmData = { id: gmSnap.docs[0].id, ...gmSnap.docs[0].data() } as GeneralManager;
 
+          if (gmData.currentSessionId && gmData.currentSessionId !== sessionId && isSessionActive(gmData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
+
           const proceed = async () => {
             if (auth.currentUser) {
               await setDoc(doc(db, 'general_manager_sessions', auth.currentUser.uid), { generalManagerId: gmData.id, pin: gmData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateGeneralManagerSession(gmData.id, sessionId);
-            await minLoadingDelay;
             setCurrentGeneralManager(gmData);
             setView('general_manager_dashboard');
             showToast(`مرحباً بك يا ${gmData.name} (مالك النظام)`);
           };
-
-          if (gmData.currentSessionId && gmData.currentSessionId !== sessionId && isSessionActive(gmData.lastActive, currentOffset)) {
-            await initiateSessionRequest('general_managers', gmData.id, gmData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -807,21 +642,20 @@ export function useGarageApp() {
         if (!supervisorSnap.empty) {
           const supervisorData = { id: supervisorSnap.docs[0].id, ...supervisorSnap.docs[0].data() } as Supervisor;
 
+          if (supervisorData.currentSessionId && supervisorData.currentSessionId !== sessionId && isSessionActive(supervisorData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
+
           const proceed = async () => {
             if (auth.currentUser) {
               await setDoc(doc(db, 'supervisor_sessions', auth.currentUser.uid), { supervisorId: supervisorData.id, pin: supervisorData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateSupervisorSession(supervisorData.id, sessionId);
-            await minLoadingDelay;
             setCurrentSupervisor(supervisorData);
             setView('admin_dashboard');
             showToast(`مرحباً بك يا ${supervisorData.name} (مشرف)`);
           };
-
-          if (supervisorData.currentSessionId && supervisorData.currentSessionId !== sessionId && isSessionActive(supervisorData.lastActive, currentOffset)) {
-            await initiateSessionRequest('supervisors', supervisorData.id, supervisorData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -832,21 +666,20 @@ export function useGarageApp() {
         if (!delegateSnap.empty) {
           const delegateData = { id: delegateSnap.docs[0].id, ...delegateSnap.docs[0].data() } as any;
 
+          if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
+
           const proceed = async () => {
             if (auth.currentUser) {
               await setDoc(doc(db, 'delegate_sessions', auth.currentUser.uid), { delegateId: delegateData.id, pin: delegateData.pin, createdAt: serverTimestamp() });
             }
             await firestoreService.updateDelegateSession(delegateData.id, sessionId);
-            await minLoadingDelay;
             setDelegate(delegateData);
             setView('delegate_dashboard');
             showToast(`مرحباً بك يا ${delegateData.name}`);
           };
-
-          if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
-            await initiateSessionRequest('delegates', delegateData.id, delegateData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -856,6 +689,11 @@ export function useGarageApp() {
         const staffSnap = await getDocs(query(collection(db, 'staff'), where('pin', '==', normalizedInput), limit(1)));
         if (!staffSnap.empty) {
           const staffData = { id: staffSnap.docs[0].id, ...staffSnap.docs[0].data() } as any;
+
+          if (staffData.currentSessionId && staffData.currentSessionId !== sessionId && isSessionActive(staffData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
 
           const proceed = async () => {
             const gSnap = await getDoc(doc(db, 'garages', staffData.garageId));
@@ -871,12 +709,11 @@ export function useGarageApp() {
               }
               await firestoreService.updateStaffSession(staffData.id, sessionId);
 
-              // Fetch fresh server data & wait for min 5s loading delay
+              // Fetch fresh server data
               const [activeV, todayT, sList] = await Promise.all([
                 firestoreService.getVehiclesInsideOnce(linkedGarage.id),
                 firestoreService.getTodayTransactionsOnce(linkedGarage.id),
-                firestoreService.getStaffByGarageOnce(linkedGarage.id),
-                minLoadingDelay
+                firestoreService.getStaffByGarageOnce(linkedGarage.id)
               ]);
 
               setVehicles(activeV);
@@ -888,11 +725,6 @@ export function useGarageApp() {
               showToast(`مرحباً بك يا ${staffData.name}`);
             }
           };
-
-          if (staffData.currentSessionId && staffData.currentSessionId !== sessionId && isSessionActive(staffData.lastActive, currentOffset)) {
-            await initiateSessionRequest('staff', staffData.id, staffData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -907,18 +739,22 @@ export function useGarageApp() {
             return 'blocked';
           }
 
+          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
+
           const proceed = async () => {
             if (auth.currentUser) {
               await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
 
-            // Fetch fresh server data & wait for min 5s loading delay
+            // Fetch fresh server data
             const [activeV, todayT, sList] = await Promise.all([
               firestoreService.getVehiclesInsideOnce(garageData.id),
               firestoreService.getTodayTransactionsOnce(garageData.id),
-              firestoreService.getStaffByGarageOnce(garageData.id),
-              minLoadingDelay
+              firestoreService.getStaffByGarageOnce(garageData.id)
             ]);
 
             setVehicles(activeV);
@@ -928,11 +764,6 @@ export function useGarageApp() {
             setCurrentStaff(null);
             setView('garage');
           };
-
-          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
-            await initiateSessionRequest('garages', garageData.id, garageData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -948,18 +779,22 @@ export function useGarageApp() {
             return 'blocked';
           }
 
+          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
+            showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
+            return 'blocked';
+          }
+
           const proceed = async () => {
             if (auth.currentUser) {
               await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
 
-            // Fetch fresh server data & wait for min 5s loading delay
+            // Fetch fresh server data
             const [activeV, todayT, sList] = await Promise.all([
               firestoreService.getVehiclesInsideOnce(garageData.id),
               firestoreService.getTodayTransactionsOnce(garageData.id),
-              firestoreService.getStaffByGarageOnce(garageData.id),
-              minLoadingDelay
+              firestoreService.getStaffByGarageOnce(garageData.id)
             ]);
 
             setVehicles(activeV);
@@ -969,11 +804,6 @@ export function useGarageApp() {
             setCurrentStaff(null);
             setView('garage');
           };
-
-          if (garageData.currentSessionId && garageData.currentSessionId !== sessionId && isSessionActive(garageData.lastActive, currentOffset)) {
-            await initiateSessionRequest('garages', garageData.id, garageData, proceed);
-            return 'blocked';
-          }
 
           await proceed();
           return true;
@@ -1016,6 +846,8 @@ export function useGarageApp() {
         showToast('رقم الموبايل غير مسجل كمندوب', 'error');
       } else if (delegateData.pin !== pin) {
         showToast('رمز الدخول غير صحيح', 'error');
+      } else if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
+        showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
       } else {
         const proceed = async () => {
           if (auth.currentUser) {
@@ -1026,12 +858,6 @@ export function useGarageApp() {
           setView('delegate_dashboard');
           showToast(`مرحباً بك يا ${delegateData.name}`);
         };
-
-        if (delegateData.currentSessionId && delegateData.currentSessionId !== sessionId && isSessionActive(delegateData.lastActive, currentOffset)) {
-          await initiateSessionRequest('delegates', delegateData.id, delegateData, proceed);
-          setIsLoading(false);
-          return;
-        }
 
         await proceed();
       }
@@ -1686,14 +1512,7 @@ export function useGarageApp() {
     setSubscriberWarningPlate,
     pendingCheckInType,
     setPendingCheckInType,
-    isWaitingForApproval,
-    setIsWaitingForApproval,
-    pendingApprovalRequest,
-    setPendingApprovalRequest,
     now,
-    serverTimeOffset,
-    setServerTimeOffset,
-    fetchServerTimeOffset,
     isOnline,
     showOfflineScreen,
     inputRef,
@@ -1713,8 +1532,6 @@ export function useGarageApp() {
     updateGarageRate,
     createNewGarage,
     addDelegate,
-    removeDelegate,
-    handleAcceptApprovalRequest,
-    handleRejectApprovalRequest
+    removeDelegate
   };
 }

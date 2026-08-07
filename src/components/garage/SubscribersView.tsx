@@ -865,9 +865,11 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
                         <p className="font-black text-slate-900 dark:text-white text-sm group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">{opt.label}</p>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">ينتهي في: <span className="text-slate-600 dark:text-slate-300 font-extrabold">{previewDateStr}</span></p>
                       </div>
-                      <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-slate-900 dark:text-white font-black text-xs transition-colors shrink-0 border border-slate-100 dark:border-slate-700/50 group-hover:border-blue-600">
-                        {opt.costUnits} وحدات
-                      </div>
+                      {!isSubscriptionModel && (
+                        <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-slate-900 dark:text-white font-black text-xs transition-colors shrink-0 border border-slate-100 dark:border-slate-700/50 group-hover:border-blue-600">
+                          {opt.costUnits} وحدات
+                        </div>
+                      )}
                     </button>
                   );
                 })}
