@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Delete } from 'lucide-react';
+import { Delete, Lock } from 'lucide-react';
 import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, formatPlateLetters, resolveShimmerColor } from '../../utils';
 import { Garage, Vehicle } from '../../types';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
@@ -19,6 +19,7 @@ interface RegistrationCardProps {
   closeKeyboard: () => void;
   inputRef: React.RefObject<HTMLDivElement>;
   shimmerActive?: boolean;
+  isBalanceOut?: boolean;
 }
 
 export const RegistrationCard = memo(({
@@ -33,7 +34,8 @@ export const RegistrationCard = memo(({
   onCheckOut,
   closeKeyboard,
   inputRef,
-  shimmerActive = false
+  shimmerActive = false,
+  isBalanceOut = false
 }: RegistrationCardProps) => {
   const { theme } = useTheme();
   const activeShimmerColor = resolveShimmerColor(garage?.shimmerColor, theme);
@@ -177,83 +179,111 @@ export const RegistrationCard = memo(({
                   <div className="absolute bottom-2 md:bottom-4 left-1/2 -translate-x-1/2 w-12 md:w-20 h-1.5 md:h-2.5 bg-slate-900 rounded-full animate-pulse" />
                 )}
               </div>
-            </div>
- 
-            {(() => {
+            </div>            {(() => {
               const raw = getRawPlate(newPlateNumber);
               const isValid = isPlateValid(newPlateNumber);
- 
+
+              // Find if vehicle matching this plate is currently inside
+              const existing = (isValid && raw)
+                ? vehicles.find(v => getRawPlate(v.plateNumberRaw) === raw && v.status === 'inside')
+                : undefined;
+
+              // 1. If car is inside, ALWAYS allow check-out (even if subscription/balance is out)
+              if (existing) {
+                return (
+                  <div className="overflow-hidden mt-2">
+                    <button 
+                      onClick={() => {
+                        closeKeyboard();
+                        setNewPlateNumber('');
+                        onCheckOut(existing);
+                      }}
+                      className="w-full py-4 md:py-8 bg-red-500 text-white rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 transition-all outline-none md:scale-[1.01] hover:bg-red-600 active:scale-[0.99] shadow-sm"
+                    >
+                      <div className="text-lg md:text-2xl font-black tracking-tight">إصدار فاتورة خروج</div>
+                      <span className="text-[10px] md:text-sm opacity-90 font-bold uppercase tracking-widest">السيارة موجودة حالياً بالداخل</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              // 2. If subscription/balance is expired and car is not inside, show locked check-in notice
+              if (isBalanceOut) {
+                const isSub = garage.billingModel === 'subscription';
+                return (
+                  <div className="mt-3 p-4 md:p-6 bg-red-500/10 dark:bg-red-500/10 border-2 border-red-500/30 rounded-2xl md:rounded-[2rem] text-center flex flex-col items-center justify-center gap-2 transition-all">
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500">
+                      <Lock className="w-5 h-5 md:w-6 md:h-6" />
+                    </div>
+                    <div className="text-base md:text-xl font-black text-red-600 dark:text-red-400">
+                      {isSub ? 'برجاء تفعيل الاشتراك' : 'برجاء شحن الرصيد'}
+                    </div>
+                    <p className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-400">
+                      {isSub 
+                        ? 'انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.'
+                        : 'رصيدك غير كافٍ، يرجى شحن باقة جديدة لتسجيل دخول سيارات جديدة.'}
+                    </p>
+
+                    {isInputFocused && (
+                      <div className="mt-4 md:mt-8 w-full">
+                        <LicensePlateKeyboard 
+                          onKeyPress={handleVirtualKeyPress}
+                          currentValue={newPlateNumber}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // 3. Normal check-in controls
               if (isInputFocused || (newPlateNumber && isValid)) {
-                // Only find existing inside-vehicle if plate number is valid (has at least 1 letter and 1 number) and raw is not empty.
-                // This prevents empty or incomplete entries from accidentally matching empty/corrupt DB records.
-                const existing = (isValid && raw)
-                  ? vehicles.find(v => getRawPlate(v.plateNumberRaw) === raw && v.status === 'inside')
-                  : undefined;
-                
                 return (
                   <div className="overflow-hidden">
-                    {existing ? (
-                      <div className="mt-2">
-                        <button 
-                          onClick={() => {
-                            closeKeyboard();
-                            setNewPlateNumber('');
-                            onCheckOut(existing);
-                          }}
-                          className="w-full py-4 md:py-8 bg-red-500 text-white rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 transition-all outline-none md:scale-[1.01] hover:bg-red-600 active:scale-[0.99] shadow-sm"
-                        >
-                          <div className="text-lg md:text-2xl font-black tracking-tight">إصدار فاتورة خروج</div>
-                          <span className="text-[10px] md:text-sm opacity-90 font-bold uppercase tracking-widest">السيارة موجودة حالياً بالداخل</span>
-                        </button>
+                    <div className="flex gap-4 mt-1">
+                      <button 
+                        disabled={!isValid}
+                        onClick={() => {
+                          closeKeyboard();
+                          handleCheckIn('hourly');
+                        }}
+                        className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
+                          isValid 
+                            ? 'bg-white dark:bg-slate-900 border-2 md:border-3 border-slate-900 dark:border-slate-100 text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-[0.98]' 
+                            : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        <div className="text-base md:text-2xl uppercase tracking-tight font-black">ساعة</div>
+                        <span className={`text-[10px] md:text-xs font-black tracking-widest ${
+                          isValid ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400/70 dark:text-slate-700'
+                        }`}>{garage.hourlyRate} ج.م / ساعة</span>
+                      </button>
+                      <button 
+                        disabled={!isValid}
+                        onClick={() => {
+                          closeKeyboard();
+                          handleCheckIn('overnight');
+                        }}
+                        className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
+                          isValid 
+                            ? 'bg-emerald-600 dark:bg-emerald-600 border-2 md:border-3 border-emerald-700 dark:border-emerald-500 text-white font-black hover:bg-emerald-700 dark:hover:bg-emerald-600/90 active:scale-[0.98]' 
+                            : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        <div className="text-base md:text-2xl uppercase tracking-tight font-black">مبيت</div>
+                        <span className={`text-[10px] md:text-xs font-black tracking-widest ${
+                          isValid ? 'text-slate-950/80 dark:text-slate-950/85' : 'text-slate-400/70 dark:text-slate-700'
+                        }`}> {garage.overnightRate} ج.م مبيت</span>
+                      </button>
+                    </div>
+
+                    {isInputFocused && (
+                      <div className="mt-4 md:mt-8">
+                        <LicensePlateKeyboard 
+                          onKeyPress={handleVirtualKeyPress}
+                          currentValue={newPlateNumber}
+                        />
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex gap-4 mt-1">
-                          <button 
-                            disabled={!isValid}
-                            onClick={() => {
-                              closeKeyboard();
-                              handleCheckIn('hourly');
-                            }}
-                            className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
-                              isValid 
-                                ? 'bg-white dark:bg-slate-900 border-2 md:border-3 border-slate-900 dark:border-slate-100 text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-[0.98]' 
-                                : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
-                            }`}
-                          >
-                            <div className="text-base md:text-2xl uppercase tracking-tight font-black">ساعة</div>
-                            <span className={`text-[10px] md:text-xs font-black tracking-widest ${
-                              isValid ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400/70 dark:text-slate-700'
-                            }`}>{garage.hourlyRate} ج.م / ساعة</span>
-                          </button>
-                          <button 
-                            disabled={!isValid}
-                            onClick={() => {
-                              closeKeyboard();
-                              handleCheckIn('overnight');
-                            }}
-                            className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
-                              isValid 
-                                ? 'bg-emerald-600 dark:bg-emerald-600 border-2 md:border-3 border-emerald-700 dark:border-emerald-500 text-white font-black hover:bg-emerald-700 dark:hover:bg-emerald-600/90 active:scale-[0.98]' 
-                                : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
-                            }`}
-                          >
-                            <div className="text-base md:text-2xl uppercase tracking-tight font-black">مبيت</div>
-                            <span className={`text-[10px] md:text-xs font-black tracking-widest ${
-                              isValid ? 'text-slate-950/80 dark:text-slate-950/85' : 'text-slate-400/70 dark:text-slate-700'
-                            }`}> {garage.overnightRate} ج.م مبيت</span>
-                          </button>
-                        </div>
- 
-                        {isInputFocused && (
-                          <div className="mt-4 md:mt-8">
-                            <LicensePlateKeyboard 
-                              onKeyPress={handleVirtualKeyPress}
-                              currentValue={newPlateNumber}
-                            />
-                          </div>
-                        )}
-                      </>
                     )}
                   </div>
                 );

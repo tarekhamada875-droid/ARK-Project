@@ -12,7 +12,8 @@ import {
   ChevronDown,
   Bell,
   PieChart,
-  Sliders
+  Sliders,
+  AlertTriangle
 } from 'lucide-react';
 import { FlipNumber } from '../ui/FlipNumber';
 import { AnimatedCounter } from '../AnimatedCounter';
@@ -145,8 +146,49 @@ export const GarageDashboardView = memo(({
 
   const showBalanceWarning = isSubscription ? (availableVehicles <= 3) : (availableVehicles < 50);
   const warningText = isSubscription 
-    ? (availableVehicles <= 0 ? 'انتهى اشتراك الجراج' : 'باقي أيام قليلة على انتهاء الاشتراك')
+    ? (availableVehicles <= 0 
+        ? 'انتهى اشتراك الجراج' 
+        : availableVehicles === 1 
+        ? 'ينتهي الاشتراك اليوم! يرجى الشحن قبل 5 مساءً' 
+        : availableVehicles === 2 
+        ? 'متبقي يومان على انتهاء الاشتراك' 
+        : 'باقي أيام قليلة على انتهاء الاشتراك')
     : (availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص');
+
+  // Popup state for subscription ending today
+  const [showLastDaySubModal, setShowLastDaySubModal] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isSubscription) return;
+    if (availableVehicles > 1) return; // Only trigger for last day (1 day or 0 day before lock)
+
+    const checkPopup = () => {
+      const currentHour = new Date().getHours();
+      // Charging hours scope: 10 AM (10) to 5 PM (17)
+      if (currentHour >= 10 && currentHour < 17) {
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const storageKey = `last_sub_alert_${garage.id}_${dateStr}`;
+        const lastShown = localStorage.getItem(storageKey);
+        const twoHoursMs = 2 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        if (!lastShown || (now - Number(lastShown) >= twoHoursMs)) {
+          setShowLastDaySubModal(true);
+        }
+      }
+    };
+
+    checkPopup();
+    const interval = setInterval(checkPopup, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isSubscription, availableVehicles, garage.id]);
+
+  const handleCloseSubModal = () => {
+    setShowLastDaySubModal(false);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const storageKey = `last_sub_alert_${garage.id}_${dateStr}`;
+    localStorage.setItem(storageKey, Date.now().toString());
+  };
 
   React.useEffect(() => {
     const diff = availableVehicles - prevVehiclesRef.current;
@@ -515,12 +557,22 @@ export const GarageDashboardView = memo(({
         {/* Persistent, always mounted Balance Card to prevent unmount navigation glitches */}
         {(!isInputFocused || currentView !== 'main') && (
           <div className="flex gap-4 shrink-0 w-full select-none" id="persistent_balance_card">
-            <div className={`flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 ${
-              balanceTransition === 'decrease'
-                ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)]'
-                : balanceTransition === 'increase'
-                ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)]'
-                : 'border-slate-200 dark:border-slate-800'
+            <div className={`flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden ${
+              isSubscription
+                ? (availableVehicles <= 1
+                    ? 'bg-red-600 dark:bg-red-700 border-red-700 dark:border-red-600 text-white shadow-md shadow-red-500/20'
+                    : availableVehicles === 2
+                    ? 'bg-red-500/10 dark:bg-red-950/40 border-red-300 dark:border-red-800/80 text-red-600 dark:text-red-400'
+                    : balanceTransition === 'decrease'
+                    ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900'
+                    : balanceTransition === 'increase'
+                    ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900'
+                    : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800')
+                : (balanceTransition === 'decrease'
+                    ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900'
+                    : balanceTransition === 'increase'
+                    ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900'
+                    : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800')
             }`}>
               {/* Moving Arrows overlay */}
               <MovingBalanceArrows transitionType={balanceTransition} />
@@ -528,7 +580,11 @@ export const GarageDashboardView = memo(({
               <div className="py-1 flex items-center justify-center overflow-visible z-10">
                 {isSubscription ? (
                   <div className={`text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ${
-                    balanceTransition === 'decrease'
+                    availableVehicles <= 1
+                      ? 'text-white'
+                      : availableVehicles === 2
+                      ? 'text-red-600 dark:text-red-400'
+                      : balanceTransition === 'decrease'
                       ? 'text-red-600 dark:text-red-400'
                       : balanceTransition === 'increase'
                       ? 'text-emerald-600 dark:text-emerald-400'
@@ -558,7 +614,11 @@ export const GarageDashboardView = memo(({
               </div>
               {showBalanceWarning && (
                 <p className={`text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ${
-                  balanceTransition === 'decrease'
+                  isSubscription && availableVehicles <= 1
+                    ? 'text-white/90 font-black'
+                    : isSubscription && availableVehicles === 2
+                    ? 'text-red-600 dark:text-red-400'
+                    : balanceTransition === 'decrease'
                     ? 'text-red-600 dark:text-red-400'
                     : balanceTransition === 'increase'
                     ? 'text-emerald-600 dark:text-emerald-400'
@@ -575,33 +635,24 @@ export const GarageDashboardView = memo(({
 
         {currentView === 'main' ? (
           <>
-            {!isBalanceOut ? (
-              <RegistrationCard 
-                newPlateNumber={newPlateNumber}
-                setNewPlateNumber={setNewPlateNumber}
-                isInputFocused={isInputFocused}
-                setIsInputFocused={setIsInputFocused}
-                plateInputRef={plateInputRef}
-                vehicles={vehicles}
-                garage={garage}
-                handleCheckIn={handleCheckIn}
-                onCheckOut={(v) => {
-                  setSelectedVehicle(v);
-                  setShowCheckOutModal(true);
-                }}
-                closeKeyboard={closeKeyboard}
-                inputRef={inputRef}
-                shimmerActive={true}
-              />
-            ) : (
-              <div className="bg-[#faf9f6] dark:bg-slate-900 border-2 border-red-100 dark:border-red-900/30 rounded-[2rem] p-8 md:p-12 text-center transition-colors w-full">
-                <p className="text-base md:text-xl font-bold text-slate-900 dark:text-white leading-relaxed">
-                  {isSubscription 
-                    ? 'انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.'
-                    : 'رصيدك خلص اختار باقتك من صفحة الباقات و اشحنها مع المندوب الخاص بيك'}
-                </p>
-              </div>
-            )}
+            <RegistrationCard 
+              newPlateNumber={newPlateNumber}
+              setNewPlateNumber={setNewPlateNumber}
+              isInputFocused={isInputFocused}
+              setIsInputFocused={setIsInputFocused}
+              plateInputRef={plateInputRef}
+              vehicles={vehicles}
+              garage={garage}
+              handleCheckIn={handleCheckIn}
+              onCheckOut={(v) => {
+                setSelectedVehicle(v);
+                setShowCheckOutModal(true);
+              }}
+              closeKeyboard={closeKeyboard}
+              inputRef={inputRef}
+              shimmerActive={true}
+              isBalanceOut={isBalanceOut}
+            />
 
             {!isInputFocused && (
               <div className="bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-[2rem] overflow-hidden flex flex-col items-center pt-4 md:pt-10 transition-colors w-full shadow-sm relative">
@@ -888,6 +939,69 @@ export const GarageDashboardView = memo(({
               >
                 إغلاق النافذة
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Expiry Alert Modal (Last Day Alert) */}
+      {showLastDaySubModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/70 dark:bg-slate-950/85 z-[120] flex items-center justify-center p-4 animate-fade-in"
+          onClick={handleCloseSubModal}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-slate-900 border-2 border-red-500/30 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden text-right"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            {/* Background glow accent */}
+            <div className="absolute top-0 right-1/2 translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            {/* Close button */}
+            <button
+              onClick={handleCloseSubModal}
+              className="absolute top-4 left-4 w-9 h-9 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-full flex items-center justify-center transition-colors outline-none"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Content */}
+            <div className="text-center mt-2">
+              <div className="w-16 h-16 bg-red-500/15 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-red-500/20 shadow-sm">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+
+              <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white mb-2">
+                تنبيه انتهاء الاشتراك
+              </h3>
+
+              <p className="text-sm md:text-base font-black text-red-600 dark:text-red-400 mb-4 leading-relaxed bg-red-50 dark:bg-red-950/40 p-4 rounded-2xl border border-red-200 dark:border-red-900/50 shadow-inner">
+                إشتراكك هينتهى النهاردة الحق اشحن قبل الساعة 5 علشان تقدر تكمل شغل
+              </p>
+
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                يرجى طلب تجديد الاشتراك من باقات الاشتراكات مع المندوب الخاص بك لتجنب توقف الخدمة.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <button
+                  onClick={() => {
+                    handleCloseSubModal();
+                    setShowPackages(true);
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white py-3.5 px-6 rounded-2xl font-black text-sm md:text-base transition-all shadow-lg shadow-red-600/20 uppercase tracking-wider block outline-none"
+                >
+                  طلب تجديد الاشتراك الآن
+                </button>
+
+                <button
+                  onClick={handleCloseSubModal}
+                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 px-6 rounded-2xl font-bold text-xs transition-all outline-none"
+                >
+                  تذكيري لاحقاً
+                </button>
+              </div>
             </div>
           </div>
         </div>

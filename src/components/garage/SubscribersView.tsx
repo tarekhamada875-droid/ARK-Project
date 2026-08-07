@@ -37,7 +37,28 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   const isSubscriptionModel = garage.billingModel === 'subscription';
   const currentBalance = garage.balance || 0;
   const commission = garage.commissionPerVehicle || 1;
-  const availableVehicles = isSubscriptionModel ? 999999 : Math.max(0, Math.floor(currentBalance / commission));
+
+  const isSubscriptionExpired = React.useMemo(() => {
+    if (!isSubscriptionModel) return false;
+    if (!garage.balanceExpiry) return true;
+    const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+    return expiryDate < new Date();
+  }, [isSubscriptionModel, garage.balanceExpiry]);
+
+  const availableVehicles = React.useMemo(() => {
+    if (isSubscriptionModel) {
+      if (isSubscriptionExpired) return 0;
+      const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+      const now = new Date();
+      const diffTime = expiryDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return Math.max(0, diffDays);
+    } else {
+      return Math.max(0, Math.floor(currentBalance / commission));
+    }
+  }, [isSubscriptionModel, isSubscriptionExpired, garage.balanceExpiry, garage.balance, garage.commissionPerVehicle]);
+
+  const isBalanceOut = availableVehicles <= 0;
 
   const [balanceTransition, setBalanceTransition] = useState<'increase' | 'decrease' | null>(null);
   const prevVehiclesRef = React.useRef(availableVehicles);
@@ -197,6 +218,15 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   };
 
   const handleOpenAdd = () => {
+    if (isBalanceOut || (isSubscriptionModel && isSubscriptionExpired)) {
+      showToast(
+        isSubscriptionModel 
+          ? 'عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتمكين إضافة المشتركين.' 
+          : 'عفواً، لا يوجد رصيد كافٍ (الحد الأدنى 5 وحدات). برجاء شحن الرصيد أولاً.', 
+        'error'
+      );
+      return;
+    }
     setEditingSubscriber(null);
     setPlateNumber('');
     setOwnerName('');
@@ -244,13 +274,27 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   };
 
   const handleOpenRenew = (s: Subscriber) => {
+    if (isBalanceOut || (isSubscriptionModel && isSubscriptionExpired)) {
+      showToast(
+        isSubscriptionModel 
+          ? 'عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتجديد المشتركين.' 
+          : 'عفواً، لا يوجد رصيد كافٍ. برجاء شحن الرصيد أولاً.', 
+        'error'
+      );
+      return;
+    }
     setActiveSubscriberForRenew(s);
     setShowRenewModal(true);
   };
 
   const handleConfirmRenew = async (type: 'week' | 'two_weeks' | 'month', costUnits: number) => {
     if (!activeSubscriberForRenew) return;
-    
+
+    if (isSubscriptionModel && isSubscriptionExpired) {
+      showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً.', 'error');
+      return;
+    }
+
     if (!isSubscriptionModel) {
       const requiredDeduction = costUnits * commission;
       if (currentBalance < requiredDeduction) {
@@ -301,8 +345,12 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
       return;
     }
 
-    if (!editingSubscriber && !isSubscriptionModel) {
-      if (availableVehicles < 5) {
+    if (!editingSubscriber) {
+      if (isSubscriptionModel && isSubscriptionExpired) {
+        showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً.', 'error');
+        return;
+      }
+      if (!isSubscriptionModel && availableVehicles < 5) {
         showToast('عفواً، لا يوجد رصيد كافٍ للعملية (الحد الأدنى 5 وحدات لإضافة مشترك)', 'error');
         return;
       }

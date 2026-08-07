@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { Package } from '../../types';
-import { X, Menu, Tag, Gift } from 'lucide-react';
+import { X, Menu, Tag, Gift, Clock } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -133,14 +133,23 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
           </div>
 
           {/* Wallet Number Card */}
-          <div className="mb-6 p-4 sm:p-8 bg-slate-900 dark:bg-slate-900 rounded-[2rem] border-4 border-amber-500 dark:border-amber-500/50 flex flex-col items-center text-center gap-4 relative overflow-hidden">
-             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-amber-400/10 via-transparent to-transparent opacity-50" />
-             <div className="relative z-10 w-full">
-                <p className="text-sm font-black text-amber-500 uppercase tracking-[0.2em] mb-4">رقم المحفظة</p>
-                <div className="flex items-center justify-center" dir="ltr">
+          <div className="mb-6 p-4 sm:p-7 bg-slate-900 dark:bg-slate-900 rounded-[2rem] border-4 border-amber-500 dark:border-amber-500/50 flex flex-col items-center text-center relative overflow-hidden shadow-xl">
+             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-amber-400/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+             <div className="relative z-10 w-full flex flex-col items-center">
+                <p className="text-sm font-black text-amber-500 uppercase tracking-[0.2em] mb-3">رقم المحفظة</p>
+                <div className="flex items-center justify-center w-full" dir="ltr">
                    <span className="text-[9vw] sm:text-7xl font-black text-white font-mono tracking-tighter whitespace-nowrap leading-none transition-all">
                       {walletNumber}
                    </span>
+                </div>
+
+                {/* Divider Line */}
+                <div className="w-full my-4 border-t border-amber-500/30 dark:border-amber-500/30" />
+
+                {/* Charging Hours */}
+                <div className="flex items-center justify-center gap-2 text-amber-400 dark:text-amber-400 text-xs sm:text-sm font-bold tracking-wide">
+                   <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                   <span>مواعيد الشحن من 9 ص لـ 5 م يومياً</span>
                 </div>
              </div>
           </div>
