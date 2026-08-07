@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface BorderShimmerProps {
   isActive: boolean;
@@ -7,7 +7,7 @@ interface BorderShimmerProps {
   color?: string;
 }
 
-export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28, ry = 28, color = '#10b981' }) => {
+export const BorderShimmer: React.FC<BorderShimmerProps> = memo(({ isActive, rx = 28, ry = 28, color = '#10b981' }) => {
   if (!isActive) return null;
 
   // Stable unique ID for SVG gradient definitions
@@ -90,4 +90,4 @@ export const BorderShimmer: React.FC<BorderShimmerProps> = ({ isActive, rx = 28,
       </svg>
     </div>
   );
-};
+});

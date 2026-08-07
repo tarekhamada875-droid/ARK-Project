@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { normalizeDigits } from '../../utils';
 import { NumericKeypad } from '../ui/NumericKeypad';
@@ -18,7 +18,7 @@ interface AdminLoginViewProps {
   correctAdminPin: string;
 }
 
-export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
+export const AdminLoginView: React.FC<AdminLoginViewProps> = memo(({
   adminPin,
   setAdminPin,
   setView,
@@ -137,4 +137,4 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
       </div>
     </div>
   );
-};
+});

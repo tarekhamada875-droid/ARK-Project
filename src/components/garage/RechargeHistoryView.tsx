@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { X, Zap, Clock, User, Menu } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { ActivityLog, Garage } from '../../types';
@@ -10,7 +10,7 @@ interface RechargeHistoryViewProps {
   onToggleMenu?: () => void;
 }
 
-export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast, onToggleMenu }: RechargeHistoryViewProps) => {
+export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToast, onToggleMenu }: RechargeHistoryViewProps) => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -192,4 +192,4 @@ export const RechargeHistoryView = ({ garage, onClose, showToast: _showToast, on
       </main>
     </div>
   );
-};
+});

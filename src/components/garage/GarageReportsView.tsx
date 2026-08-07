@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { 
   X, 
   RefreshCw, 
@@ -23,7 +23,7 @@ interface GarageReportsViewProps {
   onToggleMenu?: () => void;
 }
 
-export const GarageReportsView = ({
+export const GarageReportsView = memo(({
   garage,
   vehiclesInside,
   todayExitedVehicles,
@@ -364,4 +364,4 @@ export const GarageReportsView = ({
       </div>
     </div>
   );
-};
+});

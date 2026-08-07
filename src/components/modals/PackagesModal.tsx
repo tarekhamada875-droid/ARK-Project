@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Package } from '../../types';
 import { X, Menu, Tag, Gift } from 'lucide-react';
 
@@ -14,7 +14,7 @@ interface PackagesModalProps {
   hasMonthlySubscribers?: boolean;
 }
 
-export const PackagesModal: React.FC<PackagesModalProps> = ({ 
+export const PackagesModal: React.FC<PackagesModalProps> = memo(({ 
   packages, 
   onClose, 
   garageHourlyRate, 
@@ -322,4 +322,4 @@ export const PackagesModal: React.FC<PackagesModalProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Vehicle } from '../../types';
 
@@ -9,7 +9,7 @@ interface DeleteVehicleConfirmModalProps {
   onCancel: () => void;
 }
 
-export const DeleteVehicleConfirmModal: React.FC<DeleteVehicleConfirmModalProps> = ({
+export const DeleteVehicleConfirmModal: React.FC<DeleteVehicleConfirmModalProps> = memo(({
   vehicle,
   isLoading,
   onConfirm,
@@ -52,4 +52,4 @@ export const DeleteVehicleConfirmModal: React.FC<DeleteVehicleConfirmModalProps>
       </div>
     </div>
   );
-};
+});

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Delete, Loader2 } from 'lucide-react';
 import { normalizeDigits } from '../../utils';
 
@@ -8,7 +8,7 @@ interface LogoutConfirmModalProps {
   correctPin: string;
 }
 
-export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
+export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   onConfirm,
   onCancel,
   correctPin
@@ -175,4 +175,4 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
       </div>
     </div>
   );
-};
+});

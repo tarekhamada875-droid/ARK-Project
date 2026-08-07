@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, memo } from 'react';
 
 interface AnimatedCounterProps {
   value: number;
@@ -8,7 +8,7 @@ interface AnimatedCounterProps {
   disableColorChange?: boolean;
 }
 
-export const AnimatedCounter: React.FC<AnimatedCounterProps> = ({ 
+export const AnimatedCounter: React.FC<AnimatedCounterProps> = memo(({ 
   value, 
   duration = 800, 
   formatter = (val) => Math.floor(val).toString(),
@@ -169,5 +169,5 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
       )}
     </span>
   );
-};
+});
 

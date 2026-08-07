@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { 
   LogOut, 
   Moon, 
@@ -22,7 +22,7 @@ interface GeneralManagerDashboardProps {
   onLogout: () => void;
 }
 
-export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = ({
+export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = memo(({
   currentGeneralManager,
   allGarages,
   onLogout
@@ -32,9 +32,11 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
   const today = new Date().toISOString().split('T')[0];
 
   // Filter garages that are assigned to this general manager
-  const assignedGarages = allGarages.filter(g => 
-    (currentGeneralManager.garageIds || []).includes(g.id)
-  );
+  const assignedGarages = useMemo(() => {
+    return allGarages.filter(g => 
+      (currentGeneralManager.garageIds || []).includes(g.id)
+    );
+  }, [allGarages, currentGeneralManager.garageIds]);
 
   // Keep track of currently selected garage id
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null);
@@ -348,4 +350,4 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = (
       </main>
     </div>
   );
-};
+});

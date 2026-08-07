@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { ChevronRight, Delete } from 'lucide-react';
 import { Spinner } from '../ui/Spinner';
 import { normalizeDigits } from '../../utils';
@@ -16,7 +16,7 @@ interface LoginViewProps {
   closeKeyboard: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({
+export const LoginView: React.FC<LoginViewProps> = memo(({
   loginPhone,
   setLoginPhone,
   handleGarageLogin,
@@ -149,4 +149,4 @@ export const LoginView: React.FC<LoginViewProps> = ({
       </div>
     </div>
   );
-};
+});

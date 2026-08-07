@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface EgyptianPlateProps {
   plateNumber: string;
@@ -9,7 +9,7 @@ interface EgyptianPlateProps {
   customSizeClasses?: string;
 }
 
-export const EgyptianPlate: React.FC<EgyptianPlateProps> = ({ 
+export const EgyptianPlate: React.FC<EgyptianPlateProps> = memo(({ 
   plateNumber, 
   className = '', 
   size = 'md',
@@ -101,4 +101,4 @@ export const EgyptianPlate: React.FC<EgyptianPlateProps> = ({
       <div className="absolute top-[50%] right-1.5 w-1.5 h-1.5 bg-slate-200 dark:bg-slate-300 rounded-full" />
     </div>
   );
-};
+});

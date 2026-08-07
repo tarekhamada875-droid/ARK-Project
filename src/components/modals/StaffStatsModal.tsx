@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Users, X, Car, Menu } from 'lucide-react';
 import { Staff, Vehicle } from '../../types';
 import { safeDate } from '../../utils';
@@ -12,7 +12,7 @@ interface StaffStatsModalProps {
   onToggleMenu?: () => void;
 }
 
-export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
+export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
   staffList,
   vehiclesInside,
   todayExitedVehicles,
@@ -119,4 +119,4 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = ({
         </div>
     </div>
   );
-};
+});

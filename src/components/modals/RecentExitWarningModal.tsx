@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Vehicle } from '../../types';
 import { getDuration } from '../../utils';
@@ -10,7 +10,7 @@ interface RecentExitWarningModalProps {
   onCancel: () => void;
 }
 
-export const RecentExitWarningModal: React.FC<RecentExitWarningModalProps> = ({
+export const RecentExitWarningModal: React.FC<RecentExitWarningModalProps> = memo(({
   vehicle,
   now,
   onConfirm,
@@ -58,4 +58,4 @@ export const RecentExitWarningModal: React.FC<RecentExitWarningModalProps> = ({
       </div>
     </div>
   );
-};
+});

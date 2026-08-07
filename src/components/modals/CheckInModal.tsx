@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Clock, Moon, ChevronRight } from 'lucide-react';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { Spinner } from '../ui/Spinner';
@@ -15,7 +15,7 @@ interface CheckInModalProps {
   onCancel: () => void;
 }
 
-export const CheckInModal: React.FC<CheckInModalProps> = ({
+export const CheckInModal: React.FC<CheckInModalProps> = memo(({
   newPlateNumber,
   garage,
   isLoading,
@@ -115,4 +115,4 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       </div>
     </div>
   );
-};
+});

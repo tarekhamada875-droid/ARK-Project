@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface FlipCardProps {
   value: number;
@@ -6,7 +6,7 @@ interface FlipCardProps {
   color?: 'default' | 'success' | 'danger';
 }
 
-export const FlipNumber: React.FC<FlipCardProps> = ({ value, size = 'md', color = 'default' }) => {
+export const FlipNumber: React.FC<FlipCardProps> = memo(({ value, size = 'md', color = 'default' }) => {
   const digits = value.toString().padStart(size === 'sm' ? 1 : 2, '0').split('');
 
   return (
@@ -16,7 +16,7 @@ export const FlipNumber: React.FC<FlipCardProps> = ({ value, size = 'md', color 
       ))}
     </div>
   );
-};
+});
 
 const FlipDigit = React.memo(({ digit, size = 'md', color = 'default' }: { digit: string; size?: 'sm' | 'md' | 'lg'; color?: 'default' | 'success' | 'danger' }) => {
   const sizeClasses = {

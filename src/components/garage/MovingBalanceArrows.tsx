@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MovingBalanceArrowsProps {
   transitionType: 'increase' | 'decrease' | null;
 }
 
-export const MovingBalanceArrows: React.FC<MovingBalanceArrowsProps> = ({ transitionType }) => {
+export const MovingBalanceArrows: React.FC<MovingBalanceArrowsProps> = memo(({ transitionType }) => {
   if (!transitionType) return null;
 
   const isDecrease = transitionType === 'decrease';
@@ -89,4 +89,4 @@ export const MovingBalanceArrows: React.FC<MovingBalanceArrowsProps> = ({ transi
       </div>
     </AnimatePresence>
   );
-};
+});

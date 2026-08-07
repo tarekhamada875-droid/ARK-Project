@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { WifiOff } from 'lucide-react';
 
-export const OfflineView: React.FC = () => {
+export const OfflineView: React.FC = memo(() => {
   return (
     <div className="fixed inset-0 bg-slate-900 z-[10000] flex items-center justify-center p-6 text-center" dir="rtl">
       <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 max-w-sm w-full flex flex-col items-center gap-8 border-4 border-white/10 dark:border-slate-800 transition-colors">
@@ -23,4 +23,4 @@ export const OfflineView: React.FC = () => {
       </div>
     </div>
   );
-};
+});

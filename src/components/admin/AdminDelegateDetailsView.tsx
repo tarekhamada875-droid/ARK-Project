@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { 
   ChevronRight,
   Phone, 
@@ -38,7 +38,7 @@ interface AdminDelegateDetailsViewProps {
   removeDelegate: (id: string) => Promise<any>;
 }
 
-export const AdminDelegateDetailsView = ({
+export const AdminDelegateDetailsView = memo(({
   delegate,
   setView,
   setSelectedDelegate,
@@ -770,4 +770,4 @@ export const AdminDelegateDetailsView = ({
       )}
     </div>
   );
-};
+});

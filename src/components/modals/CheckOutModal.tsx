@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { AlertTriangle, LogOut } from 'lucide-react';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { Spinner } from '../ui/Spinner';
@@ -17,7 +17,7 @@ interface CheckOutModalProps {
   onCancel: () => void;
 }
 
-export const CheckOutModal: React.FC<CheckOutModalProps> = ({
+export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
   selectedVehicle,
   garage,
   isLoading,
@@ -459,4 +459,4 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
       </motion.div>
     </div>
   );
-};
+});

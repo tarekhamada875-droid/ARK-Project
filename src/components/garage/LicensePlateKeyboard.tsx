@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface LicensePlateKeyboardProps {
   onKeyPress: (key: string) => void;
@@ -18,7 +18,7 @@ const LETTERS = [
   ['ه', 'و', 'ي']
 ];
 
-export const LicensePlateKeyboard: React.FC<LicensePlateKeyboardProps> = ({
+export const LicensePlateKeyboard: React.FC<LicensePlateKeyboardProps> = memo(({
   onKeyPress,
   currentValue,
   compact = false
@@ -41,7 +41,7 @@ export const LicensePlateKeyboard: React.FC<LicensePlateKeyboardProps> = ({
 
     const fontClass = compact 
       ? (isNumber ? 'text-sm sm:text-base md:text-lg font-black' : 'text-base sm:text-lg md:text-xl font-black')
-      : (isNumber ? 'text-xl sm:text-2xl md:text-3xl lg:text-4xl' : 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl');
+      : (isNumber ? 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black' : 'text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black');
 
     return (
       <button
@@ -56,7 +56,7 @@ export const LicensePlateKeyboard: React.FC<LicensePlateKeyboardProps> = ({
         className={`${heightClass} w-full border-slate-100/5 dark:border-slate-200/50 flex items-center justify-center transition-all active:brightness-150 touch-manipulation ${fontClass} ${
           isSelected 
             ? 'bg-emerald-600 text-white z-10 scale-[1.05] border-transparent rounded-md shadow-md' 
-            : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 active:bg-slate-800 dark:active:bg-slate-100 border-[0.5px]'
+            : 'bg-slate-900 dark:bg-white text-white dark:text-black active:bg-slate-800 dark:active:bg-slate-100 border-[0.5px]'
         } ${isDisabled ? 'opacity-20 cursor-not-allowed grayscale' : 'opacity-100'} ${className}`}
       >
         {char}
@@ -100,4 +100,4 @@ export const LicensePlateKeyboard: React.FC<LicensePlateKeyboardProps> = ({
       </div>
     </div>
   );
-};
+});

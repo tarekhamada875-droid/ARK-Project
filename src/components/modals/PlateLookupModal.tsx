@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { motion } from 'motion/react';
 import { 
   X, 
@@ -32,7 +32,7 @@ interface PlateLookupModalProps {
   showToast?: (msg: string, type: 'success' | 'error') => void;
 }
 
-export const PlateLookupModal: React.FC<PlateLookupModalProps> = ({
+export const PlateLookupModal: React.FC<PlateLookupModalProps> = memo(({
   allGarages,
   onClose,
   showToast
@@ -535,4 +535,4 @@ export const PlateLookupModal: React.FC<PlateLookupModalProps> = ({
       </motion.div>
     </div>
   );
-};
+});

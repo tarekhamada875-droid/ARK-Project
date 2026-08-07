@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Smartphone } from 'lucide-react';
 import { Garage } from '../../types';
 
@@ -6,7 +6,7 @@ interface LandscapeMobileViewProps {
   garage: Garage | null;
 }
 
-export const LandscapeMobileView: React.FC<LandscapeMobileViewProps> = ({ garage }) => {
+export const LandscapeMobileView: React.FC<LandscapeMobileViewProps> = memo(({ garage }) => {
   if (garage) {
     return (
       <div className="fixed inset-0 h-screen w-screen flex bg-slate-900 text-white font-sans select-none z-[20000] overflow-hidden" dir="rtl">
@@ -105,4 +105,4 @@ export const LandscapeMobileView: React.FC<LandscapeMobileViewProps> = ({ garage
       </div>
     </div>
   );
-};
+});

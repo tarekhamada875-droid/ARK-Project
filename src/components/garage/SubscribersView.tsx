@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, Menu } from 'lucide-react';
 import { firestoreService, Garage } from '../../services/firestoreService';
 import { auth } from '../../firebase';
@@ -16,7 +16,7 @@ interface SubscribersViewProps {
   onToggleMenu?: () => void;
 }
 
-export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: SubscribersViewProps) => {
+export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu }: SubscribersViewProps) => {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -170,16 +170,18 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
     };
   }, [garage.id, isAuthResolved]);
 
-  const filteredSubscribers = subscribers.filter(s => {
-    const q = normalizeArabicSearch(searchQuery);
-    if (!q) return true;
-    
-    const normalizedPlate = normalizeArabicSearch(s.plateNumber);
-    const normalizedName = normalizeArabicSearch(s.ownerName);
-    const normalizedPhone = normalizeArabicSearch(s.phone);
-    
-    return normalizedPlate.includes(q) || normalizedName.includes(q) || normalizedPhone.includes(q);
-  });
+  const filteredSubscribers = React.useMemo(() => {
+    return subscribers.filter(s => {
+      const q = normalizeArabicSearch(searchQuery);
+      if (!q) return true;
+      
+      const normalizedPlate = normalizeArabicSearch(s.plateNumber);
+      const normalizedName = normalizeArabicSearch(s.ownerName);
+      const normalizedPhone = normalizeArabicSearch(s.phone);
+      
+      return normalizedPlate.includes(q) || normalizedName.includes(q) || normalizedPhone.includes(q);
+    });
+  }, [subscribers, searchQuery]);
 
   const getStatus = (endStr: string) => {
     const end = new Date(endStr);
@@ -880,4 +882,4 @@ export const SubscribersView = ({ garage, onClose, showToast, onToggleMenu }: Su
       )}
     </div>
   );
-};
+});

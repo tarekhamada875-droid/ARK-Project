@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { 
   ChevronRight, 
   Phone, 
@@ -13,7 +13,7 @@ interface DelegateLoginViewProps {
   onBack: () => void;
 }
 
-export const DelegateLoginView: React.FC<DelegateLoginViewProps> = ({ onLogin, isLoading, onBack }) => {
+export const DelegateLoginView: React.FC<DelegateLoginViewProps> = memo(({ onLogin, isLoading, onBack }) => {
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [activeField, setActiveField] = useState<'phone' | 'pin'>('phone');
@@ -146,4 +146,4 @@ export const DelegateLoginView: React.FC<DelegateLoginViewProps> = ({ onLogin, i
       </div>
     </div>
   );
-};
+});

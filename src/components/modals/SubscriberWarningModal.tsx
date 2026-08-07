@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 
@@ -7,7 +7,7 @@ interface SubscriberWarningModalProps {
   onConfirm: () => void;
 }
 
-export const SubscriberWarningModal: React.FC<SubscriberWarningModalProps> = ({
+export const SubscriberWarningModal: React.FC<SubscriberWarningModalProps> = memo(({
   plateNumber,
   onConfirm
 }) => {
@@ -56,4 +56,4 @@ export const SubscriberWarningModal: React.FC<SubscriberWarningModalProps> = ({
       </div>
     </div>
   );
-};
+});

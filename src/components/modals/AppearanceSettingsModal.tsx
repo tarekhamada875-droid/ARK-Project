@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Sun, Moon, Palette, Check, Sparkles, Sliders, Menu } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
@@ -28,7 +28,7 @@ const SHIMMER_COLORS = [
   { value: '#be123c', label: 'أحمر ياقوتي فاخر' }
 ];
 
-export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = ({
+export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = memo(({
   garage = null,
   currentStaff = null,
   onClose,
@@ -292,4 +292,4 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = (
       </div>
     </div>
   );
-};
+});

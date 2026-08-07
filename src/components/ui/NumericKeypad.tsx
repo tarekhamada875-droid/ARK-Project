@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Delete } from 'lucide-react';
 
 interface NumericKeypadProps {
@@ -7,7 +7,7 @@ interface NumericKeypadProps {
   className?: string;
 }
 
-export const NumericKeypad: React.FC<NumericKeypadProps> = ({
+export const NumericKeypad: React.FC<NumericKeypadProps> = memo(({
   onKeyPress,
   onDelete,
   className = ""
@@ -54,4 +54,4 @@ export const NumericKeypad: React.FC<NumericKeypadProps> = ({
       </div>
     </div>
   );
-};
+});

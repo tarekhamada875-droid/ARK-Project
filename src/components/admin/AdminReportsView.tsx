@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
 import { 
   BarChart3, 
   DollarSign, 
@@ -22,7 +22,7 @@ interface AdminReportsViewProps {
   delegates: Delegate[];
 }
 
-export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProps) => {
+export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsViewProps) => {
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
 
@@ -341,4 +341,4 @@ export const AdminReportsView = ({ allGarages, delegates }: AdminReportsViewProp
 
     </div>
   );
-};
+});
