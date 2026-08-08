@@ -37,7 +37,7 @@ import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
-import { generateSafePin, normalizeArabicSearch } from '../../utils';
+import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
 import { AdminReportsView } from './AdminReportsView';
 
@@ -168,7 +168,8 @@ export const AdminDashboard = memo(({
     message: '',
     onConfirm: () => {},
   });
-  const { adminLang, setAdminLang } = useTheme();
+  const { theme, adminLang, setAdminLang } = useTheme();
+  const resolvedAdminColor = resolveShimmerColor(adminColor, theme);
   const t = useAdminTranslation(adminLang);
 
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -511,20 +512,27 @@ export const AdminDashboard = memo(({
         .admin-custom-theme .text-emerald-700,
         .admin-custom-theme .dark\\:text-emerald-400,
         .admin-custom-theme .text-emerald-450 {
-          color: ${adminColor} !important;
+          color: ${resolvedAdminColor} !important;
         }
         .admin-custom-theme .bg-emerald-600,
         .admin-custom-theme .bg-emerald-500,
         .admin-custom-theme .dark\\:bg-emerald-600,
         .admin-custom-theme .dark\\:bg-emerald-500 {
-          background-color: ${adminColor} !important;
+          background-color: ${resolvedAdminColor} !important;
+          color: ${isLightColor(resolvedAdminColor) ? '#0f172a' : '#ffffff'} !important;
+        }
+        .admin-custom-theme .bg-emerald-600 *,
+        .admin-custom-theme .bg-emerald-500 *,
+        .admin-custom-theme .dark\\:bg-emerald-600 *,
+        .admin-custom-theme .dark\\:bg-emerald-500 * {
+          color: ${isLightColor(resolvedAdminColor) ? '#0f172a' : 'inherit'} !important;
         }
         .admin-custom-theme .hover\\:bg-emerald-700:hover,
         .admin-custom-theme .bg-emerald-600:hover,
         .admin-custom-theme .bg-emerald-500:hover,
         .admin-custom-theme .dark\\:bg-emerald-600:hover,
         .admin-custom-theme .dark\\:bg-emerald-500:hover {
-          background-color: ${adminColor}e6 !important;
+          background-color: ${resolvedAdminColor}e6 !important;
           opacity: 0.95;
         }
         .admin-custom-theme .bg-emerald-50,
@@ -534,12 +542,12 @@ export const AdminDashboard = memo(({
         .admin-custom-theme .dark\\:bg-emerald-950\\/40,
         .admin-custom-theme .dark\\:bg-emerald-950\\/45,
         .admin-custom-theme .dark\\:bg-emerald-950\\/10 {
-          background-color: ${adminColor}15 !important;
+          background-color: ${resolvedAdminColor}15 !important;
         }
         .admin-custom-theme .bg-emerald-400\\/10,
         .admin-custom-theme .dark\\:bg-emerald-400\\/5,
         .admin-custom-theme .bg-emerald-50\\/50 {
-          background-color: ${adminColor}1a !important;
+          background-color: ${resolvedAdminColor}1a !important;
         }
         .admin-custom-theme .border-emerald-500,
         .admin-custom-theme .border-emerald-600,
@@ -548,33 +556,33 @@ export const AdminDashboard = memo(({
         .admin-custom-theme .border-emerald-100,
         .admin-custom-theme .dark\\:border-emerald-700\\/80,
         .admin-custom-theme .dark\\:border-emerald-900\\/50 {
-          border-color: ${adminColor}80 !important;
+          border-color: ${resolvedAdminColor}80 !important;
         }
         .admin-custom-theme .border-emerald-500\\/20,
         .admin-custom-theme .border-emerald-400\\/10 {
-          border-color: ${adminColor}20 !important;
+          border-color: ${resolvedAdminColor}20 !important;
         }
         .admin-custom-theme .focus\\:border-emerald-500:focus,
         .admin-custom-theme .focus\\:border-emerald-400:focus {
-          border-color: ${adminColor} !important;
+          border-color: ${resolvedAdminColor} !important;
         }
         .admin-custom-theme .focus\\:ring-emerald-500:focus,
         .admin-custom-theme .focus\\:ring-emerald-400:focus,
         .admin-custom-theme .dark\\:focus\\:ring-emerald-500:focus {
-          --tw-ring-color: ${adminColor} !important;
-          border-color: ${adminColor} !important;
+          --tw-ring-color: ${resolvedAdminColor} !important;
+          border-color: ${resolvedAdminColor} !important;
         }
         .admin-custom-theme .shadow-emerald-500\\/5 {
-          --tw-shadow-color: ${adminColor}1a !important;
+          --tw-shadow-color: ${resolvedAdminColor}1a !important;
           --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -1px var(--tw-shadow-color) !important;
         }
         .admin-custom-theme .from-emerald-500\\/5 {
-          --tw-gradient-from: ${adminColor}0d !important;
+          --tw-gradient-from: ${resolvedAdminColor}0d !important;
           --tw-gradient-to: transparent !important;
           --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
         }
         .admin-custom-theme .dark\\:from-emerald-500\\/5 {
-          --tw-gradient-from: ${adminColor}0d !important;
+          --tw-gradient-from: ${resolvedAdminColor}0d !important;
           --tw-gradient-to: transparent !important;
           --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
         }

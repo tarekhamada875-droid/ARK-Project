@@ -418,8 +418,13 @@ export default function App() {
     );
   }
 
+  const isLoggedIn = Boolean(view && view !== 'login');
+
   return (
-    <div className="w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors">
+    <div 
+      className={`w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors ${isLoggedIn ? 'theme-logged-in' : ''}`}
+      style={{ '--theme-accent-color': resolvedColor } as React.CSSProperties}
+    >
       <ErrorBoundary>
         {toast && (
           <div 

@@ -50,12 +50,12 @@
   }
 
   .dark {
-    --bg-main: #000000; /* Pure black to match the icon background */
+    --bg-main: #000000; /* Pure black top */
     --text-main: #f4f4f5; /* Clean neutral light text */
-    --card-bg: #111112; /* Sleek card background contrasted with black background */
+    --card-bg: #111112; /* Sleek card background contrasted with grid background */
     --card-border: #1e1e1f; /* Fine neutral border */
 
-    /* Override standard tailwind slate colors to match pure black dark style */
+    /* Override standard tailwind slate colors to match dark style */
     --color-slate-950: #000000 !important;
     --color-slate-900: #111112 !important;
     --color-slate-800: #1e1e20 !important;
@@ -128,6 +128,38 @@
 }
 
 @layer utilities {
+  .dark body,
+  .dark .dark\:bg-slate-950,
+  .dark-night-grid {
+    background-color: #000000 !important;
+    background-image: 
+      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, #000000 0%, #030714 30%, #070e20 65%, #0c1730 100%) !important;
+    background-size: 32px 32px, 32px 32px, 100% 100% !important;
+    background-position: 0 0, 0 0, 0 0 !important;
+    background-attachment: fixed !important;
+  }
+
+  .dark .theme-logged-in,
+  .dark .theme-logged-in .dark\:bg-slate-950,
+  .dark.theme-logged-in {
+    background-color: #000000 !important;
+    background-image: 
+      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(
+        to bottom, 
+        #000000 0%, 
+        #000000 20%, 
+        color-mix(in srgb, var(--theme-accent-color, #10b981) 12%, #000000) 60%, 
+        color-mix(in srgb, var(--theme-accent-color, #10b981) 28%, #000000) 100%
+      ) !important;
+    background-size: 32px 32px, 32px 32px, 100% 100% !important;
+    background-position: 0 0, 0 0, 0 0 !important;
+    background-attachment: fixed !important;
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 4px;
   }
