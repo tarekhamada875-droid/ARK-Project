@@ -101,7 +101,7 @@ export const LoginView: React.FC<LoginViewProps> = memo(({
           <button
             disabled={isLoading}
             onClick={handleClearAll}
-            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-[#faf9f6] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs sm:text-sm outline-none uppercase tracking-wider disabled:pointer-events-none flex items-center justify-center transition-[background-color,transform] duration-75 active:scale-95 active:bg-slate-100 dark:active:bg-slate-950 select-none touch-manipulation"
+            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 dark:bg-rose-500/15 dark:hover:bg-rose-500/25 border border-rose-500/30 text-rose-600 dark:text-rose-400 font-black text-xs sm:text-sm outline-none uppercase tracking-wider disabled:pointer-events-none flex items-center justify-center transition-all active:scale-95 select-none touch-manipulation shadow-sm"
           >
             مسح الكل
           </button>
@@ -115,9 +115,9 @@ export const LoginView: React.FC<LoginViewProps> = memo(({
           <button
             disabled={isLoading}
             onClick={handleDelete}
-            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-slate-100/30 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center active:bg-slate-200 dark:active:bg-slate-700 transition-[background-color,transform] duration-75 active:scale-95 outline-none disabled:pointer-events-none select-none touch-manipulation"
+            className="h-14 sm:h-18 md:h-22 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center active:bg-amber-500/30 transition-all active:scale-95 outline-none disabled:pointer-events-none select-none touch-manipulation shadow-sm"
           >
-            <Delete className="w-5 h-5 sm:w-6 sm:h-6" />
+            <Delete className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 dark:text-amber-400" />
           </button>
         </div>
 

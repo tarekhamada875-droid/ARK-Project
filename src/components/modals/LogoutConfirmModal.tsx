@@ -127,7 +127,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
             type="button"
             disabled={isLoggingOut}
             onClick={onCancel}
-            className="h-16 rounded-2xl bg-[#faf9f6] dark:bg-slate-900 border-2 border-slate-150 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 font-extrabold text-sm active:scale-[0.95] outline-none transition-all disabled:opacity-50"
+            className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 text-slate-200 font-extrabold text-sm active:scale-[0.95] outline-none transition-all disabled:opacity-50 shadow-sm"
           >
             إلغاء
           </button>
@@ -143,9 +143,9 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
             type="button"
             disabled={isLoggingOut}
             onClick={handleBackspace}
-            className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center active:scale-[0.95] outline-none transition-all disabled:opacity-50"
+            className="h-16 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 border-2 border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center active:scale-[0.95] outline-none transition-all disabled:opacity-50 shadow-sm"
           >
-            <Delete className="w-6 h-6" />
+            <Delete className="w-6 h-6 text-amber-600 dark:text-amber-400" />
           </button>
         </div>
 
