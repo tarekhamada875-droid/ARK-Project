@@ -357,7 +357,7 @@ export const GarageDashboardView = memo(({
   };
   
   return (
-    <div className="h-[100dvh] bg-[#faf9f6] dark:bg-slate-950 font-sans w-full flex flex-col items-center overflow-hidden relative" dir="rtl">
+    <div className="h-[100dvh] bg-[#faf9f6] dark:bg-transparent font-sans w-full flex flex-col items-center overflow-hidden relative" dir="rtl">
       {/* Header */}
       {!isInputFocused && (
         <header className="relative bg-[#faf9f6] dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 z-40 w-full shrink-0">

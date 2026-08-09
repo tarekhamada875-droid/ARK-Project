@@ -422,7 +422,7 @@ export default function App() {
 
   return (
     <div 
-      className={`w-full h-full bg-[#faf9f6] dark:bg-slate-950 transition-colors ${isLoggedIn ? 'theme-logged-in' : ''}`}
+      className={`w-full h-full bg-[#faf9f6] dark:bg-transparent transition-colors ${isLoggedIn ? 'theme-logged-in' : ''}`}
       style={{ '--theme-accent-color': resolvedColor } as React.CSSProperties}
     >
       <ErrorBoundary>
