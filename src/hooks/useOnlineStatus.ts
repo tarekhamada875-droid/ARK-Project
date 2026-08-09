@@ -13,10 +13,10 @@ export function useOnlineStatus() {
     };
     const handleOffline = () => {
       setIsOnline(false);
-      // Wait 3.5 seconds to absorb transient events (like locking screen or screenshot editing)
+      if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         setShowOfflineScreen(true);
-      }, 3500);
+      }, 1200);
     };
 
     window.addEventListener('online', handleOnline);
@@ -25,8 +25,10 @@ export function useOnlineStatus() {
     // Handle app visibility to prevent stale state crashes
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Verify online status on visibility check
-        if (navigator.onLine) {
+        if (!navigator.onLine) {
+          setIsOnline(false);
+          setShowOfflineScreen(true);
+        } else {
           if (timeoutId) clearTimeout(timeoutId);
           setIsOnline(true);
           setShowOfflineScreen(false);
@@ -45,3 +47,4 @@ export function useOnlineStatus() {
 
   return { isOnline, showOfflineScreen };
 }
+

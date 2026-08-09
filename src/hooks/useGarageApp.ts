@@ -297,7 +297,14 @@ export function useGarageApp() {
       setUser(u);
       setIsAuthReady(true);
     });
-    return () => unsubscribe();
+    // Fallback if offline/network hangs on auth init
+    const timer = setTimeout(() => {
+      setIsAuthReady(true);
+    }, 4500);
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   // Admin PIN Sync
