@@ -128,8 +128,9 @@
 }
 
 @layer utilities {
-  .dark body,
-  .dark .dark\:bg-slate-950,
+  html.dark,
+  body.dark,
+  .dark #root,
   .dark .theme-logged-in,
   .dark.theme-logged-in,
   .dark-night-grid {
