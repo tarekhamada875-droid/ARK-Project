@@ -190,7 +190,25 @@
         </p>
       </div>
     </div>
-    <div id="root"></div>
+    <div id="root">
+      <div style="position:fixed;inset:0;background-color:#020617;display:flex;align-items:center;justify-content:center;padding:1.5rem;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:rtl;text-align:center;color:#fff;z-index:9999;">
+        <div style="background-color:#0f172a;border:2px solid #1e293b;border-radius:1.5rem;padding:2rem;max-width:24rem;width:100%;display:flex;flex-direction:column;align-items:center;gap:1.5rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
+          <div style="width:5rem;height:5rem;background-color:rgba(239,68,68,0.1);color:#f87171;border-radius:1rem;display:flex;align-items:center;justify-content:center;border:1px solid rgba(239,68,68,0.2);">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 2l20 20"/><path d="M8.5 8.5A6 6 0 0 1 12 8c1.66 0 3.16.68 4.24 1.76"/><path d="M5 5a10 10 0 0 1 14 0"/><path d="M1.42 1.42l21.16 21.16"/></svg>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem;">
+            <h2 style="font-size:1.5rem;font-weight:900;margin:0;">مفيش اتصال بالإنترنت</h2>
+            <p style="color:#cbd5e1;font-weight:700;font-size:1rem;line-height:1.6;margin:0;">البرنامج بيشتغل بالنت بس، اتأكد من توصيل النت وجرب تاني.</p>
+          </div>
+          <div style="width:100%;padding-top:0.5rem;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;color:#94a3b8;font-size:0.75rem;font-weight:700;background-color:rgba(30,41,59,0.8);padding:0.75rem 1rem;border-radius:0.75rem;border:1px solid rgba(51,65,85,0.5);">
+              <div style="width:0.5rem;height:0.5rem;border-radius:50%;background-color:#fbbf24;"></div>
+              <span>جاري فحص الاتصال بالشبكة تلقائياً...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rq-cache-v8';
+const CACHE_NAME = 'rq-cache-v9';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -46,11 +46,29 @@ self.addEventListener('fetch', (event) => {
     return; // Let browser handle network requests completely un-cached
   }
 
-  // Live-first with standard browser fallback
+  // Network-first with dynamic cache update & offline fallback
   event.respondWith(
     fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return response;
+      })
       .catch(() => {
-        return caches.match(event.request);
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html').then((indexCached) => indexCached || caches.match('/'));
+          }
+          return undefined;
+        });
       })
   );
 });
+
