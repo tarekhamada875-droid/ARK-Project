@@ -510,19 +510,6 @@ export const GarageDashboardView = memo(({
                     )}
                   </button>
 
-                  {!currentStaff && (
-                    <button 
-                      onClick={() => navigateTo('staff')}
-                      className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-400/10 text-teal-500 flex items-center justify-center">
-                          <Users className="w-4 h-4" />
-                        </div>
-                        <span className="font-bold text-sm">موظفي الوردية</span>
-                      </div>
-                    </button>
-                  )}
                   <button 
                     onClick={() => navigateTo('appearance')}
                     className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none"
