@@ -422,31 +422,35 @@ export const firestoreService = {
     }
   },
 
-  subscribeToSubscriptionPrices: (callback: (prices: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }) => void) => {
+  subscribeToSubscriptionPrices: (callback: (prices: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number }) => void) => {
     return onSnapshot(doc(db, 'admin_settings', 'subscription_prices'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         callback({
           weekly: typeof data.weekly === 'number' && data.weekly > 0 ? data.weekly : 800,
+          biweekly: typeof data.biweekly === 'number' && data.biweekly > 0 ? data.biweekly : 1500,
           monthly: typeof data.monthly === 'number' && data.monthly > 0 ? data.monthly : 3000,
           weeklyDiscount: typeof data.weeklyDiscount === 'number' && data.weeklyDiscount >= 10 && data.weeklyDiscount <= 50 ? data.weeklyDiscount : undefined,
+          biweeklyDiscount: typeof data.biweeklyDiscount === 'number' && data.biweeklyDiscount >= 10 && data.biweeklyDiscount <= 50 ? data.biweeklyDiscount : undefined,
           monthlyDiscount: typeof data.monthlyDiscount === 'number' && data.monthlyDiscount >= 10 && data.monthlyDiscount <= 50 ? data.monthlyDiscount : undefined
         });
       } else {
-        callback({ weekly: 800, monthly: 3000 });
+        callback({ weekly: 800, biweekly: 1500, monthly: 3000 });
       }
     }, (err) => {
       console.warn("Subscription prices observer failed or unsubscribed:", err);
-      callback({ weekly: 800, monthly: 3000 });
+      callback({ weekly: 800, biweekly: 1500, monthly: 3000 });
     });
   },
 
-  updateSubscriptionPrices: async (prices: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }) => {
+  updateSubscriptionPrices: async (prices: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number }) => {
     try {
       return await withRetry(() => setDoc(doc(db, 'admin_settings', 'subscription_prices'), { 
         weekly: prices.weekly,
+        biweekly: prices.biweekly ?? 1500,
         monthly: prices.monthly,
         weeklyDiscount: prices.weeklyDiscount ?? null,
+        biweeklyDiscount: prices.biweeklyDiscount ?? null,
         monthlyDiscount: prices.monthlyDiscount ?? null,
         updatedAt: serverTimestamp()
       }, { merge: true }));

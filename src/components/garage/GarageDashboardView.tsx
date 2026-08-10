@@ -60,7 +60,7 @@ interface GarageDashboardViewProps {
   showSubscribers: boolean;
   setShowSubscribers: (val: boolean) => void;
   walletNumber?: string;
-  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const GarageDashboardView = memo(({

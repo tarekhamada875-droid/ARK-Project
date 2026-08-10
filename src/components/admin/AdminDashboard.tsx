@@ -61,7 +61,7 @@ interface AdminDashboardProps {
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
-  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
 }
 
 export const AdminDashboard = memo(({
@@ -83,7 +83,7 @@ export const AdminDashboard = memo(({
   currentAdminPin,
   currentWalletNumber,
   onUpdateWalletNumber,
-  subscriptionPrices = { weekly: 800, monthly: 3000 }
+  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
 }: AdminDashboardProps) => {
 
   // Localized states to encapsulate admin view and prevent global App re-renders
@@ -113,7 +113,7 @@ export const AdminDashboard = memo(({
   const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
   const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
   const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
-  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'monthly'; hasMonthlySubscribers: boolean }>({
+  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'biweekly' | 'monthly'; hasMonthlySubscribers: boolean }>({
     name: '',
     hourlyRate: '',
     overnightRate: '',
@@ -148,6 +148,33 @@ export const AdminDashboard = memo(({
 
   const [walletValue, setWalletValue] = React.useState(currentWalletNumber);
   const [isSavingWallet, setIsSavingWallet] = React.useState(false);
+
+  const [subPriceForm, setSubPriceForm] = React.useState<{
+    weekly: string;
+    weeklyDiscount: number;
+    biweekly: string;
+    biweeklyDiscount: number;
+    monthly: string;
+    monthlyDiscount: number;
+  }>({
+    weekly: String(subscriptionPrices.weekly ?? 800),
+    weeklyDiscount: subscriptionPrices.weeklyDiscount || 0,
+    biweekly: String(subscriptionPrices.biweekly ?? 1500),
+    biweeklyDiscount: subscriptionPrices.biweeklyDiscount || 0,
+    monthly: String(subscriptionPrices.monthly ?? 3000),
+    monthlyDiscount: subscriptionPrices.monthlyDiscount || 0,
+  });
+
+  React.useEffect(() => {
+    setSubPriceForm({
+      weekly: String(subscriptionPrices.weekly ?? 800),
+      weeklyDiscount: subscriptionPrices.weeklyDiscount || 0,
+      biweekly: String(subscriptionPrices.biweekly ?? 1500),
+      biweeklyDiscount: subscriptionPrices.biweeklyDiscount || 0,
+      monthly: String(subscriptionPrices.monthly ?? 3000),
+      monthlyDiscount: subscriptionPrices.monthlyDiscount || 0,
+    });
+  }, [subscriptionPrices]);
 
   React.useEffect(() => {
     setWalletValue(currentWalletNumber);
@@ -1849,29 +1876,39 @@ export const AdminDashboard = memo(({
           </div>
         ) : activeTab === 'packages' ? (
           <div className="space-y-8">
-            {/* Subscription Prices Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3 font-sans">
-                <div className="w-8 h-8 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg flex items-center justify-center shrink-0">
-                  <Zap className="w-5 h-5 stroke-[2.5]" />
-                </div>
-                {t('تعديل أسعار اشتراكات الجراجات الدوريّة')}
-              </h2>
+            {/* Subscription Prices Cards Section */}
+            <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-6 sm:p-8 transition-colors shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3 font-sans">
+                  <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
+                    <Zap className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <span>{t('تعديل أسعار اشتراكات الجراجات الدوريّة')}</span>
+                </h2>
+                <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 self-start sm:self-auto">
+                  تحديث مباشر للباقات ⚡
+                </span>
+              </div>
+
               <form 
                 onSubmit={async (e) => {
                   e.preventDefault();
                   const form = e.target as HTMLFormElement;
                   const weeklyInput = form.elements.namedItem('weeklyPrice') as HTMLInputElement;
+                  const biweeklyInput = form.elements.namedItem('biweeklyPrice') as HTMLInputElement;
                   const monthlyInput = form.elements.namedItem('monthlyPrice') as HTMLInputElement;
-                  const weeklyDiscountInput = form.elements.namedItem('weeklyDiscount') as HTMLSelectElement | HTMLInputElement;
-                  const monthlyDiscountInput = form.elements.namedItem('monthlyDiscount') as HTMLSelectElement | HTMLInputElement;
+                  const weeklyDiscountInput = form.elements.namedItem('weeklyDiscount') as HTMLSelectElement;
+                  const biweeklyDiscountInput = form.elements.namedItem('biweeklyDiscount') as HTMLSelectElement;
+                  const monthlyDiscountInput = form.elements.namedItem('monthlyDiscount') as HTMLSelectElement;
 
                   const weekly = Number(weeklyInput.value);
+                  const biweekly = Number(biweeklyInput.value);
                   const monthly = Number(monthlyInput.value);
                   const weeklyDiscountVal = weeklyDiscountInput?.value ? Number(weeklyDiscountInput.value) : undefined;
+                  const biweeklyDiscountVal = biweeklyDiscountInput?.value ? Number(biweeklyDiscountInput.value) : undefined;
                   const monthlyDiscountVal = monthlyDiscountInput?.value ? Number(monthlyDiscountInput.value) : undefined;
 
-                  if (weekly <= 0 || monthly <= 0) {
+                  if (weekly <= 0 || biweekly <= 0 || monthly <= 0) {
                     showToast(t('يرجى إدخال أسعار صحيحة أكبر من الصفر'), 'error');
                     return;
                   }
@@ -1879,8 +1916,10 @@ export const AdminDashboard = memo(({
                   try {
                     await firestoreService.updateSubscriptionPrices({ 
                       weekly, 
+                      biweekly,
                       monthly,
                       weeklyDiscount: weeklyDiscountVal,
+                      biweeklyDiscount: biweeklyDiscountVal,
                       monthlyDiscount: monthlyDiscountVal
                     });
                     showToast(t('تم تحديث أسعار الاشتراكات والخصومات بنجاح'));
@@ -1888,66 +1927,231 @@ export const AdminDashboard = memo(({
                     showToast(t('حدث خطأ أثناء تحديث الأسعار'), 'error');
                   }
                 }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end font-sans"
+                className="space-y-8 font-sans"
               >
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الأسبوعي (7 أيام) - ج.م')}</label>
-                  <input 
-                    name="weeklyPrice" 
-                    type="number" 
-                    defaultValue={subscriptionPrices.weekly}
-                    key={`weekly-${subscriptionPrices.weekly}`}
-                    required 
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all" 
-                  />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Card 1: Weekly (7 Days) */}
+                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-indigo-100 dark:border-indigo-900/40 relative overflow-hidden group hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-all flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">الاشتراك الأسبوعي</h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 7 أيام</p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-lg">
+                          أسبوعي
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
+                            السعر الإجمالي (ج.م)
+                          </label>
+                          <div className="relative">
+                            <input 
+                              name="weeklyPrice" 
+                              type="text" 
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={subPriceForm.weekly}
+                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, weekly: e.target.value.replace(/\D/g, '') }))}
+                              required 
+                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-indigo-500 transition-all font-mono" 
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mb-2">
+                            نسبة الخصم التشجيعي (%)
+                          </label>
+                          <select 
+                            name="weeklyDiscount" 
+                            value={subPriceForm.weeklyDiscount || ''}
+                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, weeklyDiscount: Number(e.target.value) }))}
+                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-indigo-500 transition-all cursor-pointer" 
+                          >
+                            <option value="">{t('بدون خصم (0%)')}</option>
+                            {[10, 15, 20, 25, 30, 50].map((num) => (
+                              <option key={num} value={num}>
+                                خصم {num}%
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calculated Price Display */}
+                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
+                      {(() => {
+                        const price = Number(subPriceForm.weekly) || 0;
+                        const discount = subPriceForm.weeklyDiscount || 0;
+                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
+                        return (
+                          <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
+                            <span className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                              {finalPrice} ج.م
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Card 2: 15 Days (Biweekly) - NEW! */}
+                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-emerald-100 dark:border-emerald-900/40 relative overflow-hidden group hover:border-emerald-400 dark:hover:border-emerald-500/60 transition-all flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">اشتراك 15 يوم</h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 15 يوماً</p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg">
+                          جديد ✨
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
+                            السعر الإجمالي (ج.م)
+                          </label>
+                          <div className="relative">
+                            <input 
+                              name="biweeklyPrice" 
+                              type="text" 
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={subPriceForm.biweekly}
+                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, biweekly: e.target.value.replace(/\D/g, '') }))}
+                              required 
+                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-emerald-500 transition-all font-mono" 
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-extrabold text-emerald-600 dark:text-emerald-400 mb-2">
+                            نسبة الخصم التشجيعي (%)
+                          </label>
+                          <select 
+                            name="biweeklyDiscount" 
+                            value={subPriceForm.biweeklyDiscount || ''}
+                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, biweeklyDiscount: Number(e.target.value) }))}
+                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-emerald-500 transition-all cursor-pointer" 
+                          >
+                            <option value="">{t('بدون خصم (0%)')}</option>
+                            {[10, 15, 20, 25, 30, 50].map((num) => (
+                              <option key={num} value={num}>
+                                خصم {num}%
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calculated Price Display */}
+                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
+                      {(() => {
+                        const price = Number(subPriceForm.biweekly) || 0;
+                        const discount = subPriceForm.biweeklyDiscount || 0;
+                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
+                        return (
+                          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
+                            <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                              {finalPrice} ج.م
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Monthly (30 Days) */}
+                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-amber-100 dark:border-amber-900/40 relative overflow-hidden group hover:border-amber-400 dark:hover:border-amber-500/60 transition-all flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">الاشتراك الشهري</h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 30 يوماً</p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-lg">
+                          الأكثر طلباً
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
+                            السعر الإجمالي (ج.م)
+                          </label>
+                          <div className="relative">
+                            <input 
+                              name="monthlyPrice" 
+                              type="text" 
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={subPriceForm.monthly}
+                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, monthly: e.target.value.replace(/\D/g, '') }))}
+                              required 
+                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-amber-500 transition-all font-mono" 
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-extrabold text-amber-600 dark:text-amber-400 mb-2">
+                            نسبة الخصم التشجيعي (%)
+                          </label>
+                          <select 
+                            name="monthlyDiscount" 
+                            value={subPriceForm.monthlyDiscount || ''}
+                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, monthlyDiscount: Number(e.target.value) }))}
+                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-amber-500 transition-all cursor-pointer" 
+                          >
+                            <option value="">{t('بدون خصم (0%)')}</option>
+                            {[10, 15, 20, 25, 30, 50].map((num) => (
+                              <option key={num} value={num}>
+                                خصم {num}%
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calculated Price Display */}
+                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
+                      {(() => {
+                        const price = Number(subPriceForm.monthly) || 0;
+                        const discount = subPriceForm.monthlyDiscount || 0;
+                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
+                        return (
+                          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
+                            <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
+                              {finalPrice} ج.م
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-amber-600 dark:text-amber-400 mr-2">{t('نسبة الخصم الأسبوعي (%) [اختياري]')}</label>
-                  <select 
-                    name="weeklyDiscount" 
-                    defaultValue={subscriptionPrices.weeklyDiscount || ''}
-                    key={`weeklyDiscount-${subscriptionPrices.weeklyDiscount}`}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all cursor-pointer" 
-                  >
-                    <option value="">{t('بدون خصم (0%)')}</option>
-                    {[10, 15, 20, 25, 30, 50].map((num) => (
-                      <option key={num} value={num}>
-                        {num}%
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الاشتراك الشهري (30 يوماً) - ج.م')}</label>
-                  <input 
-                    name="monthlyPrice" 
-                    type="number" 
-                    defaultValue={subscriptionPrices.monthly}
-                    key={`monthly-${subscriptionPrices.monthly}`}
-                    required 
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-amber-600 dark:text-amber-400 mr-2">{t('نسبة الخصم الشهري (%) [اختياري]')}</label>
-                  <select 
-                    name="monthlyDiscount" 
-                    defaultValue={subscriptionPrices.monthlyDiscount || ''}
-                    key={`monthlyDiscount-${subscriptionPrices.monthlyDiscount}`}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all cursor-pointer" 
-                  >
-                    <option value="">{t('بدون خصم (0%)')}</option>
-                    {[10, 15, 20, 25, 30, 50].map((num) => (
-                      <option key={num} value={num}>
-                        {num}%
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
                 <button 
                   type="submit" 
-                  className="col-span-1 md:col-span-2 lg:col-span-4 bg-amber-500 hover:bg-amber-600 text-white py-4 rounded-2xl font-bold text-base transition-all outline-none flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-4 rounded-2xl font-black text-base transition-all outline-none flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-[0.99]"
                 >
+                  <Zap className="w-5 h-5 fill-current" />
                   <span>{t('حفظ أسعار الاشتراكات والخصومات')}</span>
                 </button>
               </form>
@@ -2013,20 +2217,24 @@ export const AdminDashboard = memo(({
                     <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الباقة قبل الخصم (ج.م)')}</label>
                     <input 
                       name="pkgPrice" 
-                      type="number" 
+                      type="text" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder={t('مثال: 200')} 
                       required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all font-mono" 
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('عدد السيارات المسموح بها')}</label>
                     <input 
                       name="pkgCount" 
-                      type="number" 
+                      type="text" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder={t('مثال: 100')} 
                       required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all font-mono" 
                     />
                   </div>
 
@@ -2493,12 +2701,12 @@ export const AdminDashboard = memo(({
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase pr-2">{t('السعر')}</label>
-                    <input name="price" type="number" placeholder="200" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all" />
+                    <input name="price" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="200" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase pr-2">{t('عدد السيارات')}</label>
-                  <input name="count" type="number" placeholder="100" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all" />
+                  <input name="count" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="100" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
                 </div>
                 <button 
                   type="submit"
@@ -2629,7 +2837,6 @@ export const AdminDashboard = memo(({
                           onChange={(e) => setGarageForm({ ...garageForm, hourlyRate: e.target.value.replace(/\D/g, '') })}
                           required 
                           className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-center focus:border-slate-900 dark:focus:border-emerald-500 outline-none font-mono text-xl transition-all" 
-                          dir="ltr" 
                         />
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] text-slate-300 dark:text-slate-600 font-bold">{t('ج.م')}</span>
                       </div>
@@ -2646,7 +2853,6 @@ export const AdminDashboard = memo(({
                           onChange={(e) => setGarageForm({ ...garageForm, overnightRate: e.target.value.replace(/\D/g, '') })}
                           required 
                           className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-center focus:border-slate-900 dark:focus:border-emerald-500 outline-none font-mono text-xl transition-all" 
-                          dir="ltr" 
                         />
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] text-slate-300 dark:text-slate-600 font-bold">{t('ج.م')}</span>
                       </div>
@@ -2698,8 +2904,9 @@ export const AdminDashboard = memo(({
                         className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
                         dir="rtl"
                       >
-                        <option value="weekly">{t(`اشتراك أسبوعي - ${subscriptionPrices.weekly} ج.م`)}</option>
-                        <option value="monthly">{t(`اشتراك شهري - ${subscriptionPrices.monthly} ج.م`)}</option>
+                        <option value="weekly">{t(`اشتراك أسبوعي (7 أيام) - ${subscriptionPrices.weekly} ج.م`)}</option>
+                        <option value="biweekly">{t(`اشتراك 15 يوم - ${subscriptionPrices.biweekly || 1500} ج.م`)}</option>
+                        <option value="monthly">{t(`اشتراك شهري (30 يوماً) - ${subscriptionPrices.monthly} ج.م`)}</option>
                       </select>
                     </div>
                   )}

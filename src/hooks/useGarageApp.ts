@@ -73,7 +73,7 @@ export function useGarageApp() {
   const [adminPin, setAdminPin] = useLocalStorageState<string>('app_admin_pin', '');
   const [activeAdminPin, setActiveAdminPin] = useState<string>(ADMIN_PIN);
   const [walletNumber, setWalletNumber] = useLocalStorageState<string>('app_wallet_number', '015 - 524 - 113 - 23');
-  const [subscriptionPrices, setSubscriptionPrices] = useState<{ weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number }>({ weekly: 800, monthly: 3000 });
+  const [subscriptionPrices, setSubscriptionPrices] = useState<{ weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number }>({ weekly: 800, biweekly: 1500, monthly: 3000 });
   const [loginPhone, setLoginPhone] = useLocalStorageState<string>('app_login_phone', '');
   const [showCheckInModal, setShowCheckInModal] = useLocalStorageState<boolean>('app_show_checkin', false);
   const [showCheckOutModal, setShowCheckOutModal] = useLocalStorageState<boolean>('app_show_checkout', false);
@@ -1305,7 +1305,7 @@ export function useGarageApp() {
     const initialPackageId = formData.get('initialPackageId') as string;
     const commissionPerVehicle = 1;
     const billingModel = formData.get('billingModel') as 'subscription' | 'commission' || 'commission';
-    const subscriptionType = formData.get('subscriptionType') as 'weekly' | 'monthly' || 'weekly';
+    const subscriptionType = (formData.get('subscriptionType') as string) || 'weekly';
     const hasMonthlySubscribersRaw = formData.get('hasMonthlySubscribers');
     const hasMonthlySubscribers = hasMonthlySubscribersRaw === 'true' || hasMonthlySubscribersRaw === 'on' || hasMonthlySubscribersRaw === '1';
     const referredByGarageId = (formData.get('referredByGarageId') as string || '').trim();
@@ -1318,10 +1318,10 @@ export function useGarageApp() {
     const expiryDate = new Date();
 
     if (billingModel === 'subscription') {
-      const days = subscriptionType === 'weekly' ? 7 : 30;
+      const days = subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30;
       expiryDate.setDate(expiryDate.getDate() + days);
-      let baseSubPrice = subscriptionType === 'weekly' ? subscriptionPrices.weekly : subscriptionPrices.monthly;
-      const subDiscount = subscriptionType === 'weekly' ? subscriptionPrices.weeklyDiscount : subscriptionPrices.monthlyDiscount;
+      let baseSubPrice = subscriptionType === 'weekly' ? subscriptionPrices.weekly : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? (subscriptionPrices.biweekly || 1500) : subscriptionPrices.monthly;
+      const subDiscount = subscriptionType === 'weekly' ? subscriptionPrices.weeklyDiscount : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? subscriptionPrices.biweeklyDiscount : subscriptionPrices.monthlyDiscount;
       if (subDiscount && subDiscount > 0) {
         baseSubPrice = Math.round(baseSubPrice * (1 - subDiscount / 100));
       }
@@ -1399,7 +1399,7 @@ export function useGarageApp() {
         overnightRate,
         balanceExpiry: Timestamp.fromDate(expiryDate),
         createdAt: serverTimestamp(),
-        balanceDays: billingModel === 'subscription' ? (subscriptionType === 'weekly' ? 7 : 30) : 3650,
+        balanceDays: billingModel === 'subscription' ? (subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30) : 3650,
         billingModel: billingModel,
         commissionPerVehicle: commissionPerVehicle,
         balance: actualBalance,

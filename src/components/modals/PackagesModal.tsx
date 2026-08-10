@@ -9,7 +9,7 @@ interface PackagesModalProps {
   walletNumber?: string;
   onToggleMenu?: () => void;
   billingModel?: 'subscription' | 'commission';
-  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
   referralBonusBalance?: number;
   hasMonthlySubscribers?: boolean;
 }
@@ -21,7 +21,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
   walletNumber = "015 - 524 - 113 - 23", 
   onToggleMenu,
   billingModel = 'commission',
-  subscriptionPrices = { weekly: 800, monthly: 3000 },
+  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
   referralBonusBalance = 0,
   hasMonthlySubscribers = false
 }) => {
@@ -157,11 +157,13 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
           <div className="flex flex-col">
             {(() => {
               const baseWeekly = hasMonthlySubscribers ? Math.round(subscriptionPrices.weekly * 1.25) : subscriptionPrices.weekly;
+              const baseBiweekly = hasMonthlySubscribers ? Math.round((subscriptionPrices.biweekly || 1500) * 1.25) : (subscriptionPrices.biweekly || 1500);
               const baseMonthly = hasMonthlySubscribers ? Math.round(subscriptionPrices.monthly * 1.25) : subscriptionPrices.monthly;
 
               const displayPackages = isSub 
                 ? [
                     { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: baseWeekly, vehiclesCount: 7, discountType: 'percentage' as const, discountValue: subscriptionPrices.weeklyDiscount },
+                    { id: 'biweekly_sub', name: 'اشتراك 15 يوم', price: baseBiweekly, vehiclesCount: 15, discountType: 'percentage' as const, discountValue: subscriptionPrices.biweeklyDiscount },
                     { id: 'monthly_sub', name: 'اشتراك شهري', price: baseMonthly, vehiclesCount: 30, discountType: 'percentage' as const, discountValue: subscriptionPrices.monthlyDiscount }
                   ]
                 : packages.map(p => ({

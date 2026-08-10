@@ -40,7 +40,7 @@ interface AdminGarageDetailsViewProps {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   packages: Package[];
-  subscriptionPrices?: { weekly: number; monthly: number; weeklyDiscount?: number; monthlyDiscount?: number };
+  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
   allGarages?: Garage[];
 }
 
@@ -55,7 +55,7 @@ export const AdminGarageDetailsView = memo(({
   isLoading,
   setIsLoading,
   packages,
-  subscriptionPrices = { weekly: 800, monthly: 3000 },
+  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
   allGarages = []
 }: AdminGarageDetailsViewProps) => {
   const [showClearBalanceConfirm, setShowClearBalanceConfirm] = useState(false);
@@ -1183,6 +1183,7 @@ export const AdminGarageDetailsView = memo(({
                                 const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
                                 const subPackages: Package[] = [
                                     { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage', discountValue: subscriptionPrices.weeklyDiscount },
+                                    { id: 'biweekly_sub', name: adminLang === 'en' ? '15-Day Subscription' : 'تجديد اشتراك 15 يوم', price: subscriptionPrices.biweekly || 1500, vehiclesCount: 15, discountType: 'percentage', discountValue: subscriptionPrices.biweeklyDiscount },
                                     { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage', discountValue: subscriptionPrices.monthlyDiscount }
                                 ];
                                 const displayPackages = isSubscriptionGarage ? subPackages : (packages.length > 0 ? packages : []);
