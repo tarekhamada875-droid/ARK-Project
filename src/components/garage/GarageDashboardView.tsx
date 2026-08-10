@@ -28,6 +28,7 @@ import { StaffStatsModal } from '../modals/StaffStatsModal';
 import { GarageReportsView } from './GarageReportsView';
 import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { firestoreService } from '../../services/firestoreService';
+import { safeDate } from '../../utils';
 import { soundManager } from '../../utils/sounds';
 import { auth } from '../../firebase';
 import { useTheme } from '../../utils/ThemeContext';
@@ -121,7 +122,7 @@ export const GarageDashboardView = memo(({
 
   const remainingDays = React.useMemo(() => {
     if (!isSubscription || !garage.balanceExpiry) return 0;
-    const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+    const expiryDate = safeDate(garage.balanceExpiry);
     const diff = expiryDate.getTime() - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [isSubscription, garage.balanceExpiry]);
@@ -159,7 +160,7 @@ export const GarageDashboardView = memo(({
   const [showLastDaySubModal, setShowLastDaySubModal] = React.useState(false);
 
   React.useEffect(() => {
-    if (!isSubscription) return;
+    if (!isSubscription || !garage.balanceExpiry) return;
     if (availableVehicles > 1) return; // Only trigger for last day (1 day or 0 day before lock)
 
     const checkPopup = () => {

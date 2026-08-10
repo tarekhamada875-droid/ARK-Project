@@ -13,6 +13,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
+import { safeDate } from '../../utils';
 
 interface GarageReportsViewProps {
   garage: Garage;
@@ -84,7 +85,7 @@ export const GarageReportsView = memo(({
     let formattedExpiryDate = '';
     if (isSubscriptionModel) {
       if (localGarage.balanceExpiry) {
-        const expiryDate = localGarage.balanceExpiry.toDate ? localGarage.balanceExpiry.toDate() : new Date(localGarage.balanceExpiry);
+        const expiryDate = safeDate(localGarage.balanceExpiry);
         if (!isNaN(expiryDate.getTime())) {
           const diff = expiryDate.getTime() - Date.now();
           remainingDays = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));

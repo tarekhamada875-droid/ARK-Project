@@ -27,6 +27,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber } from '../types';
 import { ADMIN_PIN } from '../constants';
+import { safeDate } from '../utils';
 
 export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber };
 
@@ -1189,7 +1190,8 @@ export const firestoreService = {
         const delegateRef = doc(db, 'delegates', request.delegateId);
         
         const garageDoc = await getDoc(garageRef);
-        const isSub = request.packageId === 'weekly_sub' || request.packageId === 'monthly_sub';
+        const garageData = garageDoc.exists() ? garageDoc.data() : null;
+        const isSubModel = garageData?.billingModel === 'subscription' || request.packageId?.endsWith('_sub') || request.packageId === 'weekly_sub' || request.packageId === 'biweekly_sub' || request.packageId === 'monthly_sub';
         
         const updateData: any = {
           totalAdminRevenue: increment(request.revenueAmount),
@@ -1197,16 +1199,21 @@ export const firestoreService = {
           lastRechargeDate: serverTimestamp()
         };
 
-        if (isSub) {
+        if (isSubModel) {
           let baseDate = new Date();
-          const currentExpiry = garageDoc.exists() ? garageDoc.data()?.balanceExpiry : null;
+          const currentExpiry = garageData?.balanceExpiry;
           if (currentExpiry) {
-            const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+            const currentExpiryDate = safeDate(currentExpiry);
             if (currentExpiryDate > baseDate) {
               baseDate = currentExpiryDate;
             }
           }
-          const days = request.packageId === 'weekly_sub' ? 7 : 30;
+          let days = 30;
+          if (request.packageId === 'weekly_sub') days = 7;
+          else if (request.packageId === 'biweekly_sub') days = 15;
+          else if (request.packageId === 'monthly_sub') days = 30;
+          else if (request.carsCount && typeof request.carsCount === 'number' && request.carsCount > 0) days = request.carsCount;
+
           baseDate.setDate(baseDate.getDate() + days);
           
           updateData.balanceExpiry = Timestamp.fromDate(baseDate);

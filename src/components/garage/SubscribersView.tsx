@@ -5,7 +5,7 @@ import { auth } from '../../firebase';
 import { AnimatedCounter } from '../AnimatedCounter';
 import { MovingBalanceArrows } from './MovingBalanceArrows';
 import { Subscriber } from '../../types';
-import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch } from '../../utils';
+import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, safeDate } from '../../utils';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 
@@ -41,14 +41,14 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   const isSubscriptionExpired = React.useMemo(() => {
     if (!isSubscriptionModel) return false;
     if (!garage.balanceExpiry) return true;
-    const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+    const expiryDate = safeDate(garage.balanceExpiry);
     return expiryDate < new Date();
   }, [isSubscriptionModel, garage.balanceExpiry]);
 
   const availableVehicles = React.useMemo(() => {
     if (isSubscriptionModel) {
       if (isSubscriptionExpired) return 0;
-      const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
+      const expiryDate = safeDate(garage.balanceExpiry);
       const now = new Date();
       const diffTime = expiryDate.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

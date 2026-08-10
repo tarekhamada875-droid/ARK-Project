@@ -13,6 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Garage, Delegate } from '../../types';
+import { safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { PlateLookupModal } from '../modals/PlateLookupModal';
@@ -238,7 +239,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
               if (isSub) {
                 remainingLabel = t('الاشتراك');
                 if (g.balanceExpiry) {
-                  const expiryDate = g.balanceExpiry.toDate ? g.balanceExpiry.toDate() : new Date(g.balanceExpiry);
+                  const expiryDate = safeDate(g.balanceExpiry);
                   const diff = expiryDate.getTime() - Date.now();
                   const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
                   remainingDisplay = `${days} ${t('يوم')}`;

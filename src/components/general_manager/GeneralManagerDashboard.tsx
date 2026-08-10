@@ -13,6 +13,7 @@ import {
   Check
 } from 'lucide-react';
 import { Garage, GeneralManager } from '../../types';
+import { safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { firestoreService } from '../../services/firestoreService';
 
@@ -246,7 +247,7 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = m
                       (() => {
                         if (!selectedGarage.balanceExpiry) return `${selectedGarage.balanceDays || 0} يوم`;
                         const expiry = selectedGarage.balanceExpiry;
-                        const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                        const expiryDate = safeDate(expiry);
                         const diff = expiryDate.getTime() - Date.now();
                         const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
                         return `${days} يوم`;

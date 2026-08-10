@@ -866,7 +866,7 @@ export const DelegateDashboardView = memo(({
                     <span className="text-[10px] font-bold text-slate-400 mt-2">
                       تاريخ الانتهاء: {(() => {
                         const expiry = selectedGarage.balanceExpiry;
-                        const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                        const expiryDate = safeDate(expiry);
                         return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
                       })()}
                     </span>

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
-import { normalizeDigits } from '../../utils';
+import { normalizeDigits, safeDate } from '../../utils';
 import { Garage, Staff, Package } from '../../types';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -270,12 +270,17 @@ export const AdminGarageDetailsView = memo(({
         let baseDate = new Date();
         const currentExpiry = selectedGarageForDetails.balanceExpiry;
         if (currentExpiry) {
-          const currentExpiryDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+          const currentExpiryDate = safeDate(currentExpiry);
           if (currentExpiryDate > baseDate) {
             baseDate = currentExpiryDate;
           }
         }
-        const days = pkg.id === 'weekly_sub' ? 7 : 30;
+        let days = 30;
+        if (pkg.id === 'weekly_sub') days = 7;
+        else if (pkg.id === 'biweekly_sub') days = 15;
+        else if (pkg.id === 'monthly_sub') days = 30;
+        else if (pkg.vehiclesCount && typeof pkg.vehiclesCount === 'number') days = pkg.vehiclesCount;
+
         baseDate.setDate(baseDate.getDate() + days);
         
         updateData.balanceExpiry = Timestamp.fromDate(baseDate);
@@ -1079,13 +1084,14 @@ export const AdminGarageDetailsView = memo(({
                       <>
                         <span className={`text-8xl font-black tracking-tighter transition-colors ${ (() => {
                           const expiry = selectedGarageForDetails.balanceExpiry;
-                          const expiryDate = expiry?.toDate ? expiry.toDate() : new Date(expiry || '');
+                          if (!expiry) return 'text-red-400';
+                          const expiryDate = safeDate(expiry);
                           return expiryDate < new Date() ? 'text-red-400' : 'text-white';
                         })()}`}>
                           {(() => {
                             const expiry = selectedGarageForDetails.balanceExpiry;
                             if (!expiry) return 0;
-                            const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                            const expiryDate = safeDate(expiry);
                             const diff = expiryDate.getTime() - Date.now();
                             return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
                           })()}
@@ -1109,7 +1115,7 @@ export const AdminGarageDetailsView = memo(({
                             {t('تاريخ انتهاء الاشتراك:')} {(() => {
                               const expiry = selectedGarageForDetails.balanceExpiry;
                               if (!expiry) return '-';
-                              const expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                              const expiryDate = safeDate(expiry);
                               return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
                             })()}
                           </>
