@@ -300,7 +300,7 @@ export const PlateLookupModal: React.FC<PlateLookupModalProps> = memo(({
                         <Coins className="w-4 h-4 text-emerald-400" />
                         <div>
                           <span className="text-[10px] text-slate-400 block font-bold">الحساب المستحق حتى الآن</span>
-                          <span className="text-sm font-black text-emerald-400">{activeVehicles[0].accruedCost} ج.م</span>
+                          <span className="text-sm font-black text-emerald-400 font-mono">{activeVehicles[0].accruedCost} ج.م</span>
                         </div>
                       </div>
                     </div>
@@ -473,7 +473,7 @@ export const PlateLookupModal: React.FC<PlateLookupModalProps> = memo(({
                                 </div>
                               </div>
                               <div className="text-left shrink-0">
-                                <span className="font-black text-emerald-400 text-xs block">{vehicle.totalCost || 0} ج.م</span>
+                                <span className="font-black text-emerald-400 text-xs block font-mono">{vehicle.totalCost || 0} ج.م</span>
                               </div>
                             </div>
                           );
@@ -500,7 +500,7 @@ export const PlateLookupModal: React.FC<PlateLookupModalProps> = memo(({
                               </div>
                               <div className="text-left shrink-0">
                                 {log.amount !== undefined && (
-                                  <span className="font-bold text-slate-200 text-xs block">{log.amount} ج.م</span>
+                                  <span className="font-bold text-slate-200 text-xs block font-mono">{log.amount} ج.م</span>
                                 )}
                               </div>
                             </div>

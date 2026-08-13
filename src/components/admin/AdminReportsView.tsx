@@ -10,10 +10,12 @@ import {
   Users, 
   Car, 
   Search,
-  RefreshCw
+  RefreshCw,
+  ClipboardList
 } from 'lucide-react';
-import { Garage, Delegate } from '../../types';
-import { safeDate } from '../../utils';
+import { Garage, Delegate, ActivityLog } from '../../types';
+import { firestoreService } from '../../services/firestoreService';
+import { getRemainingDays, safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { PlateLookupModal } from '../modals/PlateLookupModal';
@@ -42,6 +44,31 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(() => new Date());
   const [showPlateLookupModal, setShowPlateLookupModal] = useState(false);
+
+  // Paginated Activity Logs State
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [lastLogDoc, setLastLogDoc] = useState<any>(null);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  const loadMoreActivityLogs = async () => {
+    if (isLoadingLogs) return;
+    setIsLoadingLogs(true);
+    try {
+      const result = await firestoreService.getPaginatedActivityLogs(20, lastLogDoc);
+      setActivityLogs(prev => [...prev, ...result.logs]);
+      setLastLogDoc(result.lastDoc);
+      setHasMoreLogs(result.hasMore);
+    } catch (err) {
+      console.error('Failed to load activity logs:', err);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMoreActivityLogs();
+  }, []);
 
   // Manual Trigger to update the reporting view
   const handleRefresh = () => {
@@ -232,23 +259,8 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar-slate divide-y divide-slate-100 dark:divide-slate-800/60 font-sans">
             {filteredGarageStats.map((g, index) => {
               const checkedOutCount = g.totalVehiclesOut || 0;
-              const isSub = g.billingModel === 'subscription';
-              let remainingDisplay = '';
-              let remainingLabel = t('الرصيد');
-
-              if (isSub) {
-                remainingLabel = t('الاشتراك');
-                if (g.balanceExpiry) {
-                  const expiryDate = safeDate(g.balanceExpiry);
-                  const diff = expiryDate.getTime() - Date.now();
-                  const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-                  remainingDisplay = `${days} ${t('يوم')}`;
-                } else {
-                  remainingDisplay = `${g.balanceDays || 0} ${t('يوم')}`;
-                }
-              } else {
-                remainingDisplay = `${g.balance || 0} ${t('ج.م')}`;
-              }
+              const remainingLabel = t('الاشتراك');
+              const remainingDisplay = `${getRemainingDays(g)} ${t('يوم')}`;
 
               const activeCarsCount = typeof g.carsInside === 'number' ? Math.max(0, g.carsInside) : (g.activePlates ? Object.keys(g.activePlates).length : 0);
               
@@ -332,6 +344,68 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
         </section>
 
       </div>
+
+      {/* System Activity Logs (Paginated) */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-colors">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-amber-500" />
+            <span>سجل العمليات والنشاطات الأخير (مفصل)</span>
+          </h2>
+          <span className="text-xs font-bold text-slate-400 font-mono">
+            {activityLogs.length} سجل
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 font-sans">
+          {activityLogs.map((log) => (
+            <div key={log.id} className="p-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 flex items-center justify-between transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                  <ClipboardList className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white">
+                    {log.plateNumber || log.actionType}
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    {log.garageName} • {log.staffName || 'السيستم'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-left font-mono">
+                {log.amount !== undefined && (
+                  <div className="text-xs font-black text-emerald-500">
+                    +{log.amount} ج.م
+                  </div>
+                )}
+                <div className="text-[9px] font-bold text-slate-400 mt-0.5">
+                  {safeDate(log.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {activityLogs.length === 0 && !isLoadingLogs && (
+            <div className="p-8 text-center text-xs font-bold text-slate-400">
+              لا توجد سجلات نشاط متاحة حالياً
+            </div>
+          )}
+        </div>
+
+        {hasMoreLogs && (
+          <div className="p-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 text-center">
+            <button
+              onClick={loadMoreActivityLogs}
+              disabled={isLoadingLogs}
+              className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-black text-xs transition-all shadow-sm active:scale-95"
+            >
+              {isLoadingLogs ? 'جاري التحميل...' : 'تحميل المزيد من السجلات...'}
+            </button>
+          </div>
+        )}
+      </section>
 
       {showPlateLookupModal && (
         <PlateLookupModal

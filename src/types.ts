@@ -7,7 +7,9 @@ export interface Package {
   id: string;
   name: string;
   price: number;
-  vehiclesCount: number;
+  vehiclesCount: number; // duration in days (e.g. 15 or 30)
+  dailyCapacity?: number; // daily car capacity limit (50, 100, 150, or 0/undefined for unlimited)
+  durationDays?: number; // duration in days (15 or 30)
   description?: string;
   isActive?: boolean;
   createdAt?: any;
@@ -29,6 +31,8 @@ export interface Garage {
   name: string;
   phone: string;
   pin?: string;
+  ownerName?: string;
+  ownerPin?: string;
   hourlyRate: number;
   overnightRate: number;
   balanceExpiry?: any; // Timestamp
@@ -37,7 +41,7 @@ export interface Garage {
   ownerUid?: string;
   currentSessionId?: string | null;
   lastActive?: any; // Timestamp
-  billingModel?: 'subscription' | 'commission';
+  billingModel?: 'subscription';
   commissionPerVehicle?: number;
   monthlySubscriptionFee?: number;
   balance?: number;
@@ -72,6 +76,8 @@ export interface Garage {
   createdByDelegateId?: string | null;
   createdByDelegateName?: string | null;
   hasMonthlySubscribers?: boolean;
+  dailyCapacity?: number; // Daily car limit (50, 100, 150, or 0/undefined for unlimited)
+  activePackageName?: string; // Current package name
   status?: 'pending' | 'approved' | 'rejected';
 }
 
@@ -170,16 +176,6 @@ export interface Vehicle {
   isSubscriber?: boolean;
 }
 
-export interface GlobalSettings {
-  checkInSound: string;
-  checkOutSound: string;
-}
-
-export interface SubscriptionPrices {
-  weekly: number;
-  monthly: number;
-}
-
 export interface RechargeRequest {
   id: string;
   garageId: string;
@@ -189,8 +185,11 @@ export interface RechargeRequest {
   packageId: string;
   packageName: string;
   amount: number;
+  price?: number;
   carsCount: number;
   revenueAmount: number;
+  durationDays?: number;
+  dailyCapacity?: number;
   originalRevenueAmount?: number;
   couponCode?: string;
   discountAmount?: number;

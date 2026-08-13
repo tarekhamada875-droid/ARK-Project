@@ -83,7 +83,9 @@ export const CheckInModal: React.FC<CheckInModalProps> = memo(({
                 </div>
                 <div className="text-right">
                   <div className="font-black text-xl sm:text-2xl md:text-3xl text-slate-900 dark:text-white">{APP_TEXT.GARAGE.TYPE_HOURLY}</div>
-                  <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold mt-1">{garage.hourlyRate} {APP_TEXT.GARAGE.CURRENCY} / ساعة</div>
+                  <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold mt-1">
+                    <span className="font-mono">{garage.hourlyRate}</span> {APP_TEXT.GARAGE.CURRENCY} / ساعة
+                  </div>
                 </div>
                 <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 text-slate-300 dark:text-slate-700 mr-auto group-hover:text-emerald-600 transition-colors" />
               </button>
@@ -98,7 +100,9 @@ export const CheckInModal: React.FC<CheckInModalProps> = memo(({
                 </div>
                 <div className="text-right">
                   <div className="font-black text-xl sm:text-2xl md:text-3xl text-slate-900 dark:text-white transition-colors">{APP_TEXT.GARAGE.TYPE_OVERNIGHT}</div>
-                  <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold transition-colors mt-1">{garage.overnightRate} {APP_TEXT.GARAGE.CURRENCY} ثابت</div>
+                  <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-bold transition-colors mt-1">
+                    <span className="font-mono">{garage.overnightRate}</span> {APP_TEXT.GARAGE.CURRENCY} ثابت
+                  </div>
                 </div>
                 <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 text-slate-300 dark:text-slate-700 mr-auto group-hover:text-emerald-600 transition-colors" />
               </button>

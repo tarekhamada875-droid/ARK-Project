@@ -4,7 +4,6 @@ import {
   RefreshCw, 
   TrendingUp, 
   Car, 
-  DollarSign, 
   CheckCircle2,
   BarChart2,
   ChevronDown,
@@ -13,7 +12,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
-import { safeDate } from '../../utils';
+import { safeDate, getRemainingDays } from '../../utils';
 
 interface GarageReportsViewProps {
   garage: Garage;
@@ -78,21 +77,13 @@ export const GarageReportsView = memo(({
     const todayRevenue = isTodayValid ? (localGarage.todayRevenue || 0) : 0;
     const totalRevenue = localGarage.totalRevenue || 0;
     const currentBalance = localGarage.balance || 0;
-    const isSubscriptionModel = localGarage.billingModel === 'subscription';
-
-    // Calculate remaining subscription days for subscription model garages
-    let remainingDays = 0;
+    // Calculate remaining subscription days
+    const remainingDays = getRemainingDays(localGarage);
     let formattedExpiryDate = '';
-    if (isSubscriptionModel) {
-      if (localGarage.balanceExpiry) {
-        const expiryDate = safeDate(localGarage.balanceExpiry);
-        if (!isNaN(expiryDate.getTime())) {
-          const diff = expiryDate.getTime() - Date.now();
-          remainingDays = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-          formattedExpiryDate = expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
-        }
-      } else if (typeof localGarage.balanceDays === 'number') {
-        remainingDays = localGarage.balanceDays;
+    if (localGarage.balanceExpiry) {
+      const expiryDate = safeDate(localGarage.balanceExpiry);
+      if (!isNaN(expiryDate.getTime())) {
+        formattedExpiryDate = expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
       }
     }
 
@@ -126,7 +117,6 @@ export const GarageReportsView = memo(({
       todayRevenue,
       totalRevenue,
       currentBalance,
-      isSubscriptionModel,
       remainingDays,
       formattedExpiryDate,
       staffPerformance: Object.entries(staffPerformance)
@@ -193,45 +183,28 @@ export const GarageReportsView = memo(({
           <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-xl flex flex-col justify-between shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500">
-                {stats.isSubscriptionModel ? 'الاشتراك المتبقي' : 'الرصيد المتاح'}
+                الاشتراك المتبقي
               </span>
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                stats.isSubscriptionModel
-                  ? stats.remainingDays <= 2
-                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
-                    : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
-                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                stats.remainingDays <= 2
+                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
+                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
               }`}>
-                {stats.isSubscriptionModel ? (
-                  <CalendarDays className="w-3.5 h-3.5 stroke-[2.5]" />
-                ) : (
-                  <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" />
-                )}
+                <CalendarDays className="w-3.5 h-3.5 stroke-[2.5]" />
               </div>
             </div>
-            {stats.isSubscriptionModel ? (
-              <div>
-                <p className={`text-lg font-black leading-none font-mono ${stats.remainingDays <= 0 ? 'text-red-500 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
-                  {stats.remainingDays} <span className="text-[10px] font-bold text-slate-400">يوم</span>
-                </p>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1.5 block leading-none truncate">
-                  {stats.remainingDays <= 0
-                    ? 'الاشتراك منتهي'
-                    : stats.formattedExpiryDate
-                    ? `ينتهي: ${stats.formattedExpiryDate}`
-                    : 'نظام الاشتراك'}
-                </span>
-              </div>
-            ) : (
-              <div>
-                <p className="text-lg font-black text-slate-900 dark:text-white leading-none font-mono">
-                  {stats.currentBalance} <span className="text-[10px] font-bold text-slate-400">ج.م</span>
-                </p>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1.5 block leading-none">
-                  المتبقي: {Math.max(0, Math.floor((stats.currentBalance || 0) / (localGarage.commissionPerVehicle || 1)))} وحدة
-                </span>
-              </div>
-            )}
+            <div>
+              <p className={`text-lg font-black leading-none font-mono ${stats.remainingDays <= 0 ? 'text-red-500 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+                {stats.remainingDays} <span className="text-[10px] font-bold text-slate-400">يوم</span>
+              </p>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1.5 block leading-none truncate">
+                {stats.remainingDays <= 0
+                  ? 'الاشتراك منتهي'
+                  : stats.formattedExpiryDate
+                  ? `ينتهي: ${stats.formattedExpiryDate}`
+                  : 'نظام الاشتراك'}
+              </span>
+            </div>
           </div>
 
           {/* Card: Revenue */}

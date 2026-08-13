@@ -28,9 +28,13 @@ import {
   Wallet,
   LogOut,
   Sliders,
-  Tag
+  Tag,
+  AlertTriangle,
 } from 'lucide-react';
+import { getDocs, collection } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
+import { getCleanPackageInfo } from '../../constants/packages';
 import { Spinner } from '../ui/Spinner';
 import { firestoreService } from '../../services/firestoreService';
 import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
@@ -39,7 +43,12 @@ import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
+import { AdminGarageForm } from './AdminGarageForm';
+import { AdminGarageList } from './AdminGarageList';
+import { AdminRequestsTab } from './AdminRequestsTab';
 import { AdminReportsView } from './AdminReportsView';
+
+export { AdminGarageForm, AdminGarageList, AdminRequestsTab };
 
 interface AdminDashboardProps {
   allGarages: Garage[];
@@ -88,6 +97,7 @@ export const AdminDashboard = memo(({
 
   // Localized states to encapsulate admin view and prevent global App re-renders
   const [adminSearch, setAdminSearch] = React.useState<string>('');
+  const [packageDurationFilter, setPackageDurationFilter] = React.useState<15 | 30>(30);
   const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin'>('app_admin_tab', 'menu');
   const [showPlansModal, setShowPlansModal] = useLocalStorageState<boolean>('app_admin_plans_modal', false);
   const [showOverview, setShowOverview] = useLocalStorageState<boolean>('app_admin_overview', false);
@@ -113,14 +123,12 @@ export const AdminDashboard = memo(({
   const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
   const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
   const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
-  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; billingModel: 'commission' | 'subscription'; subscriptionType: 'weekly' | 'biweekly' | 'monthly'; hasMonthlySubscribers: boolean }>({
+  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; hasMonthlySubscribers: boolean }>({
     name: '',
     hourlyRate: '',
     overnightRate: '',
     phone: '',
     initialPackageId: '',
-    billingModel: 'commission',
-    subscriptionType: 'weekly',
     hasMonthlySubscribers: false
   });
 
@@ -149,7 +157,7 @@ export const AdminDashboard = memo(({
   const [walletValue, setWalletValue] = React.useState(currentWalletNumber);
   const [isSavingWallet, setIsSavingWallet] = React.useState(false);
 
-  const [subPriceForm, setSubPriceForm] = React.useState<{
+  const [_subPriceForm, _setSubPriceForm] = React.useState<{
     weekly: string;
     weeklyDiscount: number;
     biweekly: string;
@@ -166,7 +174,7 @@ export const AdminDashboard = memo(({
   });
 
   React.useEffect(() => {
-    setSubPriceForm({
+    _setSubPriceForm({
       weekly: String(subscriptionPrices.weekly ?? 800),
       weeklyDiscount: subscriptionPrices.weeklyDiscount || 0,
       biweekly: String(subscriptionPrices.biweekly ?? 1500),
@@ -180,6 +188,13 @@ export const AdminDashboard = memo(({
     setWalletValue(currentWalletNumber);
   }, [currentWalletNumber]);
 
+
+  const [packageValidationError, setPackageValidationError] = React.useState<{
+    isOpen: boolean;
+    conflictingPackageName: string;
+    message: string;
+    suggestions: string[];
+  } | null>(null);
 
   const [confirmDialog, setConfirmDialog] = React.useState<{
     isOpen: boolean;
@@ -506,6 +521,47 @@ export const AdminDashboard = memo(({
     setShowOverview(false);
   };
 
+  const exportAllData = async () => {
+    try {
+      showToast('جاري تصدير البيانات...');
+      
+      const garagesSnap = await getDocs(collection(db, 'garages'));
+      const activitySnap = await getDocs(collection(db, 'activity_logs'));
+      
+      const garagesWithVehicles: any[] = [];
+      for (const g of garagesSnap.docs) {
+        const vehiclesSnap = await getDocs(collection(db, `garages/${g.id}/vehicles`));
+        garagesWithVehicles.push({
+          ...g.data(),
+          id: g.id,
+          vehicles: vehiclesSnap.docs.map(v => ({ id: v.id, ...v.data() }))
+        });
+      }
+      
+      const data = {
+        exportDate: new Date().toISOString(),
+        garages: garagesWithVehicles,
+        activityLogs: activitySnap.docs.map(d => ({ id: d.id, ...d.data() })),
+        delegates: delegates,
+        supervisors: supervisors,
+        generalManagers: generalManagers,
+        packages: packages
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `parq-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('تم التصدير بنجاح');
+    } catch (err) {
+      console.error('Export failed:', err);
+      showToast('فشل التصدير', 'error');
+    }
+  };
+
   const [requestSubTab, setRequestSubTab] = React.useState<'recharge' | 'creation'>('recharge');
 
   const approvedGarages = React.useMemo(() => {
@@ -525,6 +581,22 @@ export const AdminDashboard = memo(({
       return normalizedName.includes(q) || phoneMatch;
     });
   }, [approvedGarages, adminSearch]);
+
+  const [garagePage, setGaragePage] = React.useState<number>(0);
+  const GARAGES_PER_PAGE = 50;
+  const [delegateDisplayLimit, setDelegateDisplayLimit] = React.useState<number>(50);
+
+  React.useEffect(() => {
+    setGaragePage(0);
+  }, [adminSearch]);
+
+  const displayedGarages = React.useMemo(() => {
+    return filteredGarages.slice(0, (garagePage + 1) * GARAGES_PER_PAGE);
+  }, [filteredGarages, garagePage]);
+
+  const displayedDelegates = React.useMemo(() => {
+    return delegates.slice(0, delegateDisplayLimit);
+  }, [delegates, delegateDisplayLimit]);
 
   const totalAdminRevenue = React.useMemo(() => {
     return approvedGarages.reduce((sum, g) => sum + (g.totalAdminRevenue || 0), 0);
@@ -642,7 +714,7 @@ export const AdminDashboard = memo(({
             <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight leading-tight">
               {activeTab === 'menu' ? t('لوحة تحكم النظام') : (
                 activeTab === 'garages' ? t('الجراجات') :
-                activeTab === 'packages' ? t('إدارة الباقات') :
+                activeTab === 'packages' ? t('إدارة خطط الاشتراكات الدوريّة') :
                 activeTab === 'delegates' ? t('المندوبين') :
                 activeTab === 'requests' ? t('الطلبات والمراجعات') :
                 activeTab === 'reports' ? t('التقارير الذكية') :
@@ -750,7 +822,7 @@ export const AdminDashboard = memo(({
                     </div>
 
                     {/* Appearance Settings Button */}
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40 space-y-2">
                       <button 
                         type="button"
                         onClick={() => {
@@ -764,6 +836,23 @@ export const AdminDashboard = memo(({
                             <Sliders className="w-4 h-4 text-indigo-500" />
                           </div>
                           <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{t('إعدادات المظهر')}</span>
+                        </div>
+                      </button>
+
+                      {/* Export Backup Data Button */}
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setShowMenu(false);
+                          exportAllData();
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 rounded-xl border-2 border-emerald-100 dark:border-emerald-800/60 transition-all outline-none cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                            <RefreshCw className="w-4 h-4" />
+                          </div>
+                          <span className="font-bold text-sm text-emerald-900 dark:text-emerald-300">تصدير نسخة احتياطية</span>
                         </div>
                       </button>
                     </div>
@@ -851,9 +940,9 @@ export const AdminDashboard = memo(({
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
               >
                 <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('إدارة الباقات')}</h3>
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('إدارة خطط الاشتراكات الدوريّة')}</h3>
                   <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {packages.length} {t('باقة شحن')}
+                    {packages.length} {t('خطة اشتراك')}
                   </span>
                 </div>
               </div>
@@ -1019,7 +1108,7 @@ export const AdminDashboard = memo(({
                   )}
                 </div>
                 <div className="p-6 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[300px]">
-                  {filteredGarages.map((g) => {
+                  {displayedGarages.map((g) => {
                     return (
                       <div 
                         key={g.id} 
@@ -1059,6 +1148,17 @@ export const AdminDashboard = memo(({
                     );
                   })}
                 </div>
+                {filteredGarages.length > (garagePage + 1) * GARAGES_PER_PAGE && (
+                  <div className="p-4 flex justify-center border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                    <button
+                      type="button"
+                      onClick={() => setGaragePage(p => p + 1)}
+                      className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition-colors shadow-sm active:scale-95"
+                    >
+                      {t('تحميل المزيد')} ({filteredGarages.length - (garagePage + 1) * GARAGES_PER_PAGE} {t('جراج متبقي')})
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -1174,7 +1274,7 @@ export const AdminDashboard = memo(({
                 </div>
                 <div className="p-8">
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                    {delegates.map((d) => (
+                    {displayedDelegates.map((d) => (
                       <div 
                         key={d.id} 
                         onClick={() => {
@@ -1208,6 +1308,17 @@ export const AdminDashboard = memo(({
                       </div>
                     )}
                   </div>
+                  {delegates.length > delegateDisplayLimit && (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setDelegateDisplayLimit(prev => prev + 12)}
+                        className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition-colors shadow-sm active:scale-95"
+                      >
+                        {t('عرض المزيد من المندوبين')} ({delegates.length - delegateDisplayLimit} {t('متبقي')})
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -1876,517 +1987,374 @@ export const AdminDashboard = memo(({
           </div>
         ) : activeTab === 'packages' ? (
           <div className="space-y-8">
-            {/* Subscription Prices Cards Section */}
-            <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-6 sm:p-8 transition-colors shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3 font-sans">
-                  <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
-                    <Zap className="w-6 h-6 stroke-[2.5]" />
-                  </div>
-                  <span>{t('تعديل أسعار اشتراكات الجراجات الدوريّة')}</span>
-                </h2>
-                <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20 self-start sm:self-auto">
-                  تحديث مباشر للباقات ⚡
-                </span>
-              </div>
-
-              <form 
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const weeklyInput = form.elements.namedItem('weeklyPrice') as HTMLInputElement;
-                  const biweeklyInput = form.elements.namedItem('biweeklyPrice') as HTMLInputElement;
-                  const monthlyInput = form.elements.namedItem('monthlyPrice') as HTMLInputElement;
-                  const weeklyDiscountInput = form.elements.namedItem('weeklyDiscount') as HTMLSelectElement;
-                  const biweeklyDiscountInput = form.elements.namedItem('biweeklyDiscount') as HTMLSelectElement;
-                  const monthlyDiscountInput = form.elements.namedItem('monthlyDiscount') as HTMLSelectElement;
-
-                  const weekly = Number(weeklyInput.value);
-                  const biweekly = Number(biweeklyInput.value);
-                  const monthly = Number(monthlyInput.value);
-                  const weeklyDiscountVal = weeklyDiscountInput?.value ? Number(weeklyDiscountInput.value) : undefined;
-                  const biweeklyDiscountVal = biweeklyDiscountInput?.value ? Number(biweeklyDiscountInput.value) : undefined;
-                  const monthlyDiscountVal = monthlyDiscountInput?.value ? Number(monthlyDiscountInput.value) : undefined;
-
-                  if (weekly <= 0 || biweekly <= 0 || monthly <= 0) {
-                    showToast(t('يرجى إدخال أسعار صحيحة أكبر من الصفر'), 'error');
-                    return;
-                  }
-
-                  try {
-                    await firestoreService.updateSubscriptionPrices({ 
-                      weekly, 
-                      biweekly,
-                      monthly,
-                      weeklyDiscount: weeklyDiscountVal,
-                      biweeklyDiscount: biweeklyDiscountVal,
-                      monthlyDiscount: monthlyDiscountVal
-                    });
-                    showToast(t('تم تحديث أسعار الاشتراكات والخصومات بنجاح'));
-                  } catch (err) {
-                    showToast(t('حدث خطأ أثناء تحديث الأسعار'), 'error');
-                  }
-                }}
-                className="space-y-8 font-sans"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Card 1: Weekly (7 Days) */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-indigo-100 dark:border-indigo-900/40 relative overflow-hidden group hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-all flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-5">
-                        <div>
-                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">الاشتراك الأسبوعي</h3>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 7 أيام</p>
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-lg">
-                          أسبوعي
-                        </span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
-                            السعر الإجمالي (ج.م)
-                          </label>
-                          <div className="relative">
-                            <input 
-                              name="weeklyPrice" 
-                              type="text" 
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={subPriceForm.weekly}
-                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, weekly: e.target.value.replace(/\D/g, '') }))}
-                              required 
-                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-indigo-500 transition-all font-mono" 
-                            />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mb-2">
-                            نسبة الخصم التشجيعي (%)
-                          </label>
-                          <select 
-                            name="weeklyDiscount" 
-                            value={subPriceForm.weeklyDiscount || ''}
-                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, weeklyDiscount: Number(e.target.value) }))}
-                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-indigo-500 transition-all cursor-pointer" 
-                          >
-                            <option value="">{t('بدون خصم (0%)')}</option>
-                            {[10, 15, 20, 25, 30, 50].map((num) => (
-                              <option key={num} value={num}>
-                                خصم {num}%
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Calculated Price Display */}
-                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
-                      {(() => {
-                        const price = Number(subPriceForm.weekly) || 0;
-                        const discount = subPriceForm.weeklyDiscount || 0;
-                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
-                        return (
-                          <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
-                            <span className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                              {finalPrice} ج.م
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Card 2: 15 Days (Biweekly) - NEW! */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-emerald-100 dark:border-emerald-900/40 relative overflow-hidden group hover:border-emerald-400 dark:hover:border-emerald-500/60 transition-all flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-5">
-                        <div>
-                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">اشتراك 15 يوم</h3>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 15 يوماً</p>
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg">
-                          جديد ✨
-                        </span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
-                            السعر الإجمالي (ج.م)
-                          </label>
-                          <div className="relative">
-                            <input 
-                              name="biweeklyPrice" 
-                              type="text" 
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={subPriceForm.biweekly}
-                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, biweekly: e.target.value.replace(/\D/g, '') }))}
-                              required 
-                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-emerald-500 transition-all font-mono" 
-                            />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-extrabold text-emerald-600 dark:text-emerald-400 mb-2">
-                            نسبة الخصم التشجيعي (%)
-                          </label>
-                          <select 
-                            name="biweeklyDiscount" 
-                            value={subPriceForm.biweeklyDiscount || ''}
-                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, biweeklyDiscount: Number(e.target.value) }))}
-                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-emerald-500 transition-all cursor-pointer" 
-                          >
-                            <option value="">{t('بدون خصم (0%)')}</option>
-                            {[10, 15, 20, 25, 30, 50].map((num) => (
-                              <option key={num} value={num}>
-                                خصم {num}%
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Calculated Price Display */}
-                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
-                      {(() => {
-                        const price = Number(subPriceForm.biweekly) || 0;
-                        const discount = subPriceForm.biweeklyDiscount || 0;
-                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
-                        return (
-                          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
-                            <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                              {finalPrice} ج.م
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Card 3: Monthly (30 Days) */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl p-6 border-2 border-amber-100 dark:border-amber-900/40 relative overflow-hidden group hover:border-amber-400 dark:hover:border-amber-500/60 transition-all flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-5">
-                        <div>
-                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">الاشتراك الشهري</h3>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-bold">صلاحية لمدة 30 يوماً</p>
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-lg">
-                          الأكثر طلباً
-                        </span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-2">
-                            السعر الإجمالي (ج.م)
-                          </label>
-                          <div className="relative">
-                            <input 
-                              name="monthlyPrice" 
-                              type="text" 
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={subPriceForm.monthly}
-                              onChange={(e) => setSubPriceForm(prev => ({ ...prev, monthly: e.target.value.replace(/\D/g, '') }))}
-                              required 
-                              className="w-full p-3.5 pr-4 pl-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-black text-lg outline-none focus:border-amber-500 transition-all font-mono" 
-                            />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">ج.م</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-extrabold text-amber-600 dark:text-amber-400 mb-2">
-                            نسبة الخصم التشجيعي (%)
-                          </label>
-                          <select 
-                            name="monthlyDiscount" 
-                            value={subPriceForm.monthlyDiscount || ''}
-                            onChange={(e) => setSubPriceForm(prev => ({ ...prev, monthlyDiscount: Number(e.target.value) }))}
-                            className="w-full p-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-sm outline-none focus:border-amber-500 transition-all cursor-pointer" 
-                          >
-                            <option value="">{t('بدون خصم (0%)')}</option>
-                            {[10, 15, 20, 25, 30, 50].map((num) => (
-                              <option key={num} value={num}>
-                                خصم {num}%
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Calculated Price Display */}
-                    <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700/60">
-                      {(() => {
-                        const price = Number(subPriceForm.monthly) || 0;
-                        const discount = subPriceForm.monthlyDiscount || 0;
-                        const finalPrice = discount > 0 ? Math.round(price * (1 - discount / 100)) : price;
-                        return (
-                          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">السعر النهائي بعد الخصم:</span>
-                            <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
-                              {finalPrice} ج.م
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit" 
-                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white py-4 rounded-2xl font-black text-base transition-all outline-none flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-[0.99]"
-                >
-                  <Zap className="w-5 h-5 fill-current" />
-                  <span>{t('حفظ أسعار الاشتراكات والخصومات')}</span>
-                </button>
-              </form>
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1">
-              <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3 font-sans">
-                  <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shrink-0">
-                    <Plus className="w-5 h-5 text-white stroke-[3]" />
-                  </div>
-                  {t('إضافة باقة جديدة')}
-                </h2>
-                <form 
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const form = e.target as HTMLFormElement;
-                    const nameInput = form.elements.namedItem('pkgName') as HTMLInputElement;
-                    const priceInput = form.elements.namedItem('pkgPrice') as HTMLInputElement;
-                    const countInput = form.elements.namedItem('pkgCount') as HTMLInputElement;
-                    const discountValueInput = form.elements.namedItem('pkgDiscountValue') as HTMLSelectElement | HTMLInputElement;
-                    
-                    const name = nameInput.value;
-                    const price = Number(priceInput.value);
-                    const count = Number(countInput.value);
-                    const discountVal = discountValueInput?.value ? Number(discountValueInput.value) : 0;
-                    
-                    if (discountVal > 0 && (discountVal < 10 || discountVal > 50)) {
-                      showToast(t('نسبة الخصم يجب أن تكون بين 10% و 50%'), 'error');
-                      return;
-                    }
+              {/* Form Column */}
+              <section className="lg:col-span-1">
+                <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm">
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white mb-6 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-emerald-600 rounded-xl flex items-center justify-center shrink-0 text-white">
+                      <Plus className="w-5 h-5 stroke-[3]" />
+                    </div>
+                    <span>{t('إضافة خطة اشتراك جديدة')}</span>
+                  </h2>
 
-                    try {
-                      const pkgData: Omit<Package, 'id' | 'createdAt' | 'isActive'> = {
-                        name,
-                        price,
-                        vehiclesCount: count
-                      };
-                      if (discountVal > 0) {
-                        pkgData.discountType = 'percentage';
-                        pkgData.discountValue = discountVal;
+                  <form 
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.target as HTMLFormElement;
+                      const nameInput = form.elements.namedItem('pkgName') as HTMLInputElement;
+                      const priceInput = form.elements.namedItem('pkgPrice') as HTMLInputElement;
+                      const durationInput = form.elements.namedItem('pkgDurationDays') as HTMLInputElement | HTMLSelectElement;
+                      const dailyCapInput = form.elements.namedItem('pkgDailyCapacity') as HTMLInputElement | HTMLSelectElement;
+                      const discountValueInput = form.elements.namedItem('pkgDiscountValue') as HTMLSelectElement;
+                      
+                      const name = nameInput.value.trim();
+                      const price = Number(priceInput.value) || 0;
+                      const durationDays = Number(durationInput.value) || 30;
+                      const rawCapVal = dailyCapInput?.value !== undefined && dailyCapInput.value.trim() !== '' ? Number(dailyCapInput.value) : 0;
+                      const dailyCapacity = isNaN(rawCapVal) ? 0 : rawCapVal;
+                      const discountVal = discountValueInput?.value ? Number(discountValueInput.value) : 0;
+                      
+                      if (!name || price <= 0) {
+                        showToast(t('يرجى إدخال اسم الاشتراك والسعر بشكل صحيح'), 'error');
+                        return;
                       }
-                      await firestoreService.addPackage(pkgData);
-                      form.reset();
-                      showToast(t('تم إضافة الباقة بنجاح'));
-                    } catch (err) {
-                      showToast(t('حدث خطأ أثناء إضافة الباقة'), 'error');
-                    }
-                  }}
-                  className="space-y-5 font-sans"
-                >
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم الباقة')}</label>
-                    <input 
-                      name="pkgName" 
-                      placeholder={t('مثال: الباقة البرونزية...')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('سعر الباقة قبل الخصم (ج.م)')}</label>
-                    <input 
-                      name="pkgPrice" 
-                      type="text" 
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder={t('مثال: 200')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all font-mono" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('عدد السيارات المسموح بها')}</label>
-                    <input 
-                      name="pkgCount" 
-                      type="text" 
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder={t('مثال: 100')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all font-mono" 
-                    />
-                  </div>
 
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                    <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mr-2">
-                      <Tag className="w-3.5 h-3.5" />
-                      <span>{t('خصم خاص على الباقة (نسبة مئوية من 10% إلى 50%)')}</span>
-                    </label>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 mb-1 block">{t('نسبة الخصم (%) [اختياري]')}</label>
+                      // Logical Validation
+                      const finalPrice = discountVal > 0 ? price * (1 - discountVal / 100) : price;
+                      const nDur = durationDays;
+                      const nCap = dailyCapacity === 0 ? Infinity : dailyCapacity;
+
+                      let conflict = null;
+                      const currentPkgs = packages || [];
+                      for (const pkg of currentPkgs) {
+                        const info = getCleanPackageInfo(pkg);
+                        const eCap = info.isUnlimited ? Infinity : (info.dailyCapacity || 50);
+                        const eDur = info.durationDays;
+                        const ePrice = pkg.discountValue && pkg.discountValue > 0 
+                          ? (pkg.discountType === 'percentage' 
+                              ? pkg.price * (1 - pkg.discountValue / 100) 
+                              : Math.max(0, pkg.price - pkg.discountValue))
+                          : pkg.price;
+
+                        // Same package details (Duplicate)
+                        if (nCap === eCap && nDur === eDur && finalPrice === ePrice) {
+                          conflict = { pkgName: pkg.name, reason: 'duplicate', ePrice, eCap, eDur };
+                          break;
+                        }
+
+                        // Condition A: New offers MORE/EQUAL value but is CHEAPER/EQUAL
+                        if (nDur >= eDur && nCap >= eCap && finalPrice <= ePrice) {
+                          conflict = { pkgName: pkg.name, reason: 'too_cheap', ePrice, eCap, eDur };
+                          break;
+                        }
+
+                        // Condition B: New offers LESS/EQUAL value but is MORE EXPENSIVE/EQUAL
+                        if (nDur <= eDur && nCap <= eCap && finalPrice >= ePrice) {
+                          conflict = { pkgName: pkg.name, reason: 'too_expensive', ePrice, eCap, eDur };
+                          break;
+                        }
+                      }
+
+                      if (conflict) {
+                        let msg = '';
+                        let suggestions: string[] = [];
+                        if (conflict.reason === 'duplicate') {
+                          msg = `هذا الاشتراك مطابق تماماً لاشتراك "${conflict.pkgName}".`;
+                          suggestions = ['قم بتغيير السعر', 'أو تغيير السعة اليومية', 'أو تغيير مدة الاشتراك'];
+                        } else if (conflict.reason === 'too_cheap') {
+                          msg = `هذا الاشتراك يقدم ميزات (مدة/سعة) أكبر من أو تساوي اشتراك "${conflict.pkgName}" ولكن بسعر أرخص أو مساوٍ!`;
+                          suggestions = [
+                            `ارفع السعر (بعد الخصم) ليكون أعلى من ${Math.round(conflict.ePrice)} ج.م`,
+                            conflict.eCap === Infinity ? `قم بتحديد سعة يومية بدلاً من السعة المفتوحة` : `قلل السعة اليومية لتكون أقل من ${conflict.eCap} سيارة/يوم`,
+                            `قلل مدة الاشتراك لتكون أقل من ${conflict.eDur} يوماً`
+                          ];
+                        } else if (conflict.reason === 'too_expensive') {
+                          msg = `هذا الاشتراك يقدم ميزات (مدة/سعة) أقل من أو تساوي اشتراك "${conflict.pkgName}" ولكن بسعر أعلى أو مساوٍ!`;
+                          suggestions = [
+                            `قلل السعر (بعد الخصم) ليكون أقل من ${Math.round(conflict.ePrice)} ج.م`,
+                            conflict.eCap === Infinity ? `(السعة الحالية مفتوحة بالفعل)` : `ارفع السعة اليومية لتكون أعلى من ${conflict.eCap} سيارة/يوم`,
+                            `ارفع مدة الاشتراك لتكون أعلى من ${conflict.eDur} يوماً`
+                          ];
+                        }
+
+                        setPackageValidationError({
+                          isOpen: true,
+                          conflictingPackageName: conflict.pkgName,
+                          message: msg,
+                          suggestions: suggestions.filter(s => !s.includes('(السعة الحالية مفتوحة بالفعل)'))
+                        });
+                        return;
+                      }
+
+                      try {
+                        const pkgData: Omit<Package, 'id' | 'createdAt' | 'isActive'> = {
+                          name,
+                          price,
+                          vehiclesCount: durationDays,
+                          durationDays,
+                          dailyCapacity
+                        };
+                        if (discountVal > 0) {
+                          pkgData.discountType = 'percentage';
+                          pkgData.discountValue = discountVal;
+                        }
+                        await firestoreService.addPackage(pkgData);
+                        form.reset();
+                        showToast(t('تم إضافة خطة الاشتراك بنجاح'));
+                      } catch (err) {
+                        showToast(t('حدث خطأ أثناء إضافة خطة الاشتراك'), 'error');
+                      }
+                    }}
+                    className="space-y-5"
+                  >
+                    {/* Plan Name */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                        {t('اسم خطة الاشتراك')} <span className="text-red-500">*</span>
+                      </label>
+                      <input 
+                        name="pkgName" 
+                        placeholder={t('مثال: اشتراك 15 يوم - سعة 50 سيارة/يوم')} 
+                        required 
+                        className="w-full p-4 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-emerald-500 outline-none font-bold text-sm transition-all" 
+                      />
+                    </div>
+
+                    {/* Price */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                        {t('سعر الاشتراك الدوري (ج.م)')} <span className="text-red-500">*</span>
+                      </label>
+                      <input 
+                        name="pkgPrice" 
+                        type="text" 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder={t('مثال: 800 أو 1500')} 
+                        required 
+                        className="w-full p-4 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-emerald-500 outline-none font-bold font-mono text-base transition-all" 
+                      />
+                    </div>
+
+                    {/* Duration & Daily Capacity */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                          {t('مدة الاشتراك (بالأيام)')}
+                        </label>
+                        <select 
+                          name="pkgDurationDays" 
+                          defaultValue="30"
+                          className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 font-bold font-mono text-sm outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          <option value="15">15 {t('يوم')}</option>
+                          <option value="30">30 {t('يوم')}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                          {t('السعة اليومية (سيارة/يوم)')}
+                        </label>
+                        <select 
+                          name="pkgDailyCapacity" 
+                          defaultValue=""
+                          className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold font-mono text-sm outline-none focus:border-emerald-500" 
+                          dir="rtl"
+                        >
+                          <option value="40">40 {t('سيارة')}</option>
+                          <option value="70">70 {t('سيارة')}</option>
+                          <option value="100">100 {t('سيارة')}</option>
+                          <option value="150">150 {t('سيارة')}</option>
+                          <option value="">{t('غير محدودة')}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Discount */}
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                      <label className="text-xs font-black text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                        <Tag className="w-4 h-4" />
+                        <span>{t('نسبة الخصم التشجيعي (%)')}</span>
+                      </label>
                       <select 
                         name="pkgDiscountValue"
-                        className="w-full p-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 cursor-pointer"
+                        className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 cursor-pointer"
                       >
                         <option value="">{t('بدون خصم (0%)')}</option>
                         {[10, 15, 20, 25, 30, 50].map((num) => (
                           <option key={num} value={num}>
-                            {num}%
+                            خصم {num}%
                           </option>
                         ))}
                       </select>
                     </div>
+
+                    <button 
+                      type="submit" 
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-base transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2"
+                    >
+                      <Plus className="w-5 h-5 stroke-[3]" />
+                      <span>{t('حفظ وإضافة خطة الاشتراك')}</span>
+                    </button>
+                  </form>
+                </div>
+              </section>
+
+              {/* Plans List Column */}
+              <section className="lg:col-span-2 space-y-6">
+                <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                  <div className="p-6 border-b-2 border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-3">
+                      <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center shrink-0">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <span>{t('خطط الاشتراكات الحالية للنظام')}</span>
+                      <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full border border-slate-200 dark:border-slate-700">
+                        ({packages.length})
+                      </span>
+                    </h2>
                   </div>
 
-                  <button 
-                    type="submit" 
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-95 transition-all outline-none flex items-center justify-center gap-3 mt-4 pointer-events-auto"
-                  >
-                    <Plus className="w-6 h-6 stroke-[3]" />
-                    <span>{t('إضافة الباقة')}</span>
-                  </button>
-                </form>
-              </div>
-            </section>
-
-            <section className="lg:col-span-2 space-y-8">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
-                <div className="p-8 border-b-2 border-slate-100 dark:border-slate-850 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors font-sans">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-850 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-800 transition-colors shrink-0">
-                      <Zap className="w-5 h-5 text-emerald-550" />
-                    </div>
-                    الباقات الحالية في النظام
-                    <span className="text-slate-300 dark:text-slate-500 text-sm font-bold mr-2">({packages.length})</span>
-                  </h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {packages.map(pkg => (
-                      <div 
-                        key={pkg.id} 
-                        className="p-5 bg-white dark:bg-slate-900 border bg-white dark:bg-slate-900 border-2 border-slate-103 dark:border-slate-800 rounded-2xl hover:border-emerald-500 dark:hover:border-emerald-500 transition-all flex flex-col justify-between min-h-40 shadow-sm relative overflow-hidden"
+                  <div className="p-6">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl mb-6">
+                      <button
+                        type="button"
+                        onClick={() => setPackageDurationFilter(15)}
+                        className={`flex-1 py-3 px-4 rounded-xl text-sm font-black transition-all flex flex-col items-center justify-center gap-1 ${
+                          packageDurationFilter === 15 
+                            ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
                       >
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h4 className="font-sans font-black text-slate-900 dark:text-white text-lg">{pkg.name}</h4>
-                            {pkg.discountValue && pkg.discountValue > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mt-1">
-                                <Tag className="w-3 h-3" />
-                                {pkg.discountType === 'percentage' ? `خصم ${pkg.discountValue}%` : `خصم ${pkg.discountValue} ج.م`}
-                              </span>
-                            ) : null}
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setConfirmDialog({
-                                isOpen: true,
-                                title: t('حذف باقة'),
-                                message: adminLang === 'en' ? `Are you sure you want to delete package "${pkg.name}"?` : `هل أنت متأكد من حذف باقة "${pkg.name}"؟`,
-                                confirmText: t('حذف'),
-                                cancelText: t('تراجع'),
-                                type: 'danger',
-                                onConfirm: async () => {
-                                  try {
-                                    await firestoreService.deletePackage(pkg.id);
-                                    showToast(t('تم حذف الباقة بنجاح'));
-                                  } catch (err) {
-                                    showToast(t('فشل حذف الباقة'), 'error');
-                                  } finally {
-                                    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-                                  }
-                                }
-                              });
-                            }}
-                            className="w-9 h-9 bg-red-500/10 dark:bg-red-500/25 hover:bg-red-500 text-red-600 dark:text-red-400 hover:text-white rounded-xl flex items-center justify-center transition-all outline-none"
-                          >
-                            <Trash2 className="w-4 h-4 stroke-[2.5]" />
-                          </button>
-                        </div>
+                        <span>15 {t('يوم')}</span>
+                        <span className="text-[10px] font-bold opacity-60">({t('نصف شهر')})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPackageDurationFilter(30)}
+                        className={`flex-1 py-3 px-4 rounded-xl text-sm font-black transition-all flex flex-col items-center justify-center gap-1 ${
+                          packageDurationFilter === 30 
+                            ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                      >
+                        <span>30 {t('يوم')}</span>
+                        <span className="text-[10px] font-bold opacity-60">({t('شهر')})</span>
+                      </button>
+                    </div>
 
-                        <div className="grid grid-cols-3 gap-1 border-t border-slate-100 dark:border-slate-800 pt-4 mt-auto font-sans text-center">
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold leading-none mb-1">{t('سعر الباقة')}</span>
-                            <div className="flex items-baseline gap-0.5 font-black mt-0.5 whitespace-nowrap justify-center w-full">
-                              {pkg.discountValue && pkg.discountValue > 0 ? (
-                                <div className="flex flex-col items-center">
-                                  <span className="text-sm xs:text-base sm:text-lg text-emerald-500 font-mono">
-                                    {pkg.discountType === 'percentage'
-                                      ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
-                                      : Math.max(0, pkg.price - pkg.discountValue)}
-                                  </span>
-                                  <span className="text-[9px] text-slate-400 line-through font-mono">{pkg.price} ج.م</span>
+                    {(() => {
+                      const displayedPackages = packages.filter(p => packageDurationFilter === 30 ? (p.durationDays === 30 || !p.durationDays) : p.durationDays === 15);
+
+                      return (
+                        <div className="space-y-8">
+                          {displayedPackages.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {displayedPackages.map(pkg => (
+                                <div 
+                                  key={pkg.id} 
+                                  className="p-5 bg-slate-50 dark:bg-slate-800/60 border-2 border-slate-200 dark:border-slate-700 rounded-2xl hover:border-emerald-500 dark:hover:border-emerald-500 transition-all flex flex-col justify-between shadow-sm relative"
+                                >
+                                  <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                      <h4 className="font-black text-slate-900 dark:text-white text-base leading-tight">{pkg.name}</h4>
+                                      {pkg.discountValue && pkg.discountValue > 0 ? (
+                                        <div className="relative overflow-hidden rounded-full inline-flex items-center justify-center shrink-0 mt-1">
+                                          {/* Spinning Golden Snake Background */}
+                                          <div 
+                                            className="absolute inset-[-250%] bg-[conic-gradient(from_0deg,transparent_75%,#fbbf24_100%)]" 
+                                            style={{ animation: 'spin 3.5s linear infinite' }} 
+                                          />
+                                          {/* Inner Background Mask */}
+                                          <div className="absolute inset-[1.5px] rounded-full bg-slate-50 dark:bg-slate-800" />
+                                          {/* Original Emerald Tint */}
+                                          <div className="absolute inset-[1.5px] rounded-full bg-emerald-500/10" />
+                                          
+                                          {/* Text Content */}
+                                          <span className="relative z-10 inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 text-emerald-600 dark:text-emerald-400">
+                                            <Tag className="w-3 h-3" />
+                                            خصم {pkg.discountValue}%
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        setConfirmDialog({
+                                          isOpen: true,
+                                          title: t('حذف خطة اشتراك'),
+                                          message: `هل أنت متأكد من حذف خطة الاشتراك "${pkg.name}"؟`,
+                                          confirmText: t('حذف'),
+                                          cancelText: t('تراجع'),
+                                          type: 'danger',
+                                          onConfirm: async () => {
+                                            try {
+                                              await firestoreService.deletePackage(pkg.id);
+                                              showToast(t('تم حذف خطة الاشتراك بنجاح'));
+                                            } catch (err) {
+                                              showToast(t('فشل حذف خطة الاشتراك'), 'error');
+                                            } finally {
+                                              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="w-9 h-9 bg-red-100 hover:bg-red-600 text-red-600 hover:text-white dark:bg-red-900/30 dark:hover:bg-red-600 dark:text-red-400 dark:hover:text-white rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0"
+                                      title={t('حذف الخطة')}
+                                    >
+                                      <Trash2 className="w-4 h-4 stroke-[2.5]" />
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-2 border-t border-slate-200 dark:border-slate-700/80 pt-4 mt-auto text-center font-sans">
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">{t('سعر الاشتراك')}</span>
+                                      <div className="flex flex-col items-center">
+                                        {pkg.discountValue && pkg.discountValue > 0 ? (
+                                          <>
+                                            <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                                              {Math.round(pkg.price * (1 - pkg.discountValue / 100))} ج.م
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 line-through font-mono">{pkg.price} ج.م</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">{pkg.price} ج.م</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-col items-center border-x border-slate-200 dark:border-slate-700/80 px-1">
+                                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">{t('مدة الاشتراك')}</span>
+                                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5">
+                                        {pkg.durationDays || 30} يوماً
+                                      </span>
+                                    </div>
+
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">{t('السعة اليومية')}</span>
+                                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5">
+                                        {getCleanPackageInfo(pkg).isUnlimited ? 'سعة مفتوحة' : `${getCleanPackageInfo(pkg).dailyCapacity} سيارة/يوم`}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
-                              ) : (
-                                <>
-                                  <span className="text-sm xs:text-base sm:text-lg text-emerald-500 font-mono">{pkg.price}</span>
-                                  <span className="text-[8px] text-emerald-500 font-semibold">{t('ج.م')}</span>
-                                </>
-                              )}
+                              ))}
                             </div>
-                          </div>
-
-                          <div className="flex flex-col items-center border-x border-slate-100 dark:border-slate-800/60 px-1">
-                            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold leading-none mb-1">{t('سعر السيارة')}</span>
-                            <div className="flex items-baseline gap-0.5 font-black mt-0.5 whitespace-nowrap justify-center w-full">
-                              <span className="text-sm xs:text-base sm:text-lg text-emerald-500 dark:text-emerald-400 font-mono">
-                                {Number(((
-                                  pkg.discountValue && pkg.discountValue > 0
-                                    ? (pkg.discountType === 'percentage'
-                                        ? pkg.price * (1 - pkg.discountValue / 100)
-                                        : Math.max(0, pkg.price - pkg.discountValue))
-                                    : pkg.price
-                                ) / (pkg.vehiclesCount || 1)).toFixed(2))}
-                              </span>
-                              <span className="text-[8px] text-emerald-500 dark:text-emerald-400 font-semibold font-sans">{t('ج.م')}</span>
+                          ) : (
+                            <div className="py-16 text-center text-slate-400 dark:text-slate-500 font-bold">
+                              <Zap className="w-12 h-12 mx-auto mb-3 opacity-30 text-emerald-500" />
+                              <p>{t('لا توجد خطط اشتراكات مسجلة حالياً في هذه الفئة')}</p>
                             </div>
-                          </div>
-
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold leading-none mb-1">{t('عدد السيارات')}</span>
-                            <div className="flex items-baseline gap-0.5 font-black mt-0.5 whitespace-nowrap justify-center w-full">
-                              <span className="text-sm xs:text-base sm:text-lg text-slate-800 dark:text-slate-200 font-mono">{pkg.vehiclesCount}</span>
-                              <span className="text-[8px] text-slate-400 font-semibold font-sans">{t('سيارة')}</span>
-                            </div>
-                          </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
-                    {packages.length === 0 && (
-                      <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
-                        <Zap className="w-12 h-12 mx-auto mb-3 opacity-20 text-emerald-500" />
-                        {t('لا يوجد باقات مسجلة حالياً')}
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
-              </div>
-
-
-            </section>
-          </div>
+              </section>
+            </div>
           </div>
         ) : activeTab === 'reports' ? (
           <AdminReportsView allGarages={approvedGarages} delegates={delegates} />
@@ -2668,7 +2636,7 @@ export const AdminDashboard = memo(({
                 <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
                   <SettingsIcon className="w-5 h-5" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{t('إدارة الباقات')}</h2>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{t('إدارة خطط الاشتراكات الدوريّة')}</h2>
               </div>
               <button 
                 onClick={() => setShowPlansModal(false)}
@@ -2808,7 +2776,7 @@ export const AdminDashboard = memo(({
                   onSubmit={async (e) => {
                     await handleAddGarage(e);
                     // Clear form on success
-                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', billingModel: 'commission', subscriptionType: 'weekly', hasMonthlySubscribers: false });
+                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', hasMonthlySubscribers: false });
                   }}
                   className="space-y-6"
                 >
@@ -2859,57 +2827,26 @@ export const AdminDashboard = memo(({
                     </div>
                   </div>
 
-                  {/* طريقة الحساب */}
+                  <input type="hidden" name="billingModel" value="subscription" />
+
+                  {/* Subscription Package Selection */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('طريقة الحساب بالجراج')}</label>
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('باقة الاشتراك الابتدائي')}</label>
                     <select 
-                      name="billingModel" 
-                      value={garageForm.billingModel}
-                      onChange={(e) => setGarageForm({ ...garageForm, billingModel: e.target.value as any })}
+                      name="initialPackageId" 
+                      value={garageForm.initialPackageId}
+                      onChange={(e) => setGarageForm({ ...garageForm, initialPackageId: e.target.value })}
                       className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
                       dir="rtl"
                     >
-                      <option value="commission">{t('بالعمولة (شحن سيارات)')}</option>
-                      <option value="subscription">{t('بالاشتراك (أسبوعي/شهري)')}</option>
+                      <option value="">{t('اختر باقة الاشتراك النظامية')}</option>
+                      {packages.map(pkg => (
+                        <option key={pkg.id} value={pkg.id}>
+                          {pkg.name} - {pkg.price} {t('ج.م')} ({getCleanPackageInfo(pkg).isUnlimited ? 'سعة مفتوحة' : `${getCleanPackageInfo(pkg).dailyCapacity} سيارة/يوم`})
+                        </option>
+                      ))}
                     </select>
                   </div>
-
-                  {/* Initial Package (Only for Commission) */}
-                  {garageForm.billingModel === 'commission' && packages.length > 0 && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('باقة البداية (اختياري)')}</label>
-                      <select 
-                        name="initialPackageId" 
-                        value={garageForm.initialPackageId}
-                        onChange={(e) => setGarageForm({ ...garageForm, initialPackageId: e.target.value })}
-                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
-                        dir="rtl"
-                      >
-                        <option value="">{t('بدون باقة')}</option>
-                        {packages.map(pkg => (
-                          <option key={pkg.id} value={pkg.id}>{pkg.name} - {pkg.price} {t('ج.م')} ({pkg.vehiclesCount} {t('سيارة')})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Subscription Type (Only for Subscription) */}
-                  {garageForm.billingModel === 'subscription' && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('نوع الاشتراك الابتدائي')}</label>
-                      <select 
-                        name="subscriptionType" 
-                        value={garageForm.subscriptionType}
-                        onChange={(e) => setGarageForm({ ...garageForm, subscriptionType: e.target.value as any })}
-                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none text-center transition-all" 
-                        dir="rtl"
-                      >
-                        <option value="weekly">{t(`اشتراك أسبوعي (7 أيام) - ${subscriptionPrices.weekly} ج.م`)}</option>
-                        <option value="biweekly">{t(`اشتراك 15 يوم - ${subscriptionPrices.biweekly || 1500} ج.م`)}</option>
-                        <option value="monthly">{t(`اشتراك شهري (30 يوماً) - ${subscriptionPrices.monthly} ج.م`)}</option>
-                      </select>
-                    </div>
-                  )}
 
                   {/* Monthly Subscribers Surcharge Toggle */}
                   <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors">
@@ -3005,6 +2942,44 @@ export const AdminDashboard = memo(({
           </div>
         </div>
       )}
+      {/* Package Validation Modal */}
+      {packageValidationError?.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl overflow-hidden border border-red-100 dark:border-red-900 shadow-2xl">
+            <div className="p-6">
+              <div className="w-16 h-16 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-2xl flex items-center justify-center mb-5 mx-auto">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white text-center mb-2">
+                تنبيه: تسعير غير منطقي
+              </h3>
+              <p className="text-sm font-bold text-red-600 dark:text-red-400 text-center mb-6 leading-relaxed bg-red-50 dark:bg-red-500/10 p-4 rounded-xl">
+                {packageValidationError.message}
+              </p>
+              
+              <div className="space-y-3 mb-8">
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">نقترح عليك أحد الحلول التالية:</h4>
+                <ul className="space-y-2">
+                  {packageValidationError.suggestions.map((sug, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm font-bold text-slate-600 dark:text-slate-400">
+                      <span className="text-emerald-500 mt-0.5"><Check className="w-4 h-4" /></span>
+                      <span className="leading-relaxed">{sug}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <button
+                onClick={() => setPackageValidationError(null)}
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-xl transition-all"
+              >
+                حسناً، سأقوم بالتعديل
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Custom Confirmation Dialog */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80">

@@ -24,8 +24,9 @@ import {
 } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
-import { normalizeDigits, safeDate } from '../../utils';
+import { normalizeDigits, safeDate, getRemainingDays } from '../../utils';
 import { Garage, Staff, Package } from '../../types';
+import { getCleanPackageInfo } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 
@@ -55,7 +56,7 @@ export const AdminGarageDetailsView = memo(({
   isLoading,
   setIsLoading,
   packages,
-  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
+  subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
   allGarages = []
 }: AdminGarageDetailsViewProps) => {
   const [showClearBalanceConfirm, setShowClearBalanceConfirm] = useState(false);
@@ -118,64 +119,6 @@ export const AdminGarageDetailsView = memo(({
       showToast(adminLang === 'en' ? 'Failed to save reward balance' : 'حدث خطأ أثناء حفظ المكافأة', 'error');
     } finally {
       setIsSavingReferralBonus(false);
-    }
-  };
-
-  const [showSwitchBillingConfirm, setShowSwitchBillingConfirm] = useState(false);
-  const [targetBillingModel, setTargetBillingModel] = useState<'commission' | 'subscription'>(
-    selectedGarageForDetails.billingModel || 'commission'
-  );
-  const [isSwitchingBillingModel, setIsSwitchingBillingModel] = useState(false);
-
-  const handleSwitchBillingModel = async (newModel: 'commission' | 'subscription') => {
-    if (newModel === selectedGarageForDetails.billingModel) return;
-    setIsSwitchingBillingModel(true);
-    try {
-      const updateData: any = {
-        billingModel: newModel,
-        commissionPerVehicle: 1,
-      };
-
-      if (newModel === 'subscription') {
-        const now = new Date();
-        const currentExp = selectedGarageForDetails.balanceExpiry ? (selectedGarageForDetails.balanceExpiry.toDate ? selectedGarageForDetails.balanceExpiry.toDate() : new Date(selectedGarageForDetails.balanceExpiry)) : null;
-        // If no expiry, or if expiry is in far future (>60 days leftover from commission default), reset to 30 days
-        if (!currentExp || currentExp.getTime() - now.getTime() > 60 * 24 * 60 * 60 * 1000) {
-          const defaultExpiry = new Date();
-          defaultExpiry.setDate(defaultExpiry.getDate() + 30);
-          updateData.balanceExpiry = Timestamp.fromDate(defaultExpiry);
-        }
-      }
-
-      await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
-
-      await firestoreService.addActivityLog({
-        garageId: selectedGarageForDetails.id,
-        garageName: selectedGarageForDetails.name,
-        staffId: 'admin',
-        staffName: adminLang === 'en' ? 'System Administrator (Admin)' : 'مدير النظام (Admin)',
-        actionType: 'check_in',
-        plateNumber: adminLang === 'en'
-          ? `Billing model updated to: ${newModel === 'subscription' ? 'Subscription' : 'Pay-per-vehicle Commission'}`
-          : `تغيير نظام المحاسبة للجراج إلى: ${newModel === 'subscription' ? 'نظام الاشتراك (أسبوعي/شهري)' : 'بالعمولة (شحن سيارات)'}`,
-        timestamp: serverTimestamp() as any,
-      });
-
-      selectedGarageForDetails.billingModel = newModel;
-      if (updateData.balanceExpiry) {
-        selectedGarageForDetails.balanceExpiry = updateData.balanceExpiry;
-      }
-
-      showToast(
-        adminLang === 'en'
-          ? `Billing model updated to ${newModel === 'subscription' ? 'Subscription' : 'Commission'}`
-          : `تم تغيير نظام المحاسبة إلى: ${newModel === 'subscription' ? 'نظام الاشتراك' : 'بالعمولة (شحن سيارات)'}`
-      );
-      setShowSwitchBillingConfirm(false);
-    } catch (e) {
-      showToast(t('فشل'), 'error');
-    } finally {
-      setIsSwitchingBillingModel(false);
     }
   };
 
@@ -257,39 +200,30 @@ export const AdminGarageDetailsView = memo(({
   const handleRechargeSubmit = async (pkg: Package) => {
     setIsLoading(true);
     try {
-      const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
-      const commission = selectedGarageForDetails.commissionPerVehicle || 1;
-      
       const updateData: any = {
         totalAdminRevenue: Number(((selectedGarageForDetails.totalAdminRevenue || 0) + pkg.price).toFixed(2)),
         isLocked: false,
         lastRechargeDate: serverTimestamp()
       };
 
-      if (isSubscriptionGarage) {
-        let baseDate = new Date();
-        const currentExpiry = selectedGarageForDetails.balanceExpiry;
-        if (currentExpiry) {
-          const currentExpiryDate = safeDate(currentExpiry);
-          if (currentExpiryDate > baseDate) {
-            baseDate = currentExpiryDate;
-          }
+      let baseDate = new Date();
+      const currentExpiry = selectedGarageForDetails.balanceExpiry;
+      if (currentExpiry) {
+        const currentExpiryDate = safeDate(currentExpiry);
+        if (currentExpiryDate > baseDate) {
+          baseDate = currentExpiryDate;
         }
-        let days = 30;
-        if (pkg.id === 'weekly_sub') days = 7;
-        else if (pkg.id === 'biweekly_sub') days = 15;
-        else if (pkg.id === 'monthly_sub') days = 30;
-        else if (pkg.vehiclesCount && typeof pkg.vehiclesCount === 'number') days = pkg.vehiclesCount;
-
-        baseDate.setDate(baseDate.getDate() + days);
-        
-        updateData.balanceExpiry = Timestamp.fromDate(baseDate);
-        updateData.billingModel = 'subscription';
-      } else {
-        const balanceValue = pkg.vehiclesCount * commission;
-        updateData.balance = Number(((selectedGarageForDetails.balance || 0) + balanceValue).toFixed(2));
-        updateData.totalRechargedCars = (selectedGarageForDetails.totalRechargedCars || 0) + pkg.vehiclesCount;
       }
+      let days = 30;
+      if (pkg.id === 'weekly_sub') days = 7;
+      else if (pkg.id === 'biweekly_sub') days = 15;
+      else if (pkg.id === 'monthly_sub') days = 30;
+      else if (pkg.vehiclesCount && typeof pkg.vehiclesCount === 'number') days = pkg.vehiclesCount;
+
+      baseDate.setDate(baseDate.getDate() + days);
+      
+      updateData.balanceExpiry = Timestamp.fromDate(baseDate);
+      updateData.billingModel = 'subscription';
 
       await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
 
@@ -305,16 +239,12 @@ export const AdminGarageDetailsView = memo(({
         staffId: 'admin',
         staffName: adminLang === 'en' ? 'System Administrator (Admin)' : 'مدير النظام (Admin)',
         actionType: 'recharge',
-        plateNumber: isSubscriptionGarage
-          ? (adminLang === 'en' ? `Recharge Subscription: ${pkg.name} (${pkg.vehiclesCount} Days) - ${pkg.price} EGP` : `تجديد اشتراك: ${pkg.name} (${pkg.vehiclesCount} يوم) - ${pkg.price} ج`)
-          : (adminLang === 'en' ? `Recharge package ${pkg.name} (${pkg.vehiclesCount} Cars) - ${pkg.price} EGP` : `شحن باقة ${pkg.name} (${pkg.vehiclesCount} سيارة) - ${pkg.price} ج`),
+        plateNumber: adminLang === 'en' ? `Recharge Subscription: ${pkg.name} (${pkg.vehiclesCount} Days) - ${pkg.price} EGP` : `تجديد اشتراك: ${pkg.name} (${pkg.vehiclesCount} يوم) - ${pkg.price} ج`,
         timestamp: serverTimestamp() as any,
         amount: pkg.price,
         packageId: pkg.id
       });
-      showToast(isSubscriptionGarage 
-        ? (adminLang === 'en' ? `Subscription extended by ${pkg.vehiclesCount} days` : `تم تمديد الاشتراك بـ ${pkg.vehiclesCount} يوم`)
-        : (adminLang === 'en' ? `Successfully recharged ${pkg.vehiclesCount} cars` : `تم شحن ${pkg.vehiclesCount} سيارة`));
+      showToast(adminLang === 'en' ? `Subscription extended by ${pkg.vehiclesCount} days` : `تم تمديد الاشتراك بـ ${pkg.vehiclesCount} يوم`);
       setPendingPackage(null);
     } catch (e) { 
       showToast(t('فشل'), 'error'); 
@@ -634,71 +564,6 @@ export const AdminGarageDetailsView = memo(({
           </div>
         </div>
 
-        {/* Billing Model Config Card */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              {t('نموذج المحاسبة والجباية')}
-            </h4>
-            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              {selectedGarageForDetails.billingModel === 'subscription' ? t('نظام الاشتراك') : t('بالعمولة (شحن سيارات)')}
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-            {t('يمكنك التبديل الآمن بين نظام العمولة والاشتراك بدون حذف الجراج أو فقدان أي من سجلاته التاريخية.')}
-          </p>
-
-          <div className="grid grid-cols-1 gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedGarageForDetails.billingModel !== 'commission') {
-                  setTargetBillingModel('commission');
-                  setShowSwitchBillingConfirm(true);
-                }
-              }}
-              className={`p-3.5 rounded-xl border-2 text-right flex items-center justify-between transition-all outline-none cursor-pointer ${
-                selectedGarageForDetails.billingModel === 'commission'
-                  ? 'bg-amber-500/10 border-amber-500 text-slate-900 dark:text-white shadow-sm'
-                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-              }`}
-            >
-              <div>
-                <div className="font-black text-xs">{t('بالعمولة (شحن سيارات)')}</div>
-                <div className="text-[10px] opacity-75 mt-0.5">{t('خصم 1 وحدة رصيد لكل سيارة تدخل الجراج')}</div>
-              </div>
-              {selectedGarageForDetails.billingModel === 'commission' && (
-                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mr-2" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedGarageForDetails.billingModel !== 'subscription') {
-                  setTargetBillingModel('subscription');
-                  setShowSwitchBillingConfirm(true);
-                }
-              }}
-              className={`p-3.5 rounded-xl border-2 text-right flex items-center justify-between transition-all outline-none cursor-pointer ${
-                selectedGarageForDetails.billingModel === 'subscription'
-                  ? 'bg-amber-500/10 border-amber-500 text-slate-900 dark:text-white shadow-sm'
-                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
-              }`}
-            >
-              <div>
-                <div className="font-black text-xs">{t('نظام الاشتراك (أسبوعي / شهري)')}</div>
-                <div className="text-[10px] opacity-75 mt-0.5">{t('محاسبة دورية محددة بفترة أسبوعية أو شهرية')}</div>
-              </div>
-              {selectedGarageForDetails.billingModel === 'subscription' && (
-                <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0 mr-2" />
-              )}
-            </button>
-          </div>
-        </div>
-
         {/* Monthly Subscribers Surcharge (+25%) Config */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
           <div className="flex items-center justify-between">
@@ -888,12 +753,7 @@ export const AdminGarageDetailsView = memo(({
                     const currentMonth = new Date().toISOString().slice(0, 7);
                     const isAwardedThisMonth = refG.lastReferralRewardMonth === currentMonth;
                     
-                    let createdAtDate = new Date();
-                    if (refG.createdAt) {
-                      if (typeof refG.createdAt.toDate === 'function') createdAtDate = refG.createdAt.toDate();
-                      else if (refG.createdAt.seconds) createdAtDate = new Date(refG.createdAt.seconds * 1000);
-                      else createdAtDate = new Date(refG.createdAt);
-                    }
+                    const createdAtDate = safeDate(refG.createdAt);
                     const diffMs = Date.now() - createdAtDate.getTime();
                     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
                     const isExpired = diffDays > 183 || (refG.referralRewardMonthsCount || 0) >= 6;
@@ -1077,51 +937,23 @@ export const AdminGarageDetailsView = memo(({
               <div className="relative z-10 p-10 flex flex-col md:flex-row justify-between items-center gap-12">
                 <div className="text-center md:text-right">
                   <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.5em] mb-4">
-                    {selectedGarageForDetails.billingModel === 'subscription' ? t('الاشتراك المتبقي للجراج') : t('رصيد التشغيل الحالي')}
+                    {t('الاشتراك المتبقي للجراج')}
                   </p>
                   <div className="flex items-end gap-3 justify-center md:justify-start">
-                    {selectedGarageForDetails.billingModel === 'subscription' ? (
-                      <>
-                        <span className={`text-8xl font-black tracking-tighter transition-colors ${ (() => {
-                          const expiry = selectedGarageForDetails.balanceExpiry;
-                          if (!expiry) return 'text-red-400';
-                          const expiryDate = safeDate(expiry);
-                          return expiryDate < new Date() ? 'text-red-400' : 'text-white';
-                        })()}`}>
-                          {(() => {
-                            const expiry = selectedGarageForDetails.balanceExpiry;
-                            if (!expiry) return 0;
-                            const expiryDate = safeDate(expiry);
-                            const diff = expiryDate.getTime() - Date.now();
-                            return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-                          })()}
-                        </span>
-                        <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('يوم')}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className={`text-8xl font-black tracking-tighter transition-colors ${ (selectedGarageForDetails.balance || 0) <= 0 ? 'text-red-400' : 'text-white'}`}>
-                          {Math.floor((selectedGarageForDetails.balance || 0) / (selectedGarageForDetails.commissionPerVehicle || 1))}
-                        </span>
-                        <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('وحدة')}</span>
-                      </>
-                    )}
+                    <span className={`text-8xl font-black tracking-tighter transition-colors ${getRemainingDays(selectedGarageForDetails) <= 0 ? 'text-red-400' : 'text-white'}`}>
+                      {getRemainingDays(selectedGarageForDetails)}
+                    </span>
+                    <span className="text-2xl text-slate-500 dark:text-slate-400 font-bold mb-4 transition-colors">{t('يوم')}</span>
                   </div>
                   <div className="mt-4 flex items-center justify-center md:justify-start">
                     <div className="px-4 py-1.5 bg-white/5 rounded-full border border-white/5 transition-colors">
                       <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 tracking-wider">
-                        {selectedGarageForDetails.billingModel === 'subscription' ? (
-                          <>
-                            {t('تاريخ انتهاء الاشتراك:')} {(() => {
-                              const expiry = selectedGarageForDetails.balanceExpiry;
-                              if (!expiry) return '-';
-                              const expiryDate = safeDate(expiry);
-                              return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-                            })()}
-                          </>
-                        ) : (
-                          <>{t('الرصيد المالي:')} {Number(selectedGarageForDetails.balance || 0).toFixed(2)} {adminLang === 'en' ? 'EGP' : 'ج.م'}</>
-                        )}
+                        {t('تاريخ انتهاء الاشتراك:')} {(() => {
+                          const expiry = selectedGarageForDetails.balanceExpiry;
+                          if (!expiry) return '-';
+                          const expiryDate = safeDate(expiry);
+                          return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -1155,10 +987,7 @@ export const AdminGarageDetailsView = memo(({
                         onClick={async () => {
                           setIsLoading(true);
                           try { 
-                            const updateFields: any = { balance: 0, isLocked: true };
-                            if (selectedGarageForDetails.billingModel === 'subscription') {
-                              updateFields.balanceExpiry = Timestamp.fromDate(new Date());
-                            }
+                            const updateFields: any = { balance: 0, isLocked: true, balanceExpiry: Timestamp.fromDate(new Date()) };
                             await firestoreService.updateGarage(selectedGarageForDetails.id, updateFields); 
                             showToast(t('تم التصفير')); 
                             setShowClearBalanceConfirm(false); 
@@ -1186,15 +1015,11 @@ export const AdminGarageDetailsView = memo(({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {(() => {
-                                const isSubscriptionGarage = selectedGarageForDetails.billingModel === 'subscription';
-                                const subPackages: Package[] = [
-                                    { id: 'weekly_sub', name: adminLang === 'en' ? 'Weekly Subscription' : 'تجديد اشتراك أسبوعي', price: subscriptionPrices.weekly, vehiclesCount: 7, discountType: 'percentage', discountValue: subscriptionPrices.weeklyDiscount },
-                                    { id: 'biweekly_sub', name: adminLang === 'en' ? '15-Day Subscription' : 'تجديد اشتراك 15 يوم', price: subscriptionPrices.biweekly || 1500, vehiclesCount: 15, discountType: 'percentage', discountValue: subscriptionPrices.biweeklyDiscount },
-                                    { id: 'monthly_sub', name: adminLang === 'en' ? 'Monthly Subscription' : 'تجديد اشتراك شهري', price: subscriptionPrices.monthly, vehiclesCount: 30, discountType: 'percentage', discountValue: subscriptionPrices.monthlyDiscount }
-                                ];
-                                const displayPackages = isSubscriptionGarage ? subPackages : (packages.length > 0 ? packages : []);
+                                const hybridList = packages;
+                                const displayPackages = hybridList;
                                 
                                 return displayPackages.map((pkg) => {
+                                    const info = getCleanPackageInfo(pkg);
                                     const isPremium = pkg.price >= 4000;
                                     const isMid = pkg.price >= 1500 && pkg.price < 4000;
                                     const hasDiscount = pkg.discountValue && pkg.discountValue > 0;
@@ -1230,21 +1055,26 @@ export const AdminGarageDetailsView = memo(({
                                               </span>
                                             )}
 
-                                            <div className="w-full bg-slate-950 dark:bg-slate-900 py-2 px-3 flex items-center justify-center border-b border-white/5 dark:border-slate-800 transition-colors">
-                                              <span className="text-[10px] font-black text-white dark:text-slate-400 uppercase tracking-[0.15em]">
-                                                {pkg.name || t('باقة شحن')}
+                                            <div className="w-full bg-slate-950 dark:bg-slate-900 py-2.5 px-3 flex items-center justify-center border-b border-white/5 dark:border-slate-800 transition-colors">
+                                              <span className="text-[11px] font-black text-amber-400 dark:text-amber-300 text-center truncate px-1">
+                                                {info.displayName}
                                               </span>
                                             </div>
                                             
-                                            <div className="flex flex-col items-center py-5 px-4 w-full">
-                                                <span className="text-5xl font-black font-mono tracking-tighter leading-none">
-                                                  {pkg.vehiclesCount}
+                                            <div className="flex flex-col items-center py-4 px-3 w-full">
+                                                <span className="text-3xl sm:text-4xl font-black font-mono tracking-tighter leading-none">
+                                                  {info.isUnlimited ? 'سعة مفتوحة' : info.dailyCapacity}
                                                 </span>
-                                                <span className={`text-[10px] font-bold uppercase tracking-widest mt-2 transition-colors ${isPremium || (document.documentElement.classList.contains('dark')) ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500'}`}>
-                                                  {isSubscriptionGarage ? t('يوم') : t('وحدة رصيد')}
+                                                {!info.isUnlimited && (
+                                                  <span className={`text-[10px] font-bold uppercase tracking-widest mt-1.5 transition-colors ${isPremium || (document.documentElement.classList.contains('dark')) ? 'text-slate-400 dark:text-slate-500' : 'text-slate-500'}`}>
+                                                    {t('سيارة / يوم')}
+                                                  </span>
+                                                )}
+                                                <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full mt-2">
+                                                  {info.durationText}
                                                 </span>
-      
-                                                <div className="mt-5 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105 flex flex-col items-center">
+
+                                                <div className="mt-4 w-full py-2.5 rounded-xl text-sm font-black font-mono bg-amber-400 text-slate-900 transition-transform group-hover:scale-105 flex flex-col items-center">
                                                     {hasDiscount ? (
                                                         <>
                                                             <span>{effectivePrice} {adminLang === 'en' ? 'EGP' : 'ج.م'}</span>
@@ -1357,12 +1187,10 @@ export const AdminGarageDetailsView = memo(({
                 <CheckCircle2 className="w-6 h-6 text-amber-500" />
               </div>
               <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                {selectedGarageForDetails.billingModel === 'subscription' ? t('تأكيد تجديد الاشتراك؟') : t('تأكيد شحن الباقة؟')}
+                {t('تأكيد تجديد الاشتراك؟')}
               </h3>
               <p className="text-xs font-bold text-slate-400 mt-1">
-                {selectedGarageForDetails.billingModel === 'subscription' 
-                  ? `${t('أنت على وشك تجديد الاشتراك لمدة')} ${pendingPackage.vehiclesCount} ${t('يوم للجراج')}`
-                  : `${t('أنت على وشك شحن')} ${pendingPackage.vehiclesCount} ${t('وحدة للجراج')}`}
+                {`${t('أنت على وشك تجديد الاشتراك لمدة')} ${pendingPackage.vehiclesCount} ${t('يوم للجراج')}`}
               </p>
             </div>
  
@@ -1373,10 +1201,10 @@ export const AdminGarageDetailsView = memo(({
               </div>
               <div className="text-left">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {selectedGarageForDetails.billingModel === 'subscription' ? t('المدة') : t('عدد العربات')}
+                  {t('المدة')}
                 </p>
                 <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-                  {pendingPackage.vehiclesCount} {selectedGarageForDetails.billingModel === 'subscription' ? t('يوم') : t('وحدة')}
+                  {pendingPackage.vehiclesCount} {t('يوم')}
                 </p>
               </div>
             </div>
@@ -1396,57 +1224,12 @@ export const AdminGarageDetailsView = memo(({
                 onClick={() => handleRechargeSubmit(pendingPackage)}
                 className="flex-1 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 outline-none cursor-pointer"
               >
-                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{selectedGarageForDetails.billingModel === 'subscription' ? t('تأكيد التجديد') : t('تأكيد الشحن')}</span>}
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{t('تأكيد التجديد')}</span>}
               </button>
               <button
                 disabled={isLoading}
                 onClick={() => setPendingPackage(null)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-4 rounded-xl font-black text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50 outline-none cursor-pointer"
-              >
-                {t('إلغاء')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Switch Billing Model Confirmation Modal */}
-      {showSwitchBillingConfirm && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 max-w-md w-full border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-5">
-            <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto text-amber-500 border border-amber-500/20">
-              <Zap className="w-7 h-7" />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                {t('تأكيد تغيير نظام المحاسبة')}
-              </h3>
-              <p className="text-xs md:text-sm font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">
-                {targetBillingModel === 'subscription'
-                  ? t('هل أنت متأكد من تحويل هذا الجراج إلى نظام الاشتراك (أسبوعي/شهري)؟ سيتم تفعيل باقات التجديد الزمني له.')
-                  : t('هل أنت متأكد من تحويل هذا الجراج إلى نظام الشحن بالعمولة؟ سيتم خصم 1 وحدة رصيد لكل سيارة عند الدخول.')}
-              </p>
-            </div>
-
-            <div className="pt-2 flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                disabled={isSwitchingBillingModel}
-                onClick={() => handleSwitchBillingModel(targetBillingModel)}
-                className="flex-1 py-3.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-900 font-black text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer outline-none"
-              >
-                {isSwitchingBillingModel ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <span>{t('تأكيد التحويل الآن')}</span>
-                )}
-              </button>
-              <button
-                type="button"
-                disabled={isSwitchingBillingModel}
-                onClick={() => setShowSwitchBillingConfirm(false)}
-                className="flex-1 py-3.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm rounded-xl transition-all cursor-pointer outline-none"
               >
                 {t('إلغاء')}
               </button>

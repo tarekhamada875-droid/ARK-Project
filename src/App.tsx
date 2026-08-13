@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -16,15 +16,9 @@ import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
 
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { GeneralManagerDashboard } from './components/general_manager/GeneralManagerDashboard';
 import { LoginView } from './components/auth/LoginView';
 import { AdminLoginView } from './components/auth/AdminLoginView';
 import { DelegateLoginView } from './components/auth/DelegateLoginView';
-import { DelegateDashboardView } from './components/delegate/DelegateDashboardView';
-import { AdminGarageDetailsView } from './components/admin/AdminGarageDetailsView';
-import { AdminDelegateDetailsView } from './components/admin/AdminDelegateDetailsView';
-import { GarageDashboardView } from './components/garage/GarageDashboardView';
 import { CheckInModal } from './components/modals/CheckInModal';
 import { CheckOutModal } from './components/modals/CheckOutModal';
 import { PackagesModal } from './components/modals/PackagesModal';
@@ -36,6 +30,15 @@ import { SubscriberWarningModal } from './components/modals/SubscriberWarningMod
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
 import { firestoreService } from './services/firestoreService';
+import { useAppStore } from './store/appStore';
+
+// Lazy Loaded Dashboard Views
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const GeneralManagerDashboard = lazy(() => import('./components/general_manager/GeneralManagerDashboard').then(m => ({ default: m.GeneralManagerDashboard })));
+const DelegateDashboardView = lazy(() => import('./components/delegate/DelegateDashboardView').then(m => ({ default: m.DelegateDashboardView })));
+const AdminGarageDetailsView = lazy(() => import('./components/admin/AdminGarageDetailsView').then(m => ({ default: m.AdminGarageDetailsView })));
+const AdminDelegateDetailsView = lazy(() => import('./components/admin/AdminDelegateDetailsView').then(m => ({ default: m.AdminDelegateDetailsView })));
+const GarageDashboardView = lazy(() => import('./components/garage/GarageDashboardView').then(m => ({ default: m.GarageDashboardView })));
 
 export default function App() {
   const {
@@ -181,6 +184,9 @@ export default function App() {
     setSubscriberWarningPlate,
   });
 
+  const storeToasts = useAppStore((state) => state.toasts);
+  const removeToast = useAppStore((state) => state.removeToast);
+
   const renderView = () => {
     // Balance/Lock Block
     if (garage && view !== 'admin_dashboard') {
@@ -241,37 +247,41 @@ export default function App() {
 
     if (view === 'admin_dashboard') {
       return (
-        <AdminDashboard 
-          allGarages={allGarages}
-          isLoading={isLoading}
-          createNewGarage={createNewGarage}
-          setView={setView}
-          setSelectedGarageForDetails={setSelectedGarageForDetails}
-          setSelectedDelegateForDetails={setSelectedDelegateForDetails}
-          delegates={delegates}
-          addDelegate={addDelegate}
-          packages={sortedPackages}
-          onLogout={handleInitiateLogout}
-          rechargeRequests={rechargeRequests}
-          showToast={showToast}
-          currentSupervisor={currentSupervisor}
-          supervisors={supervisors}
-          generalManagers={generalManagers}
-          currentAdminPin={activeAdminPin}
-          currentWalletNumber={walletNumber}
-          onUpdateWalletNumber={firestoreService.updateWalletNumber}
-          subscriptionPrices={subscriptionPrices}
-        />
+        <ErrorBoundary>
+          <AdminDashboard 
+            allGarages={allGarages}
+            isLoading={isLoading}
+            createNewGarage={createNewGarage}
+            setView={setView}
+            setSelectedGarageForDetails={setSelectedGarageForDetails}
+            setSelectedDelegateForDetails={setSelectedDelegateForDetails}
+            delegates={delegates}
+            addDelegate={addDelegate}
+            packages={sortedPackages}
+            onLogout={handleInitiateLogout}
+            rechargeRequests={rechargeRequests}
+            showToast={showToast}
+            currentSupervisor={currentSupervisor}
+            supervisors={supervisors}
+            generalManagers={generalManagers}
+            currentAdminPin={activeAdminPin}
+            currentWalletNumber={walletNumber}
+            onUpdateWalletNumber={firestoreService.updateWalletNumber}
+            subscriptionPrices={subscriptionPrices}
+          />
+        </ErrorBoundary>
       );
     }
 
     if (view === 'general_manager_dashboard' && currentGeneralManager) {
       return (
-        <GeneralManagerDashboard 
-          currentGeneralManager={currentGeneralManager}
-          allGarages={allGarages}
-          onLogout={handleInitiateLogout}
-        />
+        <ErrorBoundary>
+          <GeneralManagerDashboard 
+            currentGeneralManager={currentGeneralManager}
+            allGarages={allGarages}
+            onLogout={handleInitiateLogout}
+          />
+        </ErrorBoundary>
       );
     }
 
@@ -287,38 +297,42 @@ export default function App() {
 
     if (view === 'delegate_dashboard' && delegate) {
       return (
-        <DelegateDashboardView 
-          delegate={delegate}
-          allGarages={delegateGarages}
-          onLogout={handleInitiateLogout}
-          onRecharge={handleDelegateRecharge}
-          onCreateGarage={createNewGarage}
-          isLoading={isLoading}
-          packages={sortedPackages}
-          pendingRequests={rechargeRequests}
-          delegateRequests={delegateRequests}
-          showToast={showToast}
-          subscriptionPrices={subscriptionPrices}
-        />
+        <ErrorBoundary>
+          <DelegateDashboardView 
+            delegate={delegate}
+            allGarages={delegateGarages}
+            onLogout={handleInitiateLogout}
+            onRecharge={handleDelegateRecharge}
+            onCreateGarage={createNewGarage}
+            isLoading={isLoading}
+            packages={sortedPackages}
+            pendingRequests={rechargeRequests}
+            delegateRequests={delegateRequests}
+            showToast={showToast}
+            subscriptionPrices={subscriptionPrices}
+          />
+        </ErrorBoundary>
       );
     }
 
     if (view === 'admin_garage_details' && selectedGarageForDetails) {
       return (
-        <AdminGarageDetailsView 
-          selectedGarageForDetails={selectedGarageForDetails}
-          setView={setView}
-          setSelectedGarageForDetails={setSelectedGarageForDetails}
-          setShowDeleteConfirm={setShowDeleteConfirm}
-          updateGarageRate={updateGarageRate}
-          showToast={showToast}
-          staffList={staffList}
-          isLoading={isLoading}
-          setIsLoading={setIsLoading}
-          packages={sortedPackages}
-          subscriptionPrices={subscriptionPrices}
-          allGarages={allGarages}
-        />
+        <ErrorBoundary>
+          <AdminGarageDetailsView 
+            selectedGarageForDetails={selectedGarageForDetails}
+            setView={setView}
+            setSelectedGarageForDetails={setSelectedGarageForDetails}
+            setShowDeleteConfirm={setShowDeleteConfirm}
+            updateGarageRate={updateGarageRate}
+            showToast={showToast}
+            staffList={staffList}
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+            packages={sortedPackages}
+            subscriptionPrices={subscriptionPrices}
+            allGarages={allGarages}
+          />
+        </ErrorBoundary>
       );
     }
 
@@ -328,46 +342,50 @@ export default function App() {
       if (!liveDelegate) return <div className="p-8 text-center">جاري التحميل...</div>;
       
       return (
-        <AdminDelegateDetailsView 
-          delegate={liveDelegate}
-          setView={setView}
-          setSelectedDelegate={setSelectedDelegateForDetails}
-          removeDelegate={removeDelegate}
-        />
+        <ErrorBoundary>
+          <AdminDelegateDetailsView 
+            delegate={liveDelegate}
+            setView={setView}
+            setSelectedDelegate={setSelectedDelegateForDetails}
+            removeDelegate={removeDelegate}
+          />
+        </ErrorBoundary>
       );
     }
 
     if (view === 'garage' && garage) {
       return (
-        <GarageDashboardView 
-          garage={garage}
-          currentStaff={currentStaff}
-          isInputFocused={isInputFocused}
-          now={now}
-          vehicles={vehicles}
-          todayTransactions={todayTransactions}
-          setSelectedVehicle={setSelectedVehicle}
-          setShowCheckOutModal={setShowCheckOutModal}
-          closeKeyboard={closeKeyboard}
-          newPlateNumber={newPlateNumber}
-          setNewPlateNumber={setNewPlateNumber}
-          setIsInputFocused={setIsInputFocused}
-          plateInputRef={plateInputRef}
-          handleCheckIn={handleCheckIn}
-          inputRef={inputRef}
-          onLogout={handleInitiateLogout}
-          showToast={showToast}
-          packages={sortedPackages}
-          staffList={staffList}
-          showPackages={showPackages}
-          setShowPackages={setShowPackages}
-          showStaffStats={showStaffStats}
-          setShowStaffStats={setShowStaffStats}
-          showSubscribers={showSubscribers}
-          setShowSubscribers={setShowSubscribers}
-          walletNumber={walletNumber}
-          subscriptionPrices={subscriptionPrices}
-        />
+        <ErrorBoundary>
+          <GarageDashboardView 
+            garage={garage}
+            currentStaff={currentStaff}
+            isInputFocused={isInputFocused}
+            now={now}
+            vehicles={vehicles}
+            todayTransactions={todayTransactions}
+            setSelectedVehicle={setSelectedVehicle}
+            setShowCheckOutModal={setShowCheckOutModal}
+            closeKeyboard={closeKeyboard}
+            newPlateNumber={newPlateNumber}
+            setNewPlateNumber={setNewPlateNumber}
+            setIsInputFocused={setIsInputFocused}
+            plateInputRef={plateInputRef}
+            handleCheckIn={handleCheckIn}
+            inputRef={inputRef}
+            onLogout={handleInitiateLogout}
+            showToast={showToast}
+            packages={sortedPackages}
+            staffList={staffList}
+            showPackages={showPackages}
+            setShowPackages={setShowPackages}
+            showStaffStats={showStaffStats}
+            setShowStaffStats={setShowStaffStats}
+            showSubscribers={showSubscribers}
+            setShowSubscribers={setShowSubscribers}
+            walletNumber={walletNumber}
+            subscriptionPrices={subscriptionPrices}
+          />
+        </ErrorBoundary>
       );
     }
 
@@ -378,9 +396,7 @@ export default function App() {
           onClose={() => setView('garage')}
           garageHourlyRate={garage.hourlyRate}
           walletNumber={walletNumber}
-          billingModel={garage.billingModel}
           subscriptionPrices={subscriptionPrices}
-          referralBonusBalance={garage.referralBonusBalance || 0}
           hasMonthlySubscribers={garage.hasMonthlySubscribers}
         />
       );
@@ -542,7 +558,38 @@ export default function App() {
 
 
 
-      {renderView()}
+        {storeToasts.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm">
+            {storeToasts.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => removeToast(t.id)}
+                className={`px-4 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center justify-between cursor-pointer transition-all ${
+                  t.type === 'error'
+                    ? 'bg-red-600 text-white'
+                    : t.type === 'warning'
+                    ? 'bg-amber-500 text-white'
+                    : t.type === 'info'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-emerald-600 text-white'
+                }`}
+              >
+                <span>{t.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Suspense fallback={
+          <div className="w-full h-full min-h-screen bg-[#faf9f6] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center font-sans" dir="rtl">
+            <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3" />
+            <p className="text-slate-600 dark:text-slate-300 font-bold text-xs animate-pulse">
+              جاري تحميل الصفحة...
+            </p>
+          </div>
+        }>
+          {renderView()}
+        </Suspense>
       </ErrorBoundary>
     </div>
   );

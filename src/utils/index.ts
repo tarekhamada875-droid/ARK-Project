@@ -265,16 +265,6 @@ export const formatEntryTimeParts = (entryTime: any, referenceNow?: Date) => {
   }
 };
 
-export const formatEntryTime = (entryTime: any, referenceNow?: Date): string => {
-  const parts = formatEntryTimeParts(entryTime, referenceNow);
-  if (parts.isToday) return parts.main;
-  return `${parts.sub} ${parts.sub2 || ''} ${parts.main}`.trim();
-};
-
-export const cn = (...classes: (string | undefined | null | boolean)[]) => {
-  return classes.filter(Boolean).join(' ');
-};
-
 export const isSessionActive = (lastActive: any, serverTimeOffset: number = 0): boolean => {
   if (!lastActive) return false;
   let lastActiveMillis = 0;
@@ -365,3 +355,163 @@ export const isLightColor = (color: string | undefined): boolean => {
   }
   return false;
 };
+
+/**
+ * Calculates remaining subscription days for a garage, handling legacy 10-year commission expiries gracefully.
+ */
+export const getRemainingDays = (garage: any): number => {
+  if (!garage) return 0;
+  if (garage.balanceExpiry) {
+    const expiryDate = safeDate(garage.balanceExpiry);
+    const diff = expiryDate.getTime() - Date.now();
+    const rawDays = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    // If rawDays > 90 (e.g. 3612 or 3650 days from legacy 10-year commission setup)
+    if (rawDays > 90) {
+      if (typeof garage.balanceDays === 'number' && garage.balanceDays > 0 && garage.balanceDays <= 365) {
+        return garage.balanceDays;
+      }
+      return 30; // Default subscription fallback for converted legacy garages
+    }
+    return rawDays;
+  }
+  if (typeof garage.balanceDays === 'number' && garage.balanceDays > 0 && garage.balanceDays <= 365) {
+    return garage.balanceDays;
+  }
+  if (typeof garage.balance === 'number' && garage.balance > 0) {
+    return Math.max(1, Math.min(30, Math.ceil(garage.balance / 15)));
+  }
+  return 0;
+};
+
+/**
+ * Checks if a garage's subscription has expired.
+ */
+export const isSubscriptionExpired = (garage: any): boolean => {
+  if (!garage) return true;
+  if (!garage.balanceExpiry) return true;
+  const expiryDate = safeDate(garage.balanceExpiry);
+  return expiryDate < new Date();
+};
+
+/**
+ * Applies the 25% surcharge for garages with monthly subscribers.
+ */
+export const applyMonthlySubscribersSurcharge = (price: number, hasMonthlySubscribers: boolean): number => {
+  return hasMonthlySubscribers ? Math.round(price * 1.25) : price;
+};
+
+/**
+ * Calculates the final display price for a package:
+ * 1. Apply discount (percentage or fixed)
+ * 2. Apply monthly subscribers surcharge (25%)
+ */
+export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean): {
+  basePrice: number;
+  hasDiscount: boolean;
+  discountedPrice: number;
+  finalPrice: number;
+  totalDiscount: number;
+  displayBasePrice: number;
+} => {
+  if (!pkg) {
+    return {
+      basePrice: 0,
+      hasDiscount: false,
+      discountedPrice: 0,
+      finalPrice: 0,
+      totalDiscount: 0,
+      displayBasePrice: 0,
+    };
+  }
+  const basePrice = pkg.price || 0;
+  const hasDiscount = !!(pkg.discountValue && pkg.discountValue > 0);
+  const discountedPrice = hasDiscount
+    ? (pkg.discountType === 'percentage'
+        ? Math.round(basePrice * (1 - pkg.discountValue / 100))
+        : Math.max(0, basePrice - pkg.discountValue))
+    : basePrice;
+  const finalPrice = applyMonthlySubscribersSurcharge(discountedPrice, hasMonthlySubscribers);
+  const displayBasePrice = applyMonthlySubscribersSurcharge(basePrice, hasMonthlySubscribers);
+  const totalDiscount = displayBasePrice - finalPrice;
+  return { basePrice, hasDiscount, discountedPrice, finalPrice, totalDiscount, displayBasePrice };
+};
+
+/**
+ * Converts a subscription package ID to duration in days.
+ */
+export const packageIdToDays = (packageId: string, pkgName?: string): number => {
+  if (packageId === 'weekly_sub') return 7;
+  if (packageId === 'biweekly_sub' || packageId === '15days') return 15;
+  if (packageId === 'monthly_sub') return 30;
+  if (pkgName) {
+    if (pkgName.includes('أسبوع') || pkgName.includes('7')) return 7;
+    if (pkgName.includes('15') || pkgName.includes('نصف')) return 15;
+    if (pkgName.includes('30') || pkgName.includes('شهر')) return 30;
+  }
+  return 30;
+};
+
+/**
+ * Retries a Firestore operation with exponential backoff.
+ * Prevents transient failures from breaking the user experience.
+ */
+export const withRetry = async <T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = 3,
+  delayMs: number = 1000
+): Promise<T> => {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
+};
+
+/**
+ * Creates a debounced version of a function.
+ * Prevents rapid-fire calls (e.g., double-click on check-in button).
+ */
+export const debounce = <T extends (...args: any[]) => any>(
+  fn: T,
+  delayMs: number = 500
+): T & { cancel: () => void } => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const debounced = (...args: Parameters<T>) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      timeoutId = null;
+    }, delayMs);
+  };
+  debounced.cancel = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = null;
+  };
+  return debounced as T & { cancel: () => void };
+};
+
+/**
+ * Simple lock to prevent concurrent execution of the same async operation.
+ * Use for check-in/check-out to prevent double-submits.
+ */
+export const createAsyncLock = () => {
+  let isLocked = false;
+  return async <T>(fn: () => Promise<T>): Promise<T | null> => {
+    if (isLocked) return null; // Already running — ignore this call
+    isLocked = true;
+    try {
+      return await fn();
+    } finally {
+      isLocked = false;
+    }
+  };
+};
+
+

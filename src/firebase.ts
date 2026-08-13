@@ -2,20 +2,23 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
-  memoryLocalCache
+  enableIndexedDbPersistence
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 
-// Use memory-only local cache to guarantee 100% online consistency.
-// This prevents offline writes which would lead to race-conditions or credit/balance desynchronization.
-// experimentalAutoDetectLongPolling ensures reliable backend connectivity in sandboxed iframe environments.
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
-  localCache: memoryLocalCache()
 }, firebaseConfig.firestoreDatabaseId);
+
+enableIndexedDbPersistence(db)
+  .then(() => console.log('IndexedDB persistence enabled'))
+  .catch((err) => {
+    if (err.code === 'failed-precondition') console.warn('Multiple tabs open');
+    if (err.code === 'unimplemented') console.warn('Not supported');
+  });
 
 export const auth = getAuth(app);
 
@@ -29,7 +32,7 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
+interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
   path: string | null;

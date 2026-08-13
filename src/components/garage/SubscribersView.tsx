@@ -2,10 +2,8 @@ import React, { useState, useEffect, memo } from 'react';
 import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, Menu } from 'lucide-react';
 import { firestoreService, Garage } from '../../services/firestoreService';
 import { auth } from '../../firebase';
-import { AnimatedCounter } from '../AnimatedCounter';
-import { MovingBalanceArrows } from './MovingBalanceArrows';
 import { Subscriber } from '../../types';
-import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, safeDate } from '../../utils';
+import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersSurcharge } from '../../utils';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 
@@ -34,54 +32,9 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
     return () => unsubscribe();
   }, []);
 
-  const isSubscriptionModel = garage.billingModel === 'subscription';
-  const currentBalance = garage.balance || 0;
-  const commission = garage.commissionPerVehicle || 1;
-
   const isSubscriptionExpired = React.useMemo(() => {
-    if (!isSubscriptionModel) return false;
-    if (!garage.balanceExpiry) return true;
-    const expiryDate = safeDate(garage.balanceExpiry);
-    return expiryDate < new Date();
-  }, [isSubscriptionModel, garage.balanceExpiry]);
-
-  const availableVehicles = React.useMemo(() => {
-    if (isSubscriptionModel) {
-      if (isSubscriptionExpired) return 0;
-      const expiryDate = safeDate(garage.balanceExpiry);
-      const now = new Date();
-      const diffTime = expiryDate.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return Math.max(0, diffDays);
-    } else {
-      return Math.max(0, Math.floor(currentBalance / commission));
-    }
-  }, [isSubscriptionModel, isSubscriptionExpired, garage.balanceExpiry, garage.balance, garage.commissionPerVehicle]);
-
-  const isBalanceOut = availableVehicles <= 0;
-
-  const [balanceTransition, setBalanceTransition] = useState<'increase' | 'decrease' | null>(null);
-  const prevVehiclesRef = React.useRef(availableVehicles);
-
-  useEffect(() => {
-    const diff = availableVehicles - prevVehiclesRef.current;
-    if (diff < 0) {
-      setBalanceTransition('decrease');
-      const timer = setTimeout(() => {
-        setBalanceTransition(null);
-      }, 1200);
-      prevVehiclesRef.current = availableVehicles;
-      return () => clearTimeout(timer);
-    } else if (diff > 0) {
-      setBalanceTransition('increase');
-      const timer = setTimeout(() => {
-        setBalanceTransition(null);
-      }, 1200);
-      prevVehiclesRef.current = availableVehicles;
-      return () => clearTimeout(timer);
-    }
-    prevVehiclesRef.current = availableVehicles;
-  }, [availableVehicles]);
+    return checkSubscriptionExpired(garage);
+  }, [garage]);
 
   // Form State
   const [plateNumber, setPlateNumber] = useState(() => localStorage.getItem('sub_plate') || '');
@@ -218,13 +171,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   };
 
   const handleOpenAdd = () => {
-    if (isBalanceOut || (isSubscriptionModel && isSubscriptionExpired)) {
-      showToast(
-        isSubscriptionModel 
-          ? 'عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتمكين إضافة المشتركين.' 
-          : 'عفواً، لا يوجد رصيد كافٍ (الحد الأدنى 5 وحدات). برجاء شحن الرصيد أولاً.', 
-        'error'
-      );
+    if (isSubscriptionExpired) {
+      showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتمكين إضافة المشتركين.', 'error');
       return;
     }
     setEditingSubscriber(null);
@@ -274,13 +222,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   };
 
   const handleOpenRenew = (s: Subscriber) => {
-    if (isBalanceOut || (isSubscriptionModel && isSubscriptionExpired)) {
-      showToast(
-        isSubscriptionModel 
-          ? 'عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتجديد المشتركين.' 
-          : 'عفواً، لا يوجد رصيد كافٍ. برجاء شحن الرصيد أولاً.', 
-        'error'
-      );
+    if (isSubscriptionExpired) {
+      showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً لتجديد المشتركين.', 'error');
       return;
     }
     setActiveSubscriberForRenew(s);
@@ -290,18 +233,12 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
   const handleConfirmRenew = async (type: 'week' | 'two_weeks' | 'month', costUnits: number) => {
     if (!activeSubscriberForRenew) return;
 
-    if (isSubscriptionModel && isSubscriptionExpired) {
+    if (isSubscriptionExpired) {
       showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً.', 'error');
       return;
     }
 
-    if (!isSubscriptionModel) {
-      const requiredDeduction = costUnits * commission;
-      if (currentBalance < requiredDeduction) {
-        showToast(`عفواً، الرصيد لا يكفي للعملية. مطلوب ${costUnits} وحدات.`, 'error');
-        return;
-      }
-    }
+    const effectiveCostUnits = applyMonthlySubscribersSurcharge(costUnits, !!garage.hasMonthlySubscribers);
 
     setIsSubmitting(true);
     try {
@@ -324,10 +261,10 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
         endDate: newEndDate.toISOString().split('T')[0]
       };
 
-      await firestoreService.renewSubscriber(garage.id, activeSubscriberForRenew.id, costUnits, newDates);
+      await firestoreService.renewSubscriber(garage.id, activeSubscriberForRenew.id, effectiveCostUnits, newDates);
       
       const label = type === 'week' ? 'أسبوع' : type === 'two_weeks' ? 'أسبوعين' : 'شهر واحد';
-      showToast(isSubscriptionModel ? `تم تجديد الاشتراك بنجاح لمدة ${label}` : `تم تجديد الاشتراك بنجاح لمدة ${label} وخصم ${costUnits} وحدات`, 'success');
+      showToast(`تم تجديد الاشتراك بنجاح لمدة ${label}`, 'success');
       setShowRenewModal(false);
       setActiveSubscriberForRenew(null);
     } catch (err: any) {
@@ -345,13 +282,12 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
       return;
     }
 
+    const baseUnits = 5;
+    const effectiveUnits = applyMonthlySubscribersSurcharge(baseUnits, !!garage.hasMonthlySubscribers);
+
     if (!editingSubscriber) {
-      if (isSubscriptionModel && isSubscriptionExpired) {
+      if (isSubscriptionExpired) {
         showToast('عفواً، انتهى اشتراك الجراج. برجاء تجديد الاشتراك أولاً.', 'error');
-        return;
-      }
-      if (!isSubscriptionModel && availableVehicles < 5) {
-        showToast('عفواً، لا يوجد رصيد كافٍ للعملية (الحد الأدنى 5 وحدات لإضافة مشترك)', 'error');
         return;
       }
     }
@@ -368,7 +304,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
         phone,
         startDate,
         endDate,
-        garageId: garage.id
+        garageId: garage.id,
+        costUnits: effectiveUnits
       };
 
       if (editingSubscriber) {
@@ -377,7 +314,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
       } else {
         try {
           await firestoreService.addSubscriber(garage.id, subscriberData);
-          showToast(isSubscriptionModel ? 'تمت إضافة المشترك بنجاح' : 'تمت إضافة المشترك بنجاح وخصم 5 وحدات من رصيدك', 'success');
+          showToast('تمت إضافة المشترك بنجاح', 'success');
           clearDraft();
         } catch (error: any) {
           if (error?.message?.includes('INSUFFICIENT_BALANCE')) {
@@ -435,7 +372,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
         <div className="max-w-4xl mx-auto flex justify-between items-center w-full">
           <div className="flex items-center gap-3">
             <div className="flex flex-col">
-              <h1 className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">الأشتراكات</h1>
+              <h1 className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">الاشتراكات</h1>
             </div>
           </div>
           
@@ -462,49 +399,6 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
 
       {/* Main Content */}
       <main className={`flex-1 w-full max-w-4xl mx-auto p-4 sm:p-6 pb-[120px] stable-scrollbar ${showAddModal || showRenewModal ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-        {/* Summary Bar (Balance Card) */}
-        {!isSubscriptionModel && (
-          <div className="flex gap-4 shrink-0 w-full select-none mb-5">
-            <div className={`flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 ${
-              balanceTransition === 'decrease'
-                ? 'border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)]'
-                : balanceTransition === 'increase'
-                ? 'border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)]'
-                : 'border-slate-200 dark:border-slate-800'
-            }`}>
-              {/* Moving Arrows overlay */}
-              <MovingBalanceArrows transitionType={balanceTransition} />
-
-              <div className="py-1 flex items-center justify-center overflow-visible z-10">
-                <div className={`text-4xl md:text-7xl font-extrabold font-mono tracking-tight transition-colors duration-300 ${
-                  balanceTransition === 'decrease'
-                    ? 'text-red-600 dark:text-red-400'
-                    : balanceTransition === 'increase'
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : availableVehicles < 50
-                    ? 'text-red-500'
-                    : 'text-slate-900 dark:text-slate-100'
-                }`}>
-                  <AnimatedCounter value={availableVehicles} disableColorChange={true} />
-                </div>
-              </div>
-              {availableVehicles < 50 && (
-                <p className={`text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ${
-                  balanceTransition === 'decrease'
-                    ? 'text-red-600 dark:text-red-400'
-                    : balanceTransition === 'increase'
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : availableVehicles <= 0
-                    ? 'text-red-500'
-                    : 'text-red-400'
-                }`}>
-                  {availableVehicles <= 0 ? 'الرصيد انتهى تماماً' : 'الرصيد الحالى قرب يخلص'}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Add Subscriber Button */}
         <button
           onClick={handleOpenAdd}
@@ -915,11 +809,6 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
                         <p className="font-black text-slate-900 dark:text-white text-sm group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">{opt.label}</p>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">ينتهي في: <span className="text-slate-600 dark:text-slate-300 font-extrabold">{previewDateStr}</span></p>
                       </div>
-                      {!isSubscriptionModel && (
-                        <div className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white rounded-xl text-slate-900 dark:text-white font-black text-xs transition-colors shrink-0 border border-slate-100 dark:border-slate-700/50 group-hover:border-blue-600">
-                          {opt.costUnits} وحدات
-                        </div>
-                      )}
                     </button>
                   );
                 })}

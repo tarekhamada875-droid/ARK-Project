@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, memo } from 'react';
 import { X, Zap, Clock, User, Menu } from 'lucide-react';
 import { firestoreService } from '../../services/firestoreService';
 import { ActivityLog, Garage } from '../../types';
+import { safeDate } from '../../utils';
 
 interface RechargeHistoryViewProps {
   garage: Garage;
@@ -58,7 +59,7 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'غير معروف';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const date = safeDate(timestamp);
     return date.toLocaleDateString('ar-EG', {
       year: 'numeric',
       month: 'long',
@@ -68,7 +69,7 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
 
   const formatTime = (timestamp: any) => {
     if (!timestamp) return 'غير معروف';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const date = safeDate(timestamp);
     return date.toLocaleTimeString('ar-EG', {
       hour: '2-digit',
       minute: '2-digit'

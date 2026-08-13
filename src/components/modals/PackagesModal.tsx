@@ -1,334 +1,258 @@
 import React, { useState, memo } from 'react';
 import { Package } from '../../types';
-import { X, Menu, Tag, Gift, Clock } from 'lucide-react';
+import { getCleanPackageInfo } from '../../constants/packages';
+import { X, Menu, Clock, ShieldCheck, Car, Sparkles, Filter } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
   onClose: () => void;
-  garageHourlyRate: number;
+  garageHourlyRate?: number;
   walletNumber?: string;
   onToggleMenu?: () => void;
-  billingModel?: 'subscription' | 'commission';
-  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
-  referralBonusBalance?: number;
+  subscriptionPrices?: { weekly?: number; biweekly?: number; monthly?: number };
   hasMonthlySubscribers?: boolean;
 }
+
+export { getCleanPackageInfo };
 
 export const PackagesModal: React.FC<PackagesModalProps> = memo(({ 
   packages, 
   onClose, 
-  garageHourlyRate, 
-  walletNumber = "015 - 524 - 113 - 23", 
+  walletNumber = "01552411323", 
   onToggleMenu,
-  billingModel = 'commission',
-  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
-  referralBonusBalance = 0,
   hasMonthlySubscribers = false
 }) => {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
 
   const formatNumber = (num: number | string) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
-  const isSub = billingModel === 'subscription';
+  const formatWalletGroups = (walletStr: string) => {
+    const digits = walletStr ? walletStr.replace(/\D/g, '') : '01552411323';
+    if (!digits) return ['015', '52', '41', '13', '23'];
+    
+    const first3 = digits.slice(0, 3);
+    const remaining = digits.slice(3);
+    const pairs: string[] = [];
+    for (let i = 0; i < remaining.length; i += 2) {
+      pairs.push(remaining.slice(i, i + 2));
+    }
+    return [first3, ...pairs].filter(Boolean);
+  };
+
+  const walletGroups = formatWalletGroups(walletNumber);
+
+  const rawList = packages || [];
+
+  const displayPackages = rawList
+    .map(p => ({
+      ...p,
+      price: hasMonthlySubscribers ? Math.round(p.price * 1.25) : p.price
+    }))
+    .sort((a, b) => a.price - b.price);
+
+  const filteredPackages = displayPackages.filter(pkg => {
+    const info = getCleanPackageInfo(pkg);
+    return info.durationDays === selectedDurationFilter;
+  });
+
+  const hasUnlimitedInFiltered = filteredPackages.some(p => getCleanPackageInfo(p).isUnlimited);
+  const maxCapInFiltered = Math.max(...filteredPackages.map(p => getCleanPackageInfo(p).dailyCapacity || 0));
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
-      <style>{`
-        @keyframes badge-snake-rotate {
-          from { transform: translate(-50%, -50%) rotate(0deg); }
-          to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        .discount-snake-wrapper {
-          position: relative;
-          z-index: 0;
-          overflow: hidden;
-          padding: 2.5px;
-          border-radius: 9999px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .discount-snake-wrapper::before {
-          content: '';
-          position: absolute;
-          z-index: -1;
-          top: 50%;
-          left: 50%;
-          width: 350px;
-          height: 350px;
-          background: conic-gradient(from 0deg, transparent 140deg, #d97706 240deg, #f59e0b 310deg, #fbbf24 360deg);
-          transform-origin: center center;
-          animation: badge-snake-rotate 1.8s linear infinite;
-        }
-        .dark .discount-snake-wrapper::before {
-          background: conic-gradient(from 0deg, transparent 140deg, #f59e0b 240deg, #fbbf24 310deg, #fef08a 360deg);
-        }
-      `}</style>
-
+    <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-6 pb-4 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
-          <div className="flex items-center gap-3">
-            <div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 transition-colors">
-                {isSub ? 'باقات الاشتراكات' : 'باقات الرصيد'}
-              </h3>
-              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter transition-colors">
-                {isSub ? 'اختر فترة الاشتراك المناسبة لتجديد جراجك' : 'اختر الباقة المناسبة لشحن جراجك'}
-              </p>
-            </div>
+      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+            <ShieldCheck className="w-6 h-6" />
           </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={onClose}
-              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            {onToggleMenu && (
-              <button 
-                type="button"
-                onClick={onToggleMenu}
-                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
-              >
-                <Menu className="w-6 h-6 stroke-[3]" />
-              </button>
-            )}
-          </div>
-      </div>
-
-      {/* Content */}
-      <div className="p-6 overflow-y-auto custom-scrollbar-slate stable-scrollbar flex-1">
-        <div className="max-w-xl mx-auto w-full">
-          {/* Referral Reward Banner - First at the top */}
-          <div className="mb-6 p-5 bg-gradient-to-br from-emerald-950/90 via-slate-900 to-slate-900 rounded-2xl border border-emerald-500/40 text-right shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
-            
-            <div className="flex items-center justify-between gap-4 mb-3">
-              {/* Right side: Icon + Title */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Gift className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-white">
-                    المكافأة
-                  </h3>
-                </div>
-              </div>
-
-              {/* Left side: Large Balance in Off-White */}
-              <div className="text-left shrink-0">
-                <span className="block text-[10px] font-bold text-slate-400 mb-0.5">رصيد مكافآتك</span>
-                <span className="text-3xl sm:text-4xl font-black text-slate-100 font-mono tracking-tight">
-                  {referralBonusBalance} <span className="text-xs font-bold text-slate-300">ج.م</span>
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 font-medium leading-relaxed pt-3 border-t border-emerald-500/15">
-              رشّح أي صاحب جراج آخر للاشتراك معنا، واحصل على <strong className="text-emerald-400 font-black">50 جنيه مكافأة</strong> رصيداً في حسابك عند أول شحن ليه و لمدة 6 شهور!
+          <div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
+              الاشتراكات
+            </h3>
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              اختار الباقة اللي تناسب جراجك
             </p>
           </div>
+        </div>
 
-          {/* Wallet Number Card */}
-          <div className="mb-6 p-4 sm:p-7 bg-slate-900 dark:bg-slate-900 rounded-[2rem] border-4 border-amber-500 dark:border-amber-500/50 flex flex-col items-center text-center relative overflow-hidden shadow-xl">
-             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-amber-400/10 via-transparent to-transparent opacity-50 pointer-events-none" />
-             <div className="relative z-10 w-full flex flex-col items-center">
-                <p className="text-sm font-black text-amber-500 uppercase tracking-[0.2em] mb-3">رقم المحفظة</p>
-                <div className="flex items-center justify-center w-full" dir="ltr">
-                   <span className="text-[9vw] sm:text-7xl font-black text-white font-mono tracking-tighter whitespace-nowrap leading-none transition-all">
-                      {walletNumber}
-                   </span>
-                </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none cursor-pointer"
+            title="إغلاق"
+          >
+            <X className="w-6 h-6 stroke-[2.5]" />
+          </button>
+          {onToggleMenu && (
+            <button 
+              type="button"
+              onClick={onToggleMenu}
+              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none cursor-pointer"
+            >
+              <Menu className="w-6 h-6 stroke-[3]" />
+            </button>
+          )}
+        </div>
+      </div>
 
-                {/* Divider Line */}
-                <div className="w-full my-4 border-t border-amber-500/30 dark:border-amber-500/30" />
+      {/* Main Body */}
+      <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar-slate stable-scrollbar flex-1">
+        <div className="max-w-2xl mx-auto w-full space-y-6">
+          
+          {/* Wallet Section (Super Clear & High Contrast) */}
+          <div className="p-5 sm:p-6 bg-slate-900 text-white rounded-3xl border-2 border-amber-500 shadow-xl flex flex-col items-center text-center relative overflow-hidden">
+            <div className="flex items-center gap-2 text-amber-400 font-black text-sm mb-1">
+              <Sparkles className="w-5 h-5 text-amber-400" />
+              <span>رقم المحفظة</span>
+            </div>
 
-                {/* Charging Hours */}
-                <div className="flex items-center justify-center gap-2 text-amber-400 dark:text-amber-400 text-xs sm:text-sm font-bold tracking-wide">
-                   <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                   <span>مواعيد الشحن من 9 ص لـ 5 م يومياً</span>
-                </div>
-             </div>
+            {/* Big Wallet Number - Formatted (3 digits then pairs of 2) */}
+            <div className="my-2 py-2.5 px-4 bg-slate-800/90 rounded-2xl border border-amber-500/30 flex items-center justify-center gap-1.5 sm:gap-2.5 w-full max-w-md dir-ltr" dir="ltr">
+              {walletGroups.map((group, idx) => (
+                <React.Fragment key={idx}>
+                  {idx > 0 && (
+                    <span className="text-amber-500/50 text-xl sm:text-3xl font-mono font-bold select-none">-</span>
+                  )}
+                  <span className="text-2xl sm:text-4xl font-black font-mono text-amber-300 tracking-wider">
+                    {group}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-300 text-xs font-bold mt-2">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>مواعيد الدفع: من 9 الصبح لحد 5 العصر كل يوم</span>
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            {(() => {
-              const baseWeekly = hasMonthlySubscribers ? Math.round(subscriptionPrices.weekly * 1.25) : subscriptionPrices.weekly;
-              const baseBiweekly = hasMonthlySubscribers ? Math.round((subscriptionPrices.biweekly || 1500) * 1.25) : (subscriptionPrices.biweekly || 1500);
-              const baseMonthly = hasMonthlySubscribers ? Math.round(subscriptionPrices.monthly * 1.25) : subscriptionPrices.monthly;
+          {/* Duration Filter Tabs (Low Literacy Friendly) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-base">
+                <Filter className="w-5 h-5 text-amber-500" />
+                <span>اختار مدة الاشتراك:</span>
+              </div>
+              <span className="text-xs font-bold text-slate-500">
+                ({filteredPackages.length} باقات)
+              </span>
+            </div>
 
-              const displayPackages = isSub 
-                ? [
-                    { id: 'weekly_sub', name: 'اشتراك أسبوعي', price: baseWeekly, vehiclesCount: 7, discountType: 'percentage' as const, discountValue: subscriptionPrices.weeklyDiscount },
-                    { id: 'biweekly_sub', name: 'اشتراك 15 يوم', price: baseBiweekly, vehiclesCount: 15, discountType: 'percentage' as const, discountValue: subscriptionPrices.biweeklyDiscount },
-                    { id: 'monthly_sub', name: 'اشتراك شهري', price: baseMonthly, vehiclesCount: 30, discountType: 'percentage' as const, discountValue: subscriptionPrices.monthlyDiscount }
-                  ]
-                : packages.map(p => ({
-                    ...p,
-                    price: hasMonthlySubscribers ? Math.round(p.price * 1.25) : p.price
-                  })).sort((a, b) => a.price - b.price);
+            <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-200/70 dark:bg-slate-800/70 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setSelectedDurationFilter(15)}
+                className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                  selectedDurationFilter === 15
+                    ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                15 يوم (نصف شهر)
+              </button>
 
-              const basePackage = !isSub ? displayPackages[0] : null;
-              const baseRate = basePackage ? basePackage.price / basePackage.vehiclesCount : 0;
+              <button
+                type="button"
+                onClick={() => setSelectedDurationFilter(30)}
+                className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                  selectedDurationFilter === 30
+                    ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                30 يوم (شهر)
+              </button>
+            </div>
+          </div>
 
-              return displayPackages.map((pkg, index) => {
-                
-                // Calculate savings
-                let savings = 0;
-                let ratePerVehicle = '';
-                let expectedRevenue = 0;
+          {/* Packages Grid - Ultra Simple & Direct for Low Literacy */}
+          <div className="space-y-3">
+            {filteredPackages.map((pkg) => {
+              const info = getCleanPackageInfo(pkg);
+              const effectivePrice = pkg.discountValue && pkg.discountValue > 0
+                ? (pkg.discountType === 'percentage'
+                    ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
+                    : Math.max(0, pkg.price - pkg.discountValue))
+                : pkg.price;
 
-                const effectivePrice = pkg.discountValue && pkg.discountValue > 0
-                  ? (pkg.discountType === 'percentage'
-                      ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
-                      : Math.max(0, pkg.price - pkg.discountValue))
-                  : pkg.price;
+              const packageName = info.displayName;
 
-                if (isSub) {
-                  ratePerVehicle = (effectivePrice / pkg.vehiclesCount).toFixed(2);
-                  if (pkg.id === 'monthly_sub') {
-                    // Monthly subscription compared to weekly subscription daily rate
-                    const weeklyDailyRate = baseWeekly / 7;
-                    const expectedPrice = 30 * weeklyDailyRate;
-                    savings = Math.round(expectedPrice - effectivePrice);
-                  }
-                } else {
-                  const prevPkg = index > 0 ? displayPackages[index - 1] : null;
-                  const comparisonRate = prevPkg ? (prevPkg.price / prevPkg.vehiclesCount) : baseRate;
-                  const expectedPrice = pkg.vehiclesCount * comparisonRate;
-                  savings = Math.round(expectedPrice - effectivePrice);
-                  ratePerVehicle = (effectivePrice / pkg.vehiclesCount).toFixed(2);
-                  expectedRevenue = pkg.vehiclesCount * garageHourlyRate;
-                }
+              const isTopTier = filteredPackages.length > 1 && (
+                info.isUnlimited || (!hasUnlimitedInFiltered && info.dailyCapacity !== null && info.dailyCapacity === maxCapInFiltered && maxCapInFiltered > 0)
+              );
 
-                const isExpanded = expandedId === pkg.id;
-                const isLast = index === displayPackages.length - 1;
-                
-                return (
-                  <div key={pkg.id} className={`flex flex-col gap-3 relative pt-6 pb-8 ${!isLast ? 'border-b-2 border-dashed border-slate-200 dark:border-slate-800' : ''} transition-colors`}>
-                    {/* Header Badges Row */}
-                    <div className="flex items-center justify-center gap-2 mb-0.5 flex-wrap">
-                      <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-1.5 rounded-full border-2 border-slate-800 dark:border-slate-700 shadow-sm flex items-center gap-2 shrink-0">
-                        <span className="text-[12px] font-black uppercase tracking-widest leading-none text-white whitespace-nowrap">
-                          {pkg.name || 'باقة توفير'}
+              return (
+                <div 
+                  key={pkg.id}
+                  className={`p-4 sm:p-5 rounded-3xl border-2 transition-all flex items-center justify-between gap-3 ${
+                    info.isUnlimited
+                      ? 'bg-slate-900 border-amber-500 text-white shadow-xl'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white shadow-sm'
+                  }`}
+                >
+                  {/* Right Side: Package Name & Capacity */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xl sm:text-2xl font-black tracking-tight ${info.isUnlimited ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                        {packageName}
+                      </span>
+
+                      {isTopTier && (
+                        <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                          <Sparkles className="w-3 h-3" />
+                          الأكبر سعة
                         </span>
-                      </div>
-
-                      {pkg.discountValue && pkg.discountValue > 0 ? (
-                        <div className="discount-snake-wrapper shadow-lg shrink-0">
-                          <div className="bg-slate-900 dark:bg-slate-800 text-amber-400 dark:text-amber-300 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shrink-0 whitespace-nowrap">
-                            <Tag className="w-3.5 h-3.5 shrink-0 text-amber-400 dark:text-amber-300" />
-                            <span className="text-[12px] font-black tracking-tight leading-none whitespace-nowrap">
-                              {pkg.discountType === 'percentage' ? `خصم %${pkg.discountValue}` : `خصم ${pkg.discountValue} ج.م`}
-                            </span>
-                          </div>
-                        </div>
-                      ) : null}
+                      )}
                     </div>
 
-                    <div 
-                      onClick={() => setExpandedId(isExpanded ? null : pkg.id)}
-                      className={`relative p-4 rounded-2xl border-2 flex flex-col gap-4 cursor-pointer transition-colors duration-200 ${isExpanded ? 'bg-amber-50/50 dark:bg-amber-500/5 border-amber-500 dark:border-amber-500/50' : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-100 dark:border-slate-800'} text-slate-900 dark:text-white`}
-                    >
-                      <div className="grid grid-cols-2 gap-3 w-full">
-                        <div className="px-5 py-3 rounded-xl flex flex-col items-center justify-center border-2 bg-amber-600 border-amber-600 dark:bg-amber-600 dark:border-amber-600 text-white font-bold transition-all select-none">
-                          <span className="text-xl font-black font-mono leading-none">{formatNumber(pkg.vehiclesCount)}</span>
-                          <span className="text-[9px] font-black uppercase tracking-widest mt-1.5 opacity-60">
-                            {isSub ? 'يوم' : 'سيارة'}
+                    <div className={`flex items-center gap-1.5 text-xs font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <Car className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>{info.isUnlimited ? 'عربيات مفتوحة بدون حد أقصى' : `${info.dailyCapacity} عربية فى اليوم بس`}</span>
+                    </div>
+                  </div>
+
+                  {/* Left Side: Direct Total Price */}
+                  <div className="flex flex-col items-end text-left shrink-0">
+                    {(pkg.discountValue && pkg.discountValue > 0) ? (
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <div className="relative overflow-hidden rounded px-2 py-0.5 flex items-center justify-center shrink-0">
+                          {/* Spinning Golden Snake Background */}
+                          <div 
+                            className="absolute inset-[-250%] bg-[conic-gradient(from_0deg,transparent_75%,#fbbf24_100%)]" 
+                            style={{ animation: 'spin 3.5s linear infinite' }} 
+                          />
+                          
+                          {/* Inner Background Mask to create the border effect */}
+                          <div className={`absolute inset-[1.5px] rounded-[2.5px] ${info.isUnlimited ? 'bg-slate-900' : 'bg-white dark:bg-slate-900'}`} />
+                          
+                          {/* Original Emerald Tint */}
+                          <div className="absolute inset-[1.5px] rounded-[2.5px] bg-emerald-500/10" />
+                          
+                          {/* Text Content */}
+                          <span className="relative z-10 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                            خصم {pkg.discountType === 'percentage' ? `${pkg.discountValue}%` : `${pkg.discountValue} ج.م`}
                           </span>
                         </div>
-                        
-                        <div className="px-5 py-3 rounded-xl flex flex-col items-center justify-center border-2 bg-slate-900 dark:bg-slate-800 text-white border-slate-900 dark:border-slate-700 tracking-tight transition-all select-none relative">
-                          {pkg.discountValue && pkg.discountValue > 0 ? (
-                            <>
-                              <div className="flex items-baseline justify-center gap-2 font-mono">
-                                <span className="text-xl font-black text-emerald-400">
-                                  {formatNumber(effectivePrice)}
-                                </span>
-                                <span className="text-xs text-slate-400 line-through">
-                                  {formatNumber(pkg.price)}
-                                </span>
-                              </div>
-                              <span className="text-[9px] font-black uppercase tracking-widest mt-1 text-slate-300">
-                                جنيه مصري
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-xl font-black font-mono tracking-tight leading-none">{formatNumber(pkg.price)}</span>
-                              <span className="text-[9px] font-black uppercase tracking-widest mt-1.5 opacity-40">جنيه مصري</span>
-                            </>
-                          )}
-                        </div>
+                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
+                          {formatNumber(pkg.price)}
+                        </span>
                       </div>
+                    ) : null}
+                    <div className="flex items-baseline gap-1 font-mono">
+                      <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
+                        {formatNumber(effectivePrice)}
+                      </span>
+                      <span className="text-xs font-black text-amber-700 dark:text-amber-400">ج.م</span>
                     </div>
-
-                    {isExpanded && (
-                      <div className="px-4 flex flex-col gap-2 mt-2">
-                        {/* Card 1: Pricing Details & Savings */}
-                        <div className="bg-slate-900 dark:bg-slate-800 rounded-2xl p-4 border-2 border-amber-500 dark:border-amber-500/30 flex items-center justify-around transition-colors">
-                          <div className="text-center">
-                            <p className="text-[8px] font-black text-white uppercase tracking-widest mb-1 opacity-70">
-                              {isSub ? 'التكلفة اليومية' : 'سعر السيارة'}
-                            </p>
-                            <div className="flex items-baseline justify-center gap-1">
-                              <span className="text-lg font-black text-amber-500 font-mono">{ratePerVehicle}</span>
-                              <span className="text-[10px] font-bold text-white/40">ج.م</span>
-                            </div>
-                          </div>
-                          
-                          {savings > 0 && (
-                            <>
-                              <div className="w-[1px] h-8 bg-white/10" />
-                              <div className="text-center">
-                                <p className="text-[8px] font-black text-white uppercase tracking-widest mb-1 opacity-70">هتوفر</p>
-                                <div className="flex items-baseline justify-center gap-1">
-                                  <span className="text-lg font-black text-amber-500 font-mono">{formatNumber(savings)}</span>
-                                  <span className="text-[10px] font-bold text-white/40">ج.م</span>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Card 2: Expected Revenue / Subscription Benefits */}
-                        {isSub ? (
-                          <div className="bg-slate-900 dark:bg-slate-800 rounded-2xl p-5 border-2 border-amber-500 dark:border-amber-500/30 relative overflow-hidden group transition-colors">
-                             <div className="relative z-10 flex flex-col items-center text-center">
-                                <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] mb-2">مزايا باقة الاشتراك</p>
-                                <p className="text-xs font-bold text-white/80 leading-relaxed">
-                                   هذه الباقة تتيح لك تسجيل دخول وخروج عدد غير محدود من السيارات والعملاء طوال مدة الصلاحية ({pkg.vehiclesCount} أيام) دون أي عمولات إضافية!
-                                </p>
-                             </div>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-900 dark:bg-slate-800 rounded-2xl p-5 border-2 border-amber-500 dark:border-amber-500/30 relative overflow-hidden group transition-colors">
-                             <div className="relative z-10 flex flex-col items-center">
-                                <p className="text-[10px] font-black text-white uppercase tracking-[0.3em] mb-2 opacity-90">العائد المتوقع للباقة</p>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-4xl font-black text-amber-500 font-mono tracking-tighter tabular-nums">
-                                     {formatNumber(expectedRevenue)}
-                                  </span>
-                                  <span className="text-xs font-bold text-white/40 mt-3">ج.م</span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <div className="w-1 h-1 rounded-full bg-amber-400/40"></div>
-                                  <p className="text-[9px] font-bold text-white/50 tracking-wide">بناءاً على سعر الساعة {formatNumber(garageHourlyRate)} ج.م</p>
-                                  <div className="w-1 h-1 rounded-full bg-amber-400/40"></div>
-                                </div>
-                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
-                );
-              });
-            })()}
+                </div>
+              );
+            })}
           </div>
+
         </div>
       </div>
     </div>

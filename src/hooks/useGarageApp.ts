@@ -13,12 +13,29 @@ import {
   normalizeDigits, 
   normalizePhone,
   getStorage,
-  isSessionActive
+  isSessionActive,
+  isSubscriptionExpired,
+  applyMonthlySubscribersSurcharge,
+  createAsyncLock
 } from '../utils';
 import { useLocalStorageState } from './useLocalStorage';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useServerTime } from './useServerTime';
 import { soundManager } from '../utils/sounds';
+import { useAppStore } from '../store/appStore';
+
+// Simple async lock to prevent double-clicks
+const pendingOperations = new Set<string>();
+
+function withAsyncLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  if (pendingOperations.has(key)) {
+    return Promise.reject(new Error('Operation already in progress'));
+  }
+  pendingOperations.add(key);
+  return fn().finally(() => {
+    pendingOperations.delete(key);
+  });
+}
 
 const CURRENT_VERSION = '1.0.4';
 
@@ -43,6 +60,9 @@ export function useGarageApp() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
+
+  const checkInLock = useRef(createAsyncLock());
+  const checkOutLock = useRef(createAsyncLock());
 
   // Landscape Orientation Check
   useEffect(() => {
@@ -69,7 +89,18 @@ export function useGarageApp() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [todayTransactions, setTodayTransactions] = useState<Vehicle[]>([]);
   const [allGarages, setAllGarages] = useState<Garage[]>([]);
-  const [packages, setPackages] = useState<Package[]>([]);
+  const [packages, setPackages] = useState<Package[]>(() => {
+    try {
+      const cached = localStorage.getItem('app_packages_cache');
+      if (cached) {
+        const parts = cached.split('|');
+        if (parts.length > 1 && (Date.now() - parseInt(parts[0])) < 300000) {
+          return JSON.parse(cached.substring(cached.indexOf('|') + 1));
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
   const [adminPin, setAdminPin] = useLocalStorageState<string>('app_admin_pin', '');
   const [activeAdminPin, setActiveAdminPin] = useState<string>(ADMIN_PIN);
   const [walletNumber, setWalletNumber] = useLocalStorageState<string>('app_wallet_number', '015 - 524 - 113 - 23');
@@ -112,7 +143,7 @@ export function useGarageApp() {
   });
   
   const [isSessionReady, setIsSessionReady] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showRecentExitWarning, setShowRecentExitWarning] = useState(false);
   const [recentVehicle, setRecentVehicle] = useState<Vehicle | null>(null);
   const [showSubscriberWarning, setShowSubscriberWarning] = useState(false);
@@ -167,7 +198,8 @@ export function useGarageApp() {
   }, [setStaffList]);
 
   const sortedPackages = useMemo(() => {
-    return [...packages].sort((a, b) => a.price - b.price);
+    const activePkgs = packages || [];
+    return [...activePkgs].sort((a, b) => a.price - b.price);
   }, [packages]);
 
   const delegateGarages = useMemo(() => {
@@ -211,11 +243,24 @@ export function useGarageApp() {
     };
   }, []);
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success', silent: boolean = false) => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success', silent: boolean = false) => {
     if (type === 'error' && !silent) soundManager.play('error');
     setToast({ message, type });
+    useAppStore.getState().showToast(message, type as any);
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  useEffect(() => {
+    useAppStore.getState().setGarages(allGarages);
+  }, [allGarages]);
+
+  useEffect(() => {
+    useAppStore.getState().setPackages(packages);
+  }, [packages]);
+
+  useEffect(() => {
+    useAppStore.getState().setDelegates(delegates);
+  }, [delegates]);
 
   const handleLogout = useCallback(async (isRemoteKicked: boolean = false) => {
     try {
@@ -875,56 +920,58 @@ export function useGarageApp() {
     }
   }, [isOnline, sessionId, showToast, fetchServerTimeOffset]);
 
-  const handleDelegateRecharge = useCallback(async (garageId: string, amount: number, pkg?: Package, discountInfo?: { couponCode?: string; discountAmount?: number; originalRevenueAmount?: number }) => {
+  const rechargeLock = useRef(createAsyncLock());
+
+  const handleDelegateRecharge = useCallback(async (garageId: string, amount: number, pkg?: Package, discountInfo?: { discountAmount?: number; originalRevenueAmount?: number }) => {
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى المحاولة عند عودة النت.', 'error');
       return;
     }
-    try {
-      const g = allGarages.find(gar => gar.id === garageId);
-      if (!g || !delegate) return;
+    const lockResult = await rechargeLock.current(async () => {
+      try {
+        const g = allGarages.find(gar => gar.id === garageId);
+        if (!g || !delegate) return;
 
-      const pendingRequests = await firestoreService.getPendingRechargeRequestsForGarage(garageId);
-      if (pendingRequests.length > 0) {
-        showToast('يوجد طلب شحن معلق بالفعل لهذا الجراج', 'error');
-        return;
+        const pendingRequests = await firestoreService.getPendingRechargeRequestsForGarage(garageId);
+        if (pendingRequests.length > 0) {
+          showToast('يوجد طلب شحن معلق بالفعل لهذا الجراج', 'error');
+          return;
+        }
+        
+        const durationDays = pkg ? pkg.vehiclesCount : 30;
+        let revenueIncrement = pkg ? pkg.price : amount;
+        const originalRev = discountInfo?.originalRevenueAmount !== undefined ? discountInfo.originalRevenueAmount : revenueIncrement;
+
+        if (discountInfo?.discountAmount && discountInfo.discountAmount > 0) {
+          revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
+        }
+
+        revenueIncrement = applyMonthlySubscribersSurcharge(revenueIncrement, g.hasMonthlySubscribers || false);
+
+        const rechargePayload: any = {
+          garageId: garageId,
+          garageName: g.name,
+          delegateId: delegate.id,
+          delegateName: delegate.name,
+          packageId: pkg?.id || 'custom',
+          packageName: pkg?.name || 'مبلغ مخصص',
+          durationDays: durationDays,
+          carsCount: durationDays,
+          dailyCapacity: pkg?.dailyCapacity !== undefined ? pkg.dailyCapacity : 0,
+          revenueAmount: revenueIncrement,
+          originalRevenueAmount: originalRev,
+          discountAmount: discountInfo?.discountAmount || 0
+        };
+
+        await firestoreService.createRechargeRequest(rechargePayload);
+      } catch (error) {
+        showToast('فشل في إرسال طلب الشحن', 'error');
+        throw error;
       }
-      
-      const commission = Math.max(g.commissionPerVehicle || 1, 1);
-      const carsToMove = pkg ? pkg.vehiclesCount : Math.floor(amount / commission);
-      const balanceIncrement = pkg ? (pkg.vehiclesCount * commission) : amount;
-      let revenueIncrement = pkg ? pkg.price : amount;
-      const originalRev = discountInfo?.originalRevenueAmount !== undefined ? discountInfo.originalRevenueAmount : revenueIncrement;
+    });
 
-      if (discountInfo?.discountAmount && discountInfo.discountAmount > 0) {
-        revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
-      }
-
-      if (g.hasMonthlySubscribers) {
-        revenueIncrement = Math.round(revenueIncrement * 1.25);
-      }
-
-      const rechargePayload: any = {
-        garageId: garageId,
-        garageName: g.name,
-        delegateId: delegate.id,
-        delegateName: delegate.name,
-        packageId: pkg?.id || 'custom',
-        packageName: pkg?.name || 'مبلغ مخصص',
-        amount: balanceIncrement,
-        carsCount: carsToMove,
-        revenueAmount: revenueIncrement,
-        originalRevenueAmount: originalRev,
-        discountAmount: discountInfo?.discountAmount || 0
-      };
-      if (discountInfo?.couponCode) {
-        rechargePayload.couponCode = discountInfo.couponCode;
-      }
-
-      await firestoreService.createRechargeRequest(rechargePayload);
-    } catch (error) {
-      showToast('فشل في إرسال طلب الشحن', 'error');
-      throw error;
+    if (lockResult === null) {
+      showToast('جاري إرسال الطلب... يرجى الانتظار', 'info');
     }
   }, [isOnline, allGarages, delegate, showToast]);
 
@@ -965,27 +1012,28 @@ export function useGarageApp() {
       }
     }
 
-    const commissionVal = (garage.commissionPerVehicle !== undefined) ? garage.commissionPerVehicle : 1;
     let isSubscriber = false;
     
-    try {
-      const subSnap = await getDocs(query(
-        collection(db, `garages/${garage.id}/subscribers`),
-        where('plateNumberRaw', '==', raw),
-        limit(1)
-      ));
-      
-      if (!subSnap.empty) {
-        const subData = subSnap.docs[0].data();
-        const end = new Date(subData.endDate);
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        if (end >= today) {
-          isSubscriber = true;
+    if (garage.hasMonthlySubscribers) {
+      try {
+        const subSnap = await getDocs(query(
+          collection(db, `garages/${garage.id}/subscribers`),
+          where('plateNumberRaw', '==', raw),
+          limit(1)
+        ));
+        
+        if (!subSnap.empty) {
+          const subData = subSnap.docs[0].data();
+          const end = new Date(subData.endDate);
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          if (end >= today) {
+            isSubscriber = true;
+          }
         }
+      } catch (e) {
+        console.error("Sub check error", e);
       }
-    } catch (e) {
-      console.error("Sub check error", e);
     }
 
     if (isSubscriber) {
@@ -997,86 +1045,96 @@ export function useGarageApp() {
       return;
     }
 
-    const isGarageSubscription = garage.billingModel === 'subscription';
-    let isGarageSubscriptionExpired = false;
-    if (isGarageSubscription) {
-      if (!garage.balanceExpiry) {
-        isGarageSubscriptionExpired = true;
-      } else {
-        const expiryDate = garage.balanceExpiry.toDate ? garage.balanceExpiry.toDate() : new Date(garage.balanceExpiry);
-        isGarageSubscriptionExpired = expiryDate < new Date();
-      }
-    }
-
-    if (isGarageSubscription && isGarageSubscriptionExpired) {
+    if (isSubscriptionExpired(garage)) {
       showToast('عفواً، انتهى اشتراك الجراج. يرجى تجديد الاشتراك.', 'error');
+      soundManager.play('error');
       return;
     }
 
-    if (!isGarageSubscription && !isSubscriber && (garage.balance || 0) < commissionVal) {
-      showToast('عفواً، الرصيد لا يكفي. يرجى الشحن.', 'error');
-      return;
+    if (garage.dailyCapacity && garage.dailyCapacity > 0) {
+      const todayCount = garage.todayCount || 0;
+      if (todayCount >= garage.dailyCapacity) {
+        showToast(`عفواً، وصلت للحد الأقصى اليومي للباقة (${garage.dailyCapacity} سيارة/يوم). يرجى ترقية الباقة لتسجيل المزيد.`, 'error');
+        soundManager.play('error');
+        return;
+      }
     }
 
-    setIsLoading(true);
-    setLoadingType(type);
-    setNewPlateNumber('');
-    soundManager.play('checkIn');
-    
-    try {
-      await firestoreService.checkInVehicle(garage.id, {
-        plateNumber: formatted,
-        plateNumberRaw: raw,
-        entryTime: serverTimestamp() as any,
-        type: type,
-        garageId: garage.id,
-        status: 'inside',
-        staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-        isSubscriber: isSubscriber
-      }, (isGarageSubscription || isSubscriber) ? 0 : commissionVal);
+    const lockResult = await checkInLock.current(async () => {
+      setIsLoading(true);
+      setLoadingType(type);
+      setNewPlateNumber('');
+      soundManager.play('checkIn');
+      
+      try {
+        const res = await withAsyncLock(`checkin-${garage.id}-${raw}`, () =>
+          firestoreService.checkInVehicleTransaction(garage.id, {
+            plateNumber: formatted,
+            plateNumberRaw: raw,
+            entryTime: serverTimestamp() as any,
+            type: type,
+            garageId: garage.id,
+            status: 'inside',
+            staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+            isSubscriber: isSubscriber
+          }, 0)
+        );
 
-      firestoreService.addActivityLog({
-        garageId: garage.id,
-        staffId: currentStaff ? currentStaff.id : null,
-        staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-        actionType: 'check_in',
-        plateNumber: formatted,
-        timestamp: serverTimestamp() as any
-      }).catch(err => console.warn('CheckIn activity log error:', err));
+        if (!res.success) {
+          throw new Error(res.error);
+        }
 
-      const newVehicleObj: Vehicle = {
-        id: raw,
-        plateNumber: formatted,
-        plateNumberRaw: raw,
-        entryTime: new Date() as any,
-        type: type,
-        garageId: garage.id,
-        status: 'inside',
-        staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-        isSubscriber: isSubscriber
-      };
-      setVehicles(prev => [newVehicleObj, ...prev.filter(v => v.id !== raw)]);
+        firestoreService.addActivityLog({
+          garageId: garage.id,
+          staffId: currentStaff ? currentStaff.id : null,
+          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+          actionType: 'check_in',
+          plateNumber: formatted,
+          timestamp: serverTimestamp() as any
+        }).catch(err => console.warn('CheckIn activity log error:', err));
 
-      // showToast('تم تسجيل دخول السيارة بنجاح', 'success');
-      setShowCheckInModal(false);
-    } catch (error: any) {
-      let message = error?.message || '';
-      if (message.startsWith('{') && message.endsWith('}')) {
-        try {
-          const detailed = JSON.parse(message);
-          message = detailed.error || message;
-        } catch (e) {}
+        const newVehicleObj: Vehicle = {
+          id: raw,
+          plateNumber: formatted,
+          plateNumberRaw: raw,
+          entryTime: new Date() as any,
+          type: type,
+          garageId: garage.id,
+          status: 'inside',
+          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+          isSubscriber: isSubscriber
+        };
+        setVehicles(prev => [newVehicleObj, ...prev.filter(v => v.id !== raw)]);
+
+        setShowCheckInModal(false);
+      } catch (error: any) {
+        if (error?.message === 'Operation already in progress') {
+          showToast('جاري معالجة طلب الدخول... يرجى الانتظار', 'info');
+          return;
+        }
+        let message = error?.message || '';
+        if (message.startsWith('{') && message.endsWith('}')) {
+          try {
+            const detailed = JSON.parse(message);
+            message = detailed.error || message;
+          } catch (e) {}
+        }
+
+        if (message === 'ALREADY_INSIDE') {
+          showToast('هذه السيارة موجودة بالفعل بالداخل (تم رصدها من جهاز آخر)', 'error');
+        } else {
+          setNewPlateNumber(formatted);
+          showToast('حدث خطأ أثناء الدخول، تأكد من الاتصال بالإنترنت', 'error');
+        }
+      } finally {
+        setIsLoading(false);
+        setLoadingType(null);
       }
+    });
 
-      if (message === 'ALREADY_INSIDE') {
-        showToast('هذه السيارة موجودة بالفعل بالداخل (تم رصدها من جهاز آخر)', 'error');
-      } else {
-        setNewPlateNumber(formatted);
-        showToast('حدث خطأ أثناء الدخول، تأكد من الاتصال بالإنترنت', 'error');
-      }
-    } finally {
-      setIsLoading(false);
-      setLoadingType(null);
+    if (lockResult === null) {
+      showToast('جاري المعالجة... يرجى الانتظار', 'info');
+      return;
     }
   }, [isOnline, garage, newPlateNumber, isLoading, closeKeyboard, vehicles, todayTransactions, showRecentExitWarning, currentStaff, showToast]);
 
@@ -1090,65 +1148,78 @@ export function useGarageApp() {
 
     const vehicleToOut = selectedVehicle;
 
-    setIsLoading(true);
-    setLoadingType('checkout');
-    soundManager.play('checkOut');
-    
-    try {
-      const cost = calculateCost(vehicleToOut, garage, now);
-
-      await firestoreService.checkOutVehicle(garage.id, vehicleToOut.id, cost);
-      
-      firestoreService.addActivityLog({
-        garageId: garage.id,
-        staffId: currentStaff ? currentStaff.id : null,
-        staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-        actionType: 'check_out',
-        plateNumber: vehicleToOut.plateNumber,
-        timestamp: serverTimestamp() as any
-      }).catch(err => console.warn('CheckOut activity log error:', err));
-
-      setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
-      setShowCheckOutModal(false);
-      setSelectedVehicle(null);
-      setNewPlateNumber('');
-      // showToast('تم تسجيل خروج السيارة بنجاح', 'success');
-    } catch (error: any) {
-      console.error('CheckOut Error:', error);
-      let errMsg = 'حدث خطأ أثناء الخروج';
+    const lockResult = await checkOutLock.current(async () => {
+      setIsLoading(true);
+      setLoadingType('checkout');
+      soundManager.play('checkOut');
       
       try {
-        const message = error?.message || '';
-        if (message.startsWith('{') && message.endsWith('}')) {
-          const parsed = JSON.parse(message);
-          const rawErr = parsed.error;
-          if (rawErr === 'ALREADY_OUTSIDE') {
-            errMsg = 'هذه السيارة تم تسجيل خروجها بالفعل (من جهاز آخر)';
-          } else if (rawErr === 'VEHICLE_NOT_FOUND') {
-            errMsg = 'لم يتم العثور على بيانات السيارة';
-          } else if (rawErr === 'GARAGE_NOT_FOUND') {
-            errMsg = 'لم يتم العثور على الجراج';
-          } else {
-            errMsg = rawErr || 'مشكلة في البيانات، حاول مرة أخرى';
-          }
-        } else {
-          errMsg = message || 'حدث خطأ أثناء الخروج';
-        }
-      } catch (e) {
-        errMsg = error?.message || 'حدث خطأ أثناء الخروج';
-      }
-      
-      showToast(errMsg, 'error');
-      
-      // Clean up modal and remove stale/checked-out vehicle from local state
-      setShowCheckOutModal(false);
-      if (vehicleToOut) {
+        const cost = calculateCost(vehicleToOut, garage, now);
+
+        await withAsyncLock(`checkout-${garage.id}-${vehicleToOut.id}`, () =>
+          firestoreService.checkOutVehicle(garage.id, vehicleToOut.id, cost)
+        );
+        
+        firestoreService.addActivityLog({
+          garageId: garage.id,
+          staffId: currentStaff ? currentStaff.id : null,
+          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+          actionType: 'check_out',
+          plateNumber: vehicleToOut.plateNumber,
+          timestamp: serverTimestamp() as any
+        }).catch(err => console.warn('CheckOut activity log error:', err));
+
         setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
+        setShowCheckOutModal(false);
+        setSelectedVehicle(null);
+        setNewPlateNumber('');
+        // showToast('تم تسجيل خروج السيارة بنجاح', 'success');
+      } catch (error: any) {
+        if (error?.message === 'Operation already in progress') {
+          showToast('جاري معالجة طلب الخروج... يرجى الانتظار', 'info');
+          return;
+        }
+        console.error('CheckOut Error:', error);
+        let errMsg = 'حدث خطأ أثناء الخروج';
+        
+        try {
+          const message = error?.message || '';
+          if (message.startsWith('{') && message.endsWith('}')) {
+            const parsed = JSON.parse(message);
+            const rawErr = parsed.error;
+            if (rawErr === 'ALREADY_OUTSIDE') {
+              errMsg = 'هذه السيارة تم تسجيل خروجها بالفعل (من جهاز آخر)';
+            } else if (rawErr === 'VEHICLE_NOT_FOUND') {
+              errMsg = 'لم يتم العثور على بيانات السيارة';
+            } else if (rawErr === 'GARAGE_NOT_FOUND') {
+              errMsg = 'لم يتم العثور على الجراج';
+            } else {
+              errMsg = rawErr || 'مشكلة في البيانات، حاول مرة أخرى';
+            }
+          } else {
+            errMsg = message || 'حدث خطأ أثناء الخروج';
+          }
+        } catch (e) {
+          errMsg = error?.message || 'حدث خطأ أثناء الخروج';
+        }
+        
+        showToast(errMsg, 'error');
+        
+        // Clean up modal and remove stale/checked-out vehicle from local state
+        setShowCheckOutModal(false);
+        if (vehicleToOut) {
+          setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
+        }
+        setSelectedVehicle(null);
+      } finally {
+        setIsLoading(false);
+        setLoadingType(null);
       }
-      setSelectedVehicle(null);
-    } finally {
-      setIsLoading(false);
-      setLoadingType(null);
+    });
+
+    if (lockResult === null) {
+      showToast('جاري المعالجة... يرجى الانتظار', 'info');
+      return;
     }
   }, [isOnline, garage, selectedVehicle, isLoading, closeKeyboard, currentStaff, showToast]);
 
@@ -1168,78 +1239,21 @@ export function useGarageApp() {
     setLoadingType('delete');
     soundManager.play('checkOut');
 
-    const entryDate = selectedVehicle.entryTime ? safeDate(selectedVehicle.entryTime) : new Date();
-    const diffMs = Date.now() - entryDate.getTime();
-    const isWithinFiveMinutes = diffMs <= 300000;
-    const isOverOneDay = diffMs > 86400000;
-
     setShowCheckOutModal(false);
     setShowDeleteConfirm(false);
 
     try {
-      const isGarageSubscription = garage.billingModel === 'subscription';
-      if (isGarageSubscription) {
-        const success = await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, garage.lastRefundDate || '');
-        if (success) {
-          await firestoreService.addActivityLog({
-            garageId: garage.id,
-            staffId: currentStaff ? currentStaff.id : null,
-            staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-            actionType: 'delete_refund',
-            plateNumber: `مسح لوحة: ${selectedVehicle.plateNumber}`,
-            timestamp: serverTimestamp() as any
-          });
-          showToast('اللوحة اتمسحت بنجاح');
-        }
-      } else if (isWithinFiveMinutes && !isOverOneDay && garage.balance !== undefined) {
-        const todayYMD = new Date().toISOString().split('T')[0];
-        const hasLimit = (garage.dailyRefundCount || 0) < 5 || garage.lastRefundDate !== todayYMD;
-        
-        if (hasLimit) {
-          const refundAmount = garage.commissionPerVehicle || 1;
-          const newRefundCount = garage.lastRefundDate === todayYMD ? (garage.dailyRefundCount || 0) + 1 : 1;
-          
-          const success = await firestoreService.deleteVehicleWithRefund(
-            garage.id, 
-            selectedVehicle.id, 
-            refundAmount, 
-            todayYMD
-          );
-          
-          if (success) {
-            await firestoreService.addActivityLog({
-              garageId: garage.id,
-              staffId: currentStaff ? currentStaff.id : null,
-              staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-              actionType: 'delete_refund',
-              plateNumber: `استرداد عمولة: ${selectedVehicle.plateNumber} (محاولة ${newRefundCount}/5)`,
-              timestamp: serverTimestamp() as any
-            });
-
-            const remaining = 5 - newRefundCount;
-            showToast(`اللوحة الغلط اتمسحت ورصيدك رجعلك تانى\nباقى ليك ${remaining} أخطاء`);
-          }
-        } else {
-          const success = await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, todayYMD);
-          
-          if (success) {
-            await firestoreService.addActivityLog({
-              garageId: garage.id,
-              staffId: currentStaff ? currentStaff.id : null,
-              staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-              actionType: 'delete_refund',
-              plateNumber: `حذف بدون استرداد (تجاوز الحد): ${selectedVehicle.plateNumber}`,
-              timestamp: serverTimestamp() as any
-            });
-            
-            showToast('تم الحذف بدون استرداد (وصلت للحد اليومي 5 أخطاء)', 'error', true);
-          }
-        }
-      } else {
-        if (diffMs > 300000 && diffMs < 3600000) {
-          showToast('تم الحذف بدون استرداد (مر أكثر من 5 دقائق على الدخول)', 'error', true);
-        }
-        await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, garage.lastRefundDate || '');
+      const success = await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, garage.lastRefundDate || '');
+      if (success) {
+        await firestoreService.addActivityLog({
+          garageId: garage.id,
+          staffId: currentStaff ? currentStaff.id : null,
+          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
+          actionType: 'delete_refund',
+          plateNumber: `مسح لوحة: ${selectedVehicle.plateNumber}`,
+          timestamp: serverTimestamp() as any
+        });
+        showToast('اللوحة اتمسحت بنجاح');
       }
     } catch (err) {
       console.error('Delete Vehicle Error:', err);
@@ -1304,7 +1318,7 @@ export function useGarageApp() {
     const overnightRate = Number(normalizeDigits(formData.get('overnightRate') as string || '0'));
     const initialPackageId = formData.get('initialPackageId') as string;
     const commissionPerVehicle = 1;
-    const billingModel = formData.get('billingModel') as 'subscription' | 'commission' || 'commission';
+    const billingModel = 'subscription';
     const subscriptionType = (formData.get('subscriptionType') as string) || 'weekly';
     const hasMonthlySubscribersRaw = formData.get('hasMonthlySubscribers');
     const hasMonthlySubscribers = hasMonthlySubscribersRaw === 'true' || hasMonthlySubscribersRaw === 'on' || hasMonthlySubscribersRaw === '1';
@@ -1312,41 +1326,48 @@ export function useGarageApp() {
     const referringGarage = referredByGarageId ? allGarages.find(g => g.id === referredByGarageId) : null;
     const referredByGarageName = referringGarage ? referringGarage.name : null;
 
+    const activePkgs = packages;
+    const selectedPkg = activePkgs.find(p => p.id === initialPackageId) || activePkgs[0];
+
     let initialBalance = 0;
     let initialCars = 0;
     let initialRevenue = 0;
+    let subDurationDays = 30;
+    let selectedDailyCap = 0;
+    let selectedPkgName = '';
     const expiryDate = new Date();
 
-    if (billingModel === 'subscription') {
-      const days = subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30;
-      expiryDate.setDate(expiryDate.getDate() + days);
-      let baseSubPrice = subscriptionType === 'weekly' ? subscriptionPrices.weekly : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? (subscriptionPrices.biweekly || 1500) : subscriptionPrices.monthly;
-      const subDiscount = subscriptionType === 'weekly' ? subscriptionPrices.weeklyDiscount : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? subscriptionPrices.biweeklyDiscount : subscriptionPrices.monthlyDiscount;
-      if (subDiscount && subDiscount > 0) {
-        baseSubPrice = Math.round(baseSubPrice * (1 - subDiscount / 100));
-      }
-      initialRevenue = hasMonthlySubscribers ? Math.round(baseSubPrice * 1.25) : baseSubPrice;
-      initialCars = 9999;
-    } else {
-      expiryDate.setFullYear(expiryDate.getFullYear() + 10);
-      const selectedPkg = packages.find(p => p.id === initialPackageId);
-      initialBalance = selectedPkg ? (selectedPkg.vehiclesCount * commissionPerVehicle) : 0;
-      initialCars = selectedPkg ? selectedPkg.vehiclesCount : 0;
-      if (selectedPkg) {
-        let basePkgPrice = selectedPkg.price;
-        if (selectedPkg.discountValue && selectedPkg.discountValue > 0) {
-          basePkgPrice = selectedPkg.discountType === 'percentage'
-            ? Math.round(selectedPkg.price * (1 - selectedPkg.discountValue / 100))
-            : Math.max(0, selectedPkg.price - selectedPkg.discountValue);
-        }
-        initialRevenue = hasMonthlySubscribers ? Math.round(basePkgPrice * 1.25) : basePkgPrice;
-      } else {
-        initialRevenue = 0;
-      }
+    const derivedDuration = (selectedPkg?.durationDays && selectedPkg.durationDays <= 365) 
+      ? selectedPkg.durationDays 
+      : (selectedPkg?.vehiclesCount && selectedPkg.vehiclesCount <= 365 ? selectedPkg.vehiclesCount : null);
+    subDurationDays = derivedDuration || (subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30);
+    selectedDailyCap = selectedPkg?.dailyCapacity !== undefined && selectedPkg.dailyCapacity > 0
+      ? selectedPkg.dailyCapacity 
+      : (selectedPkg?.vehiclesCount && selectedPkg.vehiclesCount <= 500 ? selectedPkg.vehiclesCount : 50);
+    selectedPkgName = selectedPkg?.name || 'خطة الاشتراك الدوريّة';
+    expiryDate.setDate(expiryDate.getDate() + subDurationDays);
+    let baseSubPrice = selectedPkg ? selectedPkg.price : (subscriptionType === 'weekly' ? subscriptionPrices.weekly : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? (subscriptionPrices.biweekly || 1500) : subscriptionPrices.monthly);
+    if (selectedPkg && selectedPkg.discountValue && selectedPkg.discountValue > 0) {
+      baseSubPrice = selectedPkg.discountType === 'percentage'
+        ? Math.round(selectedPkg.price * (1 - selectedPkg.discountValue / 100))
+        : Math.max(0, selectedPkg.price - selectedPkg.discountValue);
+    }
+    initialRevenue = applyMonthlySubscribersSurcharge(baseSubPrice, hasMonthlySubscribers);
+    initialCars = 9999;
+    initialBalance = 0;
+
+    if (!name || name.trim().length === 0) {
+      showToast('يرجى إدخال اسم الجراج', 'error');
+      return;
     }
 
     if (phone && (phone.length < 3 || phone.length > 20)) {
       showToast('يرجى إدخال رقم هاتف صحيح يتكون من 3 أرقام على الأقل', 'error');
+      return;
+    }
+
+    if (hourlyRate < 0 || overnightRate < 0) {
+      showToast('الأسعار يجب أن تكون أرقاماً موجبة', 'error');
       return;
     }
 
@@ -1399,7 +1420,9 @@ export function useGarageApp() {
         overnightRate,
         balanceExpiry: Timestamp.fromDate(expiryDate),
         createdAt: serverTimestamp(),
-        balanceDays: billingModel === 'subscription' ? (subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30) : 3650,
+        balanceDays: subDurationDays,
+        dailyCapacity: selectedDailyCap,
+        activePackageName: selectedPkgName,
         billingModel: billingModel,
         commissionPerVehicle: commissionPerVehicle,
         balance: actualBalance,

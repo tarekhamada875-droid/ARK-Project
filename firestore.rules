@@ -460,7 +460,14 @@ service cloud.firestore {
         allow list: if isSignedIn() && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
         allow create: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && 
                          !get(/databases/$(database)/documents/garages/$(garageId)).data.isLocked && 
-                         get(/databases/$(database)/documents/garages/$(garageId)).data.balance >= 0 &&
+                         (
+                           (get(/databases/$(database)/documents/garages/$(garageId)).data.billingModel != 'subscription' &&
+                            get(/databases/$(database)/documents/garages/$(garageId)).data.balance > 0) ||
+                           (get(/databases/$(database)/documents/garages/$(garageId)).data.billingModel == 'subscription' &&
+                            'balanceExpiry' in get(/databases/$(database)/documents/garages/$(garageId)).data &&
+                            get(/databases/$(database)/documents/garages/$(garageId)).data.balanceExpiry is timestamp &&
+                            get(/databases/$(database)/documents/garages/$(garageId)).data.balanceExpiry.toMillis() > request.time.toMillis())
+                         ) &&
                          incoming().keys().hasAll(['plateNumber', 'entryTime', 'type', 'garageId', 'status', 'plateNumberRaw']) &&
                          isValidVehicle(incoming());
         allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming());

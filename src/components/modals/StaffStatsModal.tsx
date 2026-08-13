@@ -76,7 +76,7 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
              </div>
              <div className="flex flex-col items-end">
                 <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                  <span className="text-lg font-black text-white leading-none">{getStaffStats('مدير الجراج')}</span>
+                  <span className="text-lg font-black text-white leading-none font-mono">{getStaffStats('مدير الجراج')}</span>
                   <Car className="w-3.5 h-3.5 text-white/40" />
                 </div>
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mt-1">سيارة اليوم</p>
@@ -107,7 +107,7 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
                   
                   <div className="flex flex-col items-end">
                     <div className="flex items-center gap-1.5 bg-teal-50 dark:bg-teal-900/20 px-3 py-1.5 rounded-lg border border-teal-100 dark:border-teal-900/30">
-                      <span className="text-lg font-black text-teal-600 dark:text-teal-400 leading-none">{count}</span>
+                      <span className="text-lg font-black text-teal-600 dark:text-teal-400 leading-none font-mono">{count}</span>
                       <Car className="w-3.5 h-3.5 text-teal-500" />
                     </div>
                     <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter mt-1">سيارة اليوم</p>

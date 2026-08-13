@@ -209,19 +209,16 @@ export const RegistrationCard = memo(({
 
               // 2. If subscription/balance is expired and car is not inside, show locked check-in notice
               if (isBalanceOut) {
-                const isSub = garage.billingModel === 'subscription';
                 return (
                   <div className="mt-3 p-4 md:p-6 bg-red-500/10 dark:bg-red-500/10 border-2 border-red-500/30 rounded-2xl md:rounded-[2rem] text-center flex flex-col items-center justify-center gap-2 transition-all">
                     <div className="w-10 h-10 md:w-12 md:h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500">
                       <Lock className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
                     <div className="text-base md:text-xl font-black text-red-600 dark:text-red-400">
-                      {isSub ? 'برجاء تفعيل الاشتراك' : 'برجاء شحن الرصيد'}
+                      برجاء تفعيل الاشتراك
                     </div>
                     <p className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-400">
-                      {isSub 
-                        ? 'انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.'
-                        : 'رصيدك غير كافٍ، يرجى شحن باقة جديدة لتسجيل دخول سيارات جديدة.'}
+                      انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.
                     </p>
 
                     {isInputFocused && (

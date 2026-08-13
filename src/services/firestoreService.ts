@@ -22,12 +22,13 @@ import {
   limit,
   serverTimestamp,
   Timestamp,
-  increment
+  increment,
+  startAfter
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber } from '../types';
 import { ADMIN_PIN } from '../constants';
-import { safeDate } from '../utils';
+import { safeDate, packageIdToDays } from '../utils';
 
 export type { Garage, Staff, ActivityLog, Vehicle, Delegate, Package, RechargeRequest, Supervisor, GeneralManager, Coupon, Subscriber };
 
@@ -61,9 +62,24 @@ export const firestoreService = {
   subscribeToGarages: (callback: (garages: Garage[]) => void) => {
     // Only fetch once for the list to save reads in high-traffic scenarios
     const q = query(collection(db, 'garages'), limit(100));
+    let cachedData: Garage[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Garage));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Garage;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'garages'));
   },
 
@@ -136,17 +152,7 @@ export const firestoreService = {
         if (!garageData.referredByGarageId) return;
 
         // Check if within 6 months (183 days) of creation
-        const createdAt = garageData.createdAt;
-        let createdAtDate = new Date();
-        if (createdAt) {
-          if (typeof createdAt.toDate === 'function') {
-            createdAtDate = createdAt.toDate();
-          } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
-            createdAtDate = new Date(createdAt);
-          } else if (createdAt.seconds) {
-            createdAtDate = new Date(createdAt.seconds * 1000);
-          }
-        }
+        const createdAtDate = safeDate(garageData.createdAt);
 
         const diffMs = Date.now() - createdAtDate.getTime();
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
@@ -157,18 +163,20 @@ export const firestoreService = {
         const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
         if (garageData.lastReferralRewardMonth === currentMonth) return;
 
+        const batch = writeBatch(db);
+
         // Referrer garage lookup
         const referrerRef = doc(db, 'garages', garageData.referredByGarageId);
         const referrerSnap = await getDoc(referrerRef);
         if (referrerSnap.exists()) {
           const referrerData = referrerSnap.data() as Garage;
-          await updateDoc(referrerRef, {
+          batch.update(referrerRef, {
             referralBonusBalance: increment(50)
           });
 
           // Log referral bonus transaction for referrer
           const logRef = doc(collection(db, 'activity_logs'));
-          await setDoc(logRef, {
+          batch.set(logRef, {
             garageId: referrerData.id,
             garageName: referrerData.name,
             staffId: null,
@@ -181,10 +189,12 @@ export const firestoreService = {
         }
 
         // Mark bonus as awarded for this month
-        await updateDoc(garageRef, {
+        batch.update(garageRef, {
           lastReferralRewardMonth: currentMonth,
           referralRewardMonthsCount: increment(1)
         });
+
+        await batch.commit();
       });
     } catch (error) {
       console.error('Error in processReferralRewardForRecharge:', error);
@@ -362,11 +372,54 @@ export const firestoreService = {
     }
   },
 
+  getGarageSettings: async (garageId: string) => {
+    try {
+      const cacheKey = `garage_${garageId}_settings`;
+      const cached = localStorage.getItem(cacheKey);
+      const isFresh = cached && (Date.now() - parseInt(cached.split('|')[0])) < 300000;
+      if (isFresh) {
+        try {
+          return JSON.parse(cached.substring(cached.indexOf('|') + 1));
+        } catch (e) {
+          // fallback
+        }
+      }
+
+      const snapshot = await getDoc(doc(db, 'garages', garageId));
+      if (!snapshot.exists()) return null;
+      const data = { id: snapshot.id, ...snapshot.data() };
+      try {
+        localStorage.setItem(cacheKey, `${Date.now()}|${JSON.stringify(data)}`);
+      } catch (e) {}
+      return data;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `garages/${garageId}`);
+      throw error;
+    }
+  },
+
   getStaffByGarageOnce: async (garageId: string) => {
     try {
-      const q = query(collection(db, 'staff'), where('garageId', '==', garageId));
+      const cacheKey = `garage_${garageId}_staff`;
+      const cached = localStorage.getItem(cacheKey);
+      const isFresh = cached && (Date.now() - parseInt(cached.split('|')[0])) < 300000;
+      if (isFresh) {
+        try {
+          return JSON.parse(cached.substring(cached.indexOf('|') + 1)) as Staff[];
+        } catch (e) {
+          // fallback
+        }
+      }
+
+      const q = query(collection(db, 'staff'), where('garageId', '==', garageId), limit(20));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+      const staff = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+      if (staff && staff.length > 0) {
+        try {
+          localStorage.setItem(cacheKey, `${Date.now()}|${JSON.stringify(staff)}`);
+        } catch (e) {}
+      }
+      return staff;
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'staff');
       throw error;
@@ -552,11 +605,27 @@ export const firestoreService = {
   subscribeToActiveVehicles: (garageId: string, callback: (vehicles: Vehicle[]) => void) => {
     const q = query(
       collection(db, `garages/${garageId}/vehicles`),
-      where('status', '==', 'inside')
+      where('status', '==', 'inside'),
+      limit(100)
     );
+    let cachedData: Vehicle[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
-      // Sort descending by entryTime in-memory to avoid needing a composite index
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Vehicle;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      const data = [...cachedData];
       data.sort((a, b) => {
         const timeA = a.entryTime?.toMillis ? a.entryTime.toMillis() : (a.entryTime?.seconds ? a.entryTime.seconds * 1000 : (a.entryTime ? new Date(a.entryTime).getTime() : 0));
         const timeB = b.entryTime?.toMillis ? b.entryTime.toMillis() : (b.entryTime?.seconds ? b.entryTime.seconds * 1000 : (b.entryTime ? new Date(b.entryTime).getTime() : 0));
@@ -576,11 +645,24 @@ export const firestoreService = {
       collection(db, `garages/${garageId}/vehicles`),
       where('exitTime', '>=', Timestamp.fromDate(startOfDay))
     );
-    
+    let cachedData: Vehicle[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Vehicle))
-        .filter(v => v.status === 'outside');
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Vehicle;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      const data = cachedData.filter(v => v.status === 'outside');
 
       // Sort descending by exitTime
       data.sort((a, b) => {
@@ -593,7 +675,7 @@ export const firestoreService = {
     }, (err) => handleFirestoreError(err, OperationType.LIST, `garages/${garageId}/vehicles`));
   },
 
-  checkInVehicle: async (garageId: string, vehicleData: Omit<Vehicle, 'id'>, commission: number) => {
+  checkInVehicle: async (garageId: string, vehicleData: Omit<Vehicle, 'id'>, _commission?: number) => {
     try {
       return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
@@ -618,10 +700,15 @@ export const firestoreService = {
           entryTime: serverTimestamp()
         });
 
-        // 2. Update garage balance (completely free of the activePlates map update)
+        const today = new Date().toISOString().split('T')[0];
+        const garageDocData = garageDoc.data();
+        const isNewDay = garageDocData?.lastTransactionDate !== today;
+
+        // 2. Update garage today stats (subscription model - no balance deduction)
         transaction.update(garageRef, {
-          balance: increment(-commission),
-          carsInside: increment(1)
+          carsInside: increment(1),
+          todayCount: isNewDay ? 1 : increment(1),
+          lastTransactionDate: today
         });
       }));
     } catch (error) {
@@ -630,9 +717,19 @@ export const firestoreService = {
     }
   },
 
+  checkInVehicleTransaction: async (garageId: string, vehicleData: Omit<Vehicle, 'id'>, commission?: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await firestoreService.checkInVehicle(garageId, vehicleData, commission);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'حدث خطأ' };
+    }
+  },
+
 
   checkOutVehicle: async (garageId: string, vehicleId: string, cost: number) => {
     try {
+      if (cost <= 0) throw new Error('INVALID_COST');
       return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
@@ -758,9 +855,24 @@ export const firestoreService = {
 
   subscribeToSupervisors: (callback: (supervisors: Supervisor[]) => void) => {
     const q = query(collection(db, 'supervisors'), orderBy('createdAt', 'desc'));
+    let cachedData: Supervisor[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supervisor));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Supervisor;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'supervisors'));
   },
 
@@ -806,9 +918,24 @@ export const firestoreService = {
 
   subscribeToGeneralManagers: (callback: (generalManagers: GeneralManager[]) => void) => {
     const q = query(collection(db, 'general_managers'), orderBy('createdAt', 'desc'));
+    let cachedData: GeneralManager[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneralManager));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as GeneralManager;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'general_managers'));
   },
 
@@ -848,9 +975,24 @@ export const firestoreService = {
 
   subscribeToDelegates: (callback: (delegates: Delegate[]) => void) => {
     const q = query(collection(db, 'delegates'), orderBy('createdAt', 'desc'));
+    let cachedData: Delegate[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Delegate));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Delegate;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'delegates'));
   },
 
@@ -909,6 +1051,8 @@ export const firestoreService = {
       name: pkg.name,
       price: pkg.price,
       vehiclesCount: pkg.vehiclesCount,
+      durationDays: pkg.durationDays || pkg.vehiclesCount || 30,
+      dailyCapacity: pkg.dailyCapacity !== undefined ? pkg.dailyCapacity : 50,
       isActive: true,
       createdAt: serverTimestamp()
     };
@@ -931,13 +1075,29 @@ export const firestoreService = {
 
   deletePackage: async (id: string): Promise<void> => {
     const docRef = doc(db, 'packages', id);
-    await withRetry(() => updateDoc(docRef, { isActive: false }));
+    await withRetry(() => setDoc(docRef, { isActive: false }, { merge: true }));
   },
 
   subscribeToPackages: (callback: (packages: Package[]) => void) => {
-    const q = query(collection(db, 'packages'), where('isActive', '==', true));
-    return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Package)));
+    const colRef = collection(db, 'packages');
+    return onSnapshot(colRef, async (snapshot) => {
+      const activePkgs = snapshot.docs
+        .map(doc => {
+          const data = doc.data() as Package;
+          // Patch missing fields due to legacy bug
+          return {
+            id: doc.id,
+            ...data,
+            durationDays: data.durationDays || data.vehiclesCount || 30,
+            dailyCapacity: data.dailyCapacity !== undefined ? data.dailyCapacity : 50
+          };
+        })
+        .filter(p => p.isActive !== false);
+      
+      try {
+        localStorage.setItem('app_packages_cache', `${Date.now()}|${JSON.stringify(activePkgs)}`);
+      } catch (e) {}
+      callback(activePkgs);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'packages'));
   },
 
@@ -958,8 +1118,24 @@ export const firestoreService = {
 
   subscribeToCoupons: (callback: (coupons: Coupon[]) => void) => {
     const q = query(collection(db, 'coupons'), where('isActive', '==', true));
+    let cachedData: Coupon[] = [];
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Coupon)));
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Coupon;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'coupons'));
   },
 
@@ -992,11 +1168,27 @@ export const firestoreService = {
   subscribeToSubscribers: (garageId: string, callback: (subscribers: any[]) => void) => {
     const q = query(
       collection(db, `garages/${garageId}/subscribers`),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
+    let cachedData: any[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() };
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, `garages/${garageId}/subscribers`));
   },
 
@@ -1010,20 +1202,6 @@ export const firestoreService = {
           throw new Error('GARAGE_NOT_FOUND');
         }
         
-        const garageData = garageDoc.data() as Garage;
-        const isSubscriptionModel = garageData.billingModel === 'subscription';
-        
-        let requiredDeduction = 0;
-        if (!isSubscriptionModel) {
-          const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
-          requiredDeduction = 5 * commissionVal;
-          const currentBalance = garageData.balance || 0;
-          
-          if (currentBalance < requiredDeduction) {
-            throw new Error('INSUFFICIENT_BALANCE');
-          }
-        }
-
         const subscribersCol = collection(db, `garages/${garageId}/subscribers`);
         const subscriberRef = doc(subscribersCol);
         
@@ -1033,12 +1211,6 @@ export const firestoreService = {
           createdAt: serverTimestamp()
         });
 
-        if (requiredDeduction > 0) {
-          transaction.update(garageRef, {
-            balance: increment(-requiredDeduction)
-          });
-        }
-
         return subscriberRef.id;
       }));
     } catch (error) {
@@ -1047,7 +1219,7 @@ export const firestoreService = {
     }
   },
 
-  renewSubscriber: async (garageId: string, subscriberId: string, costUnits: number, newDates: { startDate: string, endDate: string }) => {
+  renewSubscriber: async (garageId: string, subscriberId: string, _costUnits: number, newDates: { startDate: string, endDate: string }) => {
     try {
       return await withRetry(() => runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
@@ -1056,20 +1228,6 @@ export const firestoreService = {
         if (!garageDoc.exists()) {
           throw new Error('GARAGE_NOT_FOUND');
         }
-        
-        const garageData = garageDoc.data() as Garage;
-        const isSubscriptionModel = garageData.billingModel === 'subscription';
-        
-        let requiredDeduction = 0;
-        if (!isSubscriptionModel) {
-          const commissionVal = (garageData.commissionPerVehicle !== undefined) ? garageData.commissionPerVehicle : 1;
-          requiredDeduction = costUnits * commissionVal;
-          const currentBalance = garageData.balance || 0;
-          
-          if (currentBalance < requiredDeduction) {
-            throw new Error('INSUFFICIENT_BALANCE');
-          }
-        }
 
         const subscriberRef = doc(db, `garages/${garageId}/subscribers`, subscriberId);
         
@@ -1077,12 +1235,6 @@ export const firestoreService = {
           startDate: newDates.startDate,
           endDate: newDates.endDate
         });
-
-        if (requiredDeduction > 0) {
-          transaction.update(garageRef, {
-            balance: increment(-requiredDeduction)
-          });
-        }
 
         return true;
       }));
@@ -1145,10 +1297,27 @@ export const firestoreService = {
   subscribeToPendingRechargeRequests: (callback: (requests: RechargeRequest[]) => void) => {
     const q = query(
       collection(db, 'recharge_requests'),
-      where('status', '==', 'pending')
+      where('status', '==', 'pending'),
+      limit(20)
     );
+    let cachedData: RechargeRequest[] = [];
     return onSnapshot(q, (snapshot) => {
-      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RechargeRequest));
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as RechargeRequest;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      const requests = [...cachedData];
       // In-memory sorting to prevent the need for a composite Firestore index
       requests.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt ? new Date(a.createdAt).getTime() : 0));
@@ -1162,11 +1331,27 @@ export const firestoreService = {
   subscribeToDelegateRechargeRequests: (delegateId: string, callback: (requests: RechargeRequest[]) => void) => {
     const q = query(
       collection(db, 'recharge_requests'),
-      where('delegateId', '==', delegateId)
+      where('delegateId', '==', delegateId),
+      limit(20)
     );
+    let cachedData: RechargeRequest[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RechargeRequest));
-      callback(data);
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as RechargeRequest;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'recharge_requests'));
   },
 
@@ -1191,13 +1376,14 @@ export const firestoreService = {
         
         const garageDoc = await getDoc(garageRef);
         const garageData = garageDoc.exists() ? garageDoc.data() : null;
-        const isSubModel = garageData?.billingModel === 'subscription' || request.packageId?.endsWith('_sub') || request.packageId === 'weekly_sub' || request.packageId === 'biweekly_sub' || request.packageId === 'monthly_sub';
         
         const updateData: any = {
           totalAdminRevenue: increment(request.revenueAmount),
           isLocked: false,
           lastRechargeDate: serverTimestamp()
         };
+
+        const isSubModel = true;
 
         if (isSubModel) {
           let baseDate = new Date();
@@ -1209,19 +1395,22 @@ export const firestoreService = {
             }
           }
           let days = 30;
-          if (request.packageId === 'weekly_sub') days = 7;
-          else if (request.packageId === 'biweekly_sub') days = 15;
-          else if (request.packageId === 'monthly_sub') days = 30;
-          else if (request.carsCount && typeof request.carsCount === 'number' && request.carsCount > 0) days = request.carsCount;
+          if (request.durationDays && typeof request.durationDays === 'number' && request.durationDays > 0) {
+            days = request.durationDays;
+          } else {
+            days = packageIdToDays(request.packageId, request.packageName);
+          }
 
           baseDate.setDate(baseDate.getDate() + days);
           
           updateData.balanceExpiry = Timestamp.fromDate(baseDate);
           updateData.billingModel = 'subscription';
-        } else {
-          updateData.balance = increment(request.amount);
-          updateData.totalRechargedCars = increment(request.carsCount);
-          updateData.billingModel = 'commission';
+          if (request.dailyCapacity !== undefined) {
+            updateData.dailyCapacity = request.dailyCapacity;
+          }
+          if (request.packageName) {
+            updateData.activePackageName = request.packageName;
+          }
         }
 
         // 1. Update Garage
@@ -1301,36 +1490,124 @@ export const firestoreService = {
       orderBy('timestamp', 'desc'),
       limit(limitCount)
     );
+    let cachedData: ActivityLog[] = [];
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog)));
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as ActivityLog;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'activity_logs'));
   },
 
-  subscribeToGarageActivityLogs: (garageId: string, callback: (logs: ActivityLog[]) => void, limitCount = 100) => {
+  getPaginatedGarages: async (pageSize = 20, lastDocRef?: any) => {
+    try {
+      let q = query(collection(db, 'garages'), limit(pageSize));
+      if (lastDocRef) {
+        q = query(collection(db, 'garages'), startAfter(lastDocRef), limit(pageSize));
+      }
+      const snap = await getDocs(q);
+      const garages = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Garage));
+      return { 
+        garages, 
+        lastDoc: snap.docs[snap.docs.length - 1] || null,
+        hasMore: snap.docs.length === pageSize
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'garages');
+      throw error;
+    }
+  },
+
+  getPaginatedActivityLogs: async (pageSize = 20, lastDocRef?: any) => {
+    try {
+      let q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(pageSize));
+      if (lastDocRef) {
+        q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), startAfter(lastDocRef), limit(pageSize));
+      }
+      const snap = await getDocs(q);
+      const logs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+      return { 
+        logs, 
+        lastDoc: snap.docs[snap.docs.length - 1] || null,
+        hasMore: snap.docs.length === pageSize
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'activity_logs');
+      throw error;
+    }
+  },
+
+  subscribeToGarageActivityLogs: (garageId: string, callback: (logs: ActivityLog[]) => void, limitCount = 50) => {
     const q = query(
       collection(db, 'activity_logs'),
-      where('garageId', '==', garageId)
+      where('garageId', '==', garageId),
+      limit(limitCount)
     );
+    let cachedData: ActivityLog[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as ActivityLog;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      const data = [...cachedData];
       // Sort descending by timestamp
       data.sort((a, b) => {
         const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : (a.timestamp ? new Date(a.timestamp).getTime() : 0));
         const timeB = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : (b.timestamp ? new Date(b.timestamp).getTime() : 0));
         return timeB - timeA;
       });
-      callback(data.slice(0, limitCount));
+      callback(data);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'activity_logs'));
   },
 
-  subscribeToGarageRechargeLogs: (garageId: string, callback: (logs: ActivityLog[]) => void, limitCount = 100) => {
+  subscribeToGarageRechargeLogs: (garageId: string, callback: (logs: ActivityLog[]) => void, limitCount = 50) => {
     const q = query(
       collection(db, 'activity_logs'),
       where('garageId', '==', garageId),
-      where('actionType', '==', 'recharge')
+      where('actionType', '==', 'recharge'),
+      limit(limitCount)
     );
+    let cachedData: ActivityLog[] = [];
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as ActivityLog;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      const data = [...cachedData];
       // Sort descending by timestamp
       data.sort((a, b) => {
         const timeA = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : (a.timestamp ? new Date(a.timestamp).getTime() : 0));
