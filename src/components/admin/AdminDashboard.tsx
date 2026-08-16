@@ -36,7 +36,7 @@ import { db } from '../../firebase';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { Spinner } from '../ui/Spinner';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService, firestoreServiceV2 } from '../../services/domain/firestoreServiceV2';
 import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
@@ -47,6 +47,8 @@ import { AdminGarageForm } from './AdminGarageForm';
 import { AdminGarageList } from './AdminGarageList';
 import { AdminRequestsTab } from './AdminRequestsTab';
 import { AdminReportsView } from './AdminReportsView';
+import { AdminAnnouncementsView } from './AdminAnnouncementsView';
+import { AdminGlobalSettingsView } from './AdminGlobalSettingsView';
 
 export { AdminGarageForm, AdminGarageList, AdminRequestsTab };
 
@@ -98,7 +100,7 @@ export const AdminDashboard = memo(({
   // Localized states to encapsulate admin view and prevent global App re-renders
   const [adminSearch, setAdminSearch] = React.useState<string>('');
   const [packageDurationFilter, setPackageDurationFilter] = React.useState<15 | 30>(30);
-  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin'>('app_admin_tab', 'menu');
+  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin' | 'announcements' | 'global_settings'>('app_admin_tab', 'menu');
   const [showPlansModal, setShowPlansModal] = useLocalStorageState<boolean>('app_admin_plans_modal', false);
   const [showOverview, setShowOverview] = useLocalStorageState<boolean>('app_admin_overview', false);
   const [pinInput, setPinInput] = React.useState<string>('');
@@ -123,13 +125,26 @@ export const AdminDashboard = memo(({
   const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
   const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
   const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
-  const [garageForm, setGarageForm] = React.useState<{ name: string; hourlyRate: string; overnightRate: string; phone: string; initialPackageId: string; hasMonthlySubscribers: boolean }>({
+  const [garageForm, setGarageForm] = React.useState<{
+    name: string;
+    hourlyRate: string;
+    overnightRate: string;
+    phone: string;
+    initialPackageId: string;
+    hasMonthlySubscribers: boolean;
+    isTrial: boolean;
+    priceScope: 'new_only' | 'all';
+    ownerPin: string;
+  }>({
     name: '',
     hourlyRate: '',
     overnightRate: '',
     phone: '',
     initialPackageId: '',
-    hasMonthlySubscribers: false
+    hasMonthlySubscribers: false,
+    isTrial: false,
+    priceScope: 'new_only',
+    ownerPin: ''
   });
 
   const [editingSupervisorPinId, setEditingSupervisorPinId] = React.useState<string | null>(null);
@@ -227,22 +242,25 @@ export const AdminDashboard = memo(({
     setConfirmDialog({
       isOpen: true,
       title: 'تفعيل الشحن',
-      message: `هل أنت متأكد من تفعيل شحن رصيد جراج "${request.garageName}" بمقدار ${request.carsCount} سيارة؟`,
+      message: `هل أنت متأكد من تفعيل شحن رصيد جراج "${request.garageName}"؟`,
       confirmText: 'تفعيل الآن',
       cancelText: 'تراجع',
       type: 'success',
       onConfirm: async () => {
         try {
-          await firestoreService.approveRechargeRequest(request);
-          soundManager.play('checkIn');
-          showToast(`تم شحن رصيد ${request.garageName} بنجاح`);
+          const result = await firestoreServiceV2.approveRechargeRequest(request);
+          if (result.success) {
+            soundManager.play('checkIn');
+            showToast(`تم شحن رصيد ${request.garageName} بنجاح`);
+          } else {
+            showToast(result.error || 'فشل تفعيل الشحن', 'error');
+          }
         } catch (error) {
           console.error('Failed to approve request:', error);
           let msg = 'فشل تفعيل الشحن';
           if (error instanceof Error) {
             try {
               const obj = JSON.parse(error.message);
-              // If there's a nested error message like "FirebaseError: Missing or insufficient permissions"
               msg += `: ${obj.error || error.message}`;
             } catch {
               msg += `: ${error.message}`;
@@ -606,7 +624,7 @@ export const AdminDashboard = memo(({
     <div className={`admin-custom-theme h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-hidden flex flex-col`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
       <style>{`
         .admin-custom-theme .text-emerald-500,
-        .admin-custom-theme .text-emerald-550,
+        .admin-custom-theme .text-emerald-500,
         .admin-custom-theme .text-emerald-600,
         .admin-custom-theme .text-emerald-700,
         .admin-custom-theme .dark\\:text-emerald-400,
@@ -688,7 +706,7 @@ export const AdminDashboard = memo(({
       `}</style>
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 transition-colors w-full shrink-0">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {activeTab !== 'menu' && (
               <button 
                 type="button"
@@ -721,11 +739,13 @@ export const AdminDashboard = memo(({
                 activeTab === 'supervisors' ? t('المشرفين') :
                 activeTab === 'general_managers' ? t('المديرين العموم') :
                 activeTab === 'wallet' ? t('رقم المحفظة') :
-                activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') : t('لوحة تحكم النظام')
+                activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') :
+                activeTab === 'announcements' ? t('الإعلانات') :
+                activeTab === 'global_settings' ? t('الإعدادات العامة') : t('لوحة تحكم النظام')
               )}
             </h1>
           </div>
-          <div className="flex items-center gap-2 relative" ref={menuRef}>
+          <div className="flex items-center gap-4 relative" ref={menuRef}>
             <button 
               onClick={() => setShowMenu(!showMenu)}
               className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all outline-none border-2 ${
@@ -745,13 +765,13 @@ export const AdminDashboard = memo(({
                 />
                 
                 <div 
-                  className={`fixed top-3 bottom-3 ${adminLang === 'en' ? 'right-3' : 'left-3'} w-[290px] xs:w-[330px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/80 z-50 flex flex-col overflow-hidden pointer-events-auto`}
+                  className={`fixed top-4 bottom-3 ${adminLang === 'en' ? 'right-3' : 'left-3'} w-[290px] xs:w-[330px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/80 z-50 flex flex-col overflow-hidden pointer-events-auto`}
                   dir={adminLang === 'en' ? 'ltr' : 'rtl'}
                 >
                   {/* Drawer Header - Clean Profile Box */}
                   <div className="p-5 pb-4 border-b border-slate-100 dark:border-slate-800/60 font-sans">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center text-white font-extrabold AN_ELEMENT_ID_HERE">
                           <Shield className="w-6 h-6" />
                         </div>
@@ -759,7 +779,7 @@ export const AdminDashboard = memo(({
                           <span className="text-sm font-black text-slate-900 dark:text-slate-100 truncate max-w-[150px]">
                             {currentSupervisor ? currentSupervisor.name : t('مالك النظام')}
                           </span>
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-550 uppercase tracking-wider">
+                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                             {currentSupervisor ? t('مشرف نظام') : t('مسؤول النظام')}
                           </span>
                         </div>
@@ -781,11 +801,11 @@ export const AdminDashboard = memo(({
 
                     {/* Display Language Selection */}
                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-4">
                         <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none">
                           {currentSupervisor ? t('لغة العرض:') : t('لغة العرض (الآدمن فقط):')}
                         </span>
-                        <div className="flex gap-3">
+                        <div className="flex gap-4">
                           {/* Arabic Button */}
                           <button 
                             type="button"
@@ -793,7 +813,7 @@ export const AdminDashboard = memo(({
                               setAdminLang('ar');
                               setShowMenu(false);
                             }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
+                            className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
                               adminLang === 'ar'
                                 ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
                                 : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -809,7 +829,7 @@ export const AdminDashboard = memo(({
                               setAdminLang('en');
                               setShowMenu(false);
                             }}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
+                            className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
                               adminLang === 'en'
                                 ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
                                 : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -829,9 +849,9 @@ export const AdminDashboard = memo(({
                           setShowMenu(false);
                           setShowAppearanceSettings(true);
                         }}
-                        className="w-full flex items-center justify-between p-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-850 dark:text-slate-200 rounded-xl border-2 border-slate-100 dark:border-slate-800 transition-all outline-none cursor-pointer"
+                        className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-850 dark:text-slate-200 rounded-xl border-2 border-slate-100 dark:border-slate-800 transition-all outline-none cursor-pointer"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-4.5">
                           <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
                             <Sliders className="w-4 h-4 text-indigo-500" />
                           </div>
@@ -846,9 +866,9 @@ export const AdminDashboard = memo(({
                           setShowMenu(false);
                           exportAllData();
                         }}
-                        className="w-full flex items-center justify-between p-3 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 rounded-xl border-2 border-emerald-100 dark:border-emerald-800/60 transition-all outline-none cursor-pointer"
+                        className="w-full flex items-center justify-between p-4 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 rounded-xl border-2 border-emerald-100 dark:border-emerald-800/60 transition-all outline-none cursor-pointer"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-4.5">
                           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                             <RefreshCw className="w-4 h-4" />
                           </div>
@@ -867,7 +887,7 @@ export const AdminDashboard = memo(({
                           setShowMenu(false);
                           onLogout();
                         }}
-                        className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl border-2 border-red-200/50 dark:border-red-900/30 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-650 dark:text-red-400 font-bold text-sm transition-all outline-none cursor-pointer"
+                        className="w-full flex items-center justify-center gap-4 py-3.5 px-4 rounded-xl border-2 border-red-200/50 dark:border-red-900/30 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-500 dark:text-red-400 font-bold text-sm transition-all outline-none cursor-pointer"
                       >
                         <LogOut className="w-4 h-4 stroke-[2.5]" />
                         <span>{t('تسجيل الخروج')}</span>
@@ -894,7 +914,7 @@ export const AdminDashboard = memo(({
                 <div className="absolute inset-0 bg-radial-gradient from-amber-500/5 dark:from-emerald-500/5 via-transparent to-transparent opacity-80 pointer-events-none" />
                 
                 {/* Traditional Side Ornaments for Visual Framing */}
-                <div className="absolute top-3 bottom-3 right-3 left-3 border border-dashed border-amber-500/10 dark:border-amber-400/5 rounded-2xl pointer-events-none" />
+                <div className="absolute top-4 bottom-3 right-3 left-3 border border-dashed border-amber-500/10 dark:border-amber-400/5 rounded-2xl pointer-events-none" />
                 
                 {/* Top Islamic Geometric Ornament accent */}
                 <div className="flex items-center justify-center gap-4 text-amber-600/50 dark:text-amber-400/40 mb-4 select-none">
@@ -927,7 +947,7 @@ export const AdminDashboard = memo(({
             >
               <div className="flex items-center justify-between relative z-10">
                 <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الجراجات')}</h3>
-                <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                   {approvedGarages.length} {t('جراج مسجل')}
                 </span>
               </div>
@@ -941,7 +961,7 @@ export const AdminDashboard = memo(({
               >
                 <div className="flex items-center justify-between relative z-10">
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('إدارة خطط الاشتراكات الدوريّة')}</h3>
-                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                     {packages.length} {t('خطة اشتراك')}
                   </span>
                 </div>
@@ -955,7 +975,7 @@ export const AdminDashboard = memo(({
             >
               <div className="flex items-center justify-between relative z-10">
                 <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المندوبين')}</h3>
-                <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                   {delegates.length} {t('مندوب معتمد')}
                 </span>
               </div>
@@ -971,7 +991,7 @@ export const AdminDashboard = memo(({
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الطلبات والمراجعات')}</h3>
                   <div className="flex flex-wrap gap-1.5 justify-end shrink-0">
                     {rechargeRequests.length > 0 && (
-                      <span className="text-[10px] font-black text-white px-2.5 py-1 bg-red-650 rounded-lg shrink-0">
+                      <span className="text-[10px] font-black text-white px-2.5 py-1 bg-red-600 rounded-lg shrink-0">
                         {rechargeRequests.length} {t('معلق شحن')}
                       </span>
                     )}
@@ -993,9 +1013,24 @@ export const AdminDashboard = memo(({
               >
                 <div className="flex items-center justify-between relative z-10">
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('التقارير الذكية')}</h3>
-                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/65 dark:bg-slate-800/65 border border-slate-200/30 dark:border-slate-700/30 rounded-lg shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/65 dark:bg-slate-800/65 border border-slate-200/30 dark:border-slate-700/30 rounded-lg shrink-0">
                     {t('رؤية حية')}
                   </span>
+                </div>
+              </div>
+            )}
+
+            {/* Card 5.5: Announcements (الإعلانات) */}
+            {!currentSupervisor && (
+              <div 
+                onClick={() => setActiveTab('announcements')}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
+              >
+                <div className="flex items-center justify-between relative z-10">
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الإعلانات')}</h3>
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                    <ClipboardList className="w-4.5 h-4.5" />
+                  </div>
                 </div>
               </div>
             )}
@@ -1008,7 +1043,7 @@ export const AdminDashboard = memo(({
               >
                 <div className="flex items-center justify-between relative z-10">
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المشرفين')}</h3>
-                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                     {supervisors.length} {t('مشرف')}
                   </span>
                 </div>
@@ -1023,7 +1058,7 @@ export const AdminDashboard = memo(({
               >
                 <div className="flex items-center justify-between relative z-10">
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المديرين العموم')}</h3>
-                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
                     {generalManagers.length} {t('مدير عام')}
                   </span>
                 </div>
@@ -1038,7 +1073,7 @@ export const AdminDashboard = memo(({
               >
                 <div className="flex items-center justify-between relative z-10">
                   <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('رقم المحفظة')}</h3>
-                  <span className="text-[10px] font-bold text-slate-550 dark:text-slate-400 px-3 py-1 bg-slate-150/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg max-w-[130px] truncate shrink-0" dir="ltr">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg max-w-[130px] truncate shrink-0" dir="ltr">
                     {currentWalletNumber}
                   </span>
                 </div>
@@ -1059,6 +1094,21 @@ export const AdminDashboard = memo(({
                 </div>
               </div>
             )}
+
+            {/* Card 9: Global Settings (الإعدادات العامة) */}
+            {!currentSupervisor && (
+              <div 
+                onClick={() => setActiveTab('global_settings')}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
+              >
+                <div className="flex items-center justify-between relative z-10">
+                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الإعدادات العامة')}</h3>
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
+                    <SettingsIcon className="w-4.5 h-4.5" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         ) : activeTab === 'garages' ? (
@@ -1069,7 +1119,7 @@ export const AdminDashboard = memo(({
                 setPinInput('');
                 setShowOverview(true);
               }}
-              className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all outline-none active:scale-[0.98]"
+              className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-2xl font-black text-base flex items-center justify-center gap-4 hover:opacity-90 transition-all outline-none active:scale-[0.98]"
             >
               <Plus className="w-5 h-5 stroke-[3]" />
               <span>{t('إضافة جراج جديد')}</span>
@@ -1079,7 +1129,7 @@ export const AdminDashboard = memo(({
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="p-5 border-b border-slate-100 dark:border-slate-800 space-y-4">
                   <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 ${adminLang === 'en' ? 'sm:flex-row-reverse' : ''}`}>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
                       <span className="text-sm font-semibold text-slate-900 dark:text-white">{t('قائمة الجراجات')}</span>
                       <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">({approvedGarages.length})</span>
                     </div>
@@ -1102,7 +1152,7 @@ export const AdminDashboard = memo(({
                         <div className="text-sm font-black text-emerald-500 font-mono">
                           {Number(totalAdminRevenue).toFixed(0)}
                         </div>
-                        <p className="text-[8px] font-bold text-emerald-550 dark:text-emerald-400/60 uppercase tracking-tight">{t('إجمالي الدخل')}</p>
+                        <p className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400/60 uppercase tracking-tight">{t('إجمالي الدخل')}</p>
                       </div>
                     </div>
                   )}
@@ -1138,7 +1188,7 @@ export const AdminDashboard = memo(({
                           
                           {g.isLocked && (
                             <div className="absolute bottom-2 inset-x-2 text-center">
-                              <span className="inline-block text-[8px] font-black px-2.5 py-0.5 rounded-full bg-red-500/10 dark:bg-red-500/25 text-red-650 dark:text-red-400 border border-red-500/20 uppercase tracking-widest leading-none">
+                              <span className="inline-block text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-500/10 dark:bg-red-500/25 text-red-500 dark:text-red-400 border border-red-500/20 uppercase tracking-widest leading-none">
                                 {t('مغلق')}
                               </span>
                             </div>
@@ -1166,7 +1216,7 @@ export const AdminDashboard = memo(({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <section className="lg:col-span-1">
               <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
                   <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-white" />
                   </div>
@@ -1219,7 +1269,7 @@ export const AdminDashboard = memo(({
 
                   <div className="pt-2">
                     <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2 mb-3 block">{t('صلاحيات المندوب')}</label>
-                    <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-1 gap-4">
                       <button
                         type="button"
                         onClick={() => setDelegateForm({...delegateForm, canCreateGarage: !delegateForm.canCreateGarage})}
@@ -1229,7 +1279,7 @@ export const AdminDashboard = memo(({
                             : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
                             delegateForm.canCreateGarage ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600'
                           }`}>
@@ -1248,7 +1298,7 @@ export const AdminDashboard = memo(({
                   <button 
                     type="submit" 
                     disabled={isSubmittingDelegate}
-                    className="w-full bg-emerald-600 dark:bg-emerald-500 text-white py-5 rounded-2xl font-bold text-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-3 mt-4 transition-all outline-none"
+                    className="w-full bg-emerald-600 dark:bg-emerald-500 text-white py-5 rounded-2xl font-bold text-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
                   >
                     {isSubmittingDelegate ? <Spinner /> : (
                       <>
@@ -1264,7 +1314,7 @@ export const AdminDashboard = memo(({
             <section className="lg:col-span-2">
               <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors">
                       <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     </div>
@@ -1273,7 +1323,7 @@ export const AdminDashboard = memo(({
                   </h2>
                 </div>
                 <div className="p-8">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                     {displayedDelegates.map((d) => (
                       <div 
                         key={d.id} 
@@ -1281,9 +1331,9 @@ export const AdminDashboard = memo(({
                           setSelectedDelegateForDetails(d);
                           setView('admin_delegate_details');
                         }}
-                        className="p-3 bg-white dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-emerald-500 dark:hover:border-emerald-500 cursor-pointer group flex flex-col justify-between h-32 transition-all"
+                        className="p-4 bg-white dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-emerald-500 dark:hover:border-emerald-500 cursor-pointer group flex flex-col justify-between h-32 transition-all"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-4">
                            <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center font-black group-hover:bg-emerald-500 group-hover:text-white transition-all text-xs">
                             {d.name.charAt(0)}
                           </div>
@@ -1327,7 +1377,7 @@ export const AdminDashboard = memo(({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <section className="lg:col-span-1">
               <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
                   <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-white dark:text-white" />
                   </div>
@@ -1385,7 +1435,7 @@ export const AdminDashboard = memo(({
                   <button 
                     type="submit" 
                     disabled={isSubmittingSupervisor}
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-3 mt-4 transition-all outline-none"
+                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
                   >
                     {isSubmittingSupervisor ? <Spinner /> : (
                       <>
@@ -1401,7 +1451,7 @@ export const AdminDashboard = memo(({
             <section className="lg:col-span-2">
               <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
                       <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
                     </div>
@@ -1417,7 +1467,7 @@ export const AdminDashboard = memo(({
                         className="p-5 bg-slate-50 dark:bg-slate-800/20 border-2 border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between h-36 transition-all hover:border-slate-300 dark:hover:border-slate-700 relative group"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black text-sm">
                               {s.name.charAt(0)}
                             </div>
@@ -1527,7 +1577,7 @@ export const AdminDashboard = memo(({
                               </button>
                             </div>
                           )}
-                          <span className="text-[8px] font-black px-2.5 py-1 bg-slate-200 dark:bg-slate-800 rounded-md text-slate-600 dark:text-slate-400">
+                          <span className="text-[10px] font-black px-2.5 py-1 bg-slate-200 dark:bg-slate-800 rounded-md text-slate-600 dark:text-slate-400">
                             {t('صلاحيات مشرف')}
                           </span>
                         </div>
@@ -1548,7 +1598,7 @@ export const AdminDashboard = memo(({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <section className="lg:col-span-1">
               <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-3">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
                   <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
                     <Plus className="w-5 h-5 text-white dark:text-white" />
                   </div>
@@ -1608,7 +1658,7 @@ export const AdminDashboard = memo(({
                         <div 
                           key={g.id}
                           onClick={() => toggleGarageSelection(g.id)}
-                          className="flex items-center gap-3 cursor-pointer select-none"
+                          className="flex items-center gap-4 cursor-pointer select-none"
                         >
                           <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
                             adminGeneralManagerForm.selectedGarages.includes(g.id)
@@ -1629,7 +1679,7 @@ export const AdminDashboard = memo(({
                   <button 
                     type="submit" 
                     disabled={isSubmittingGeneralManager}
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-3 mt-4 transition-all outline-none"
+                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
                   >
                     {isSubmittingGeneralManager ? <Spinner /> : (
                       <>
@@ -1645,7 +1695,7 @@ export const AdminDashboard = memo(({
             <section className="lg:col-span-2">
               <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
                     <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
                       <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
                     </div>
@@ -1661,7 +1711,7 @@ export const AdminDashboard = memo(({
                         className="p-5 bg-slate-50 dark:bg-slate-800/20 border-2 border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between h-44 transition-all hover:border-slate-300 dark:hover:border-slate-700 relative group"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black text-sm">
                               {gm.name.charAt(0)}
                             </div>
@@ -1675,7 +1725,7 @@ export const AdminDashboard = memo(({
                                 {(gm.garageIds || []).map(gid => {
                                   const grg = allGarages.find(g => g.id === gid);
                                   return (
-                                    <span key={gid} className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/45 text-emerald-600 dark:text-emerald-400 border border-emerald-100/40 dark:border-emerald-800/30">
+                                    <span key={gid} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/45 text-emerald-600 dark:text-emerald-400 border border-emerald-100/40 dark:border-emerald-800/30">
                                       {grg ? grg.name : gid}
                                     </span>
                                   );
@@ -1781,7 +1831,7 @@ export const AdminDashboard = memo(({
                               </button>
                             </div>
                           )}
-                          <span className="text-[8px] font-black px-2.5 py-1 bg-purple-550/10 rounded-md text-purple-650 dark:text-purple-400">
+                          <span className="text-[10px] font-black px-2.5 py-1 bg-purple-500/10 rounded-md text-purple-650 dark:text-purple-400">
                             {t('مدير عام لجراج أو أكثر')}
                           </span>
                         </div>
@@ -1805,7 +1855,7 @@ export const AdminDashboard = memo(({
             <div className="flex bg-[#f1f5f9] dark:bg-slate-900/60 p-1 rounded-2xl max-w-sm sm:max-w-md w-full border border-slate-200/40 dark:border-slate-800/40">
               <button
                 onClick={() => setRequestSubTab('recharge')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
+                className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
                   requestSubTab === 'recharge'
                     ? 'bg-emerald-600 text-white shadow-sm font-black'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1820,7 +1870,7 @@ export const AdminDashboard = memo(({
               </button>
               <button
                 onClick={() => setRequestSubTab('creation')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
+                className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
                   requestSubTab === 'creation'
                     ? 'bg-emerald-600 text-white shadow-sm font-black'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -1850,50 +1900,63 @@ export const AdminDashboard = memo(({
                           </div>
                           <div className={adminLang === 'en' ? 'text-left' : 'text-right'}>
                             <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{request.garageName}</h3>
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-1">
+                            <div className="flex items-center gap-4 text-xs font-bold text-slate-400 mt-1">
                               <span>{t('بواسطة المندوب:')}</span>
                               <span className="text-emerald-600 dark:text-emerald-400 underline decoration-dotted">{request.delegateName}</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('الباقة المختارة')}</p>
-                            <div className="flex items-center gap-2">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('نوع الاشتراك')}</p>
+                            <div className="flex items-center gap-4">
                               <Zap className="w-3.5 h-3.5 text-emerald-500" />
                               <span className="text-xs font-black text-slate-900 dark:text-white truncate">{request.packageName}</span>
                             </div>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('الرصيد المضاف')}</p>
-                            <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">+{request.carsCount} <span className="text-[10px]">{t('سيارة')}</span></p>
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('السعة اليومية')}</p>
+                            <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                              {request.carsCount === 0 || !request.carsCount ? t('غير محدودة') : `${request.carsCount} ${t('سيارة/يوم')}`}
+                            </p>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('المبلغ المدفوع')}</p>
-                            <div className="flex flex-col items-center">
-                              <p className="text-sm font-black text-slate-900 dark:text-white font-mono">{request.revenueAmount} <span className="text-[10px]">{t('ج.م')}</span></p>
-                              {request.discountAmount && request.discountAmount > 0 ? (
-                                <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                  خصم {request.discountAmount} ج.م {request.couponCode ? `[كود: ${request.couponCode}]` : ''}
-                                </span>
-                              ) : null}
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('المدة')}</p>
+                            <p className="text-sm font-black text-slate-900 dark:text-white font-mono">{request.durationDays || 30} <span className="text-[10px]">{t('يوم')}</span></p>
+                          </div>
+                        </div>
+
+                        {/* Payment Breakdown */}
+                        <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex flex-col gap-1.5 bg-slate-50/60 dark:bg-slate-800/40 p-3 rounded-xl text-right">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('المبلغ الأصلي')}</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white font-mono">{(request as any).originalRevenueAmount !== undefined ? (request as any).originalRevenueAmount : request.revenueAmount} {t('ج.م')}</span>
+                          </div>
+                          {request.discountAmount && request.discountAmount > 0 ? (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{t('الخصم')}</span>
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">- {request.discountAmount} {t('ج.م')} {request.couponCode ? `[${request.couponCode}]` : ''}</span>
                             </div>
+                          ) : null}
+                          <div className="flex items-center justify-between text-xs font-bold border-t border-slate-200/60 dark:border-slate-700/60 pt-1.5">
+                            <span className="text-[10px] font-black text-slate-500 dark:text-slate-300 uppercase tracking-widest">{t('المبلغ المدفوع')}</span>
+                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">{request.revenueAmount} {t('ج.م')}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex flex-row md:flex-col gap-3 justify-center">
+                      <div className="flex flex-row md:flex-col gap-4 justify-center">
                         <button
                           onClick={() => handleApproveRequest(request)}
-                          className="flex-1 md:w-32 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all uppercase tracking-widest"
+                          className="flex-1 md:w-32 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-4 transition-all uppercase tracking-widest"
                         >
                           <Check className="w-5 h-5 stroke-[4]" />
                           <span>{t('موافق')}</span>
                         </button>
                         <button
                           onClick={() => handleRejectRequest(request.id)}
-                          className="flex-1 md:w-32 bg-red-50 dark:bg-red-900/20 text-red-655 dark:text-red-400 p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all uppercase tracking-widest border border-red-100 dark:border-red-900/30"
+                          className="flex-1 md:w-32 bg-red-50 dark:bg-red-900/20 text-red-655 dark:text-red-400 p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-4 transition-all uppercase tracking-widest border border-red-100 dark:border-red-900/30"
                         >
                           <X className="w-5 h-5 stroke-[4]" />
                           <span>{t('رفض')}</span>
@@ -1908,7 +1971,7 @@ export const AdminDashboard = memo(({
                     <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
                       <ClipboardList className="w-10 h-10 text-slate-200 dark:text-slate-700" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-350 dark:text-slate-755 mb-2">{t('لا توجد طلبات معلقة')}</h3>
+                    <h3 className="text-xl font-bold text-slate-400 dark:text-slate-755 mb-2">{t('لا توجد طلبات معلقة')}</h3>
                     <p className="text-sm font-medium text-slate-400 dark:text-slate-600">{t('سيظهر هنا طلبات شحن الأرصدة المقدمة من قبل المندوبين')}</p>
                   </div>
                 )}
@@ -1928,7 +1991,7 @@ export const AdminDashboard = memo(({
                           </div>
                           <div className={adminLang === 'en' ? 'text-left' : 'text-right'}>
                             <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{garage.name}</h3>
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-1">
+                            <div className="flex items-center gap-4 text-xs font-bold text-slate-400 mt-1">
                               <span>{t('بواسطة المندوب:')}</span>
                               <span className="text-emerald-600 dark:text-emerald-400 underline decoration-dotted">
                                 {garage.createdByDelegateName || t('غير معروف')}
@@ -1937,33 +2000,33 @@ export const AdminDashboard = memo(({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('رقم الموبايل')}</p>
                             <p className="text-xs font-black text-slate-900 dark:text-white font-mono" dir="ltr">{garage.phone || t('بدون هاتف')}</p>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('سعر الساعة')}</p>
                             <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">{garage.hourlyRate} <span className="text-[10px]">{t('ج.م')}</span></p>
                           </div>
-                          <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center">
+                          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('سعر المبيت')}</p>
                             <p className="text-sm font-black text-slate-900 dark:text-white font-mono">{garage.overnightRate} <span className="text-[10px]">{t('ج.م')}</span></p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex flex-row md:flex-col gap-3 justify-center">
+                      <div className="flex flex-row md:flex-col gap-4 justify-center">
                         <button
                           onClick={() => handleApproveGarage(garage)}
-                          className="flex-1 md:w-32 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all uppercase tracking-widest"
+                          className="flex-1 md:w-32 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-4 transition-all uppercase tracking-widest"
                         >
                           <Check className="w-5 h-5 stroke-[4]" />
                           <span>{t('تأكيد تفعيل')}</span>
                         </button>
                         <button
                           onClick={() => handleRejectGarage(garage)}
-                          className="flex-1 md:w-32 bg-red-50 dark:bg-red-900/20 text-red-655 dark:text-red-400 p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all uppercase tracking-widest border border-red-100 dark:border-red-900/30"
+                          className="flex-1 md:w-32 bg-red-50 dark:bg-red-900/20 text-red-655 dark:text-red-400 p-4 rounded-2xl font-black text-sm flex items-center justify-center gap-4 transition-all uppercase tracking-widest border border-red-100 dark:border-red-900/30"
                         >
                           <X className="w-5 h-5 stroke-[4]" />
                           <span>{t('رفض الطلب')}</span>
@@ -1978,7 +2041,7 @@ export const AdminDashboard = memo(({
                     <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
                       <Building2 className="w-10 h-10 text-slate-200 dark:text-slate-700" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-350 dark:text-slate-755 mb-2">{t('لا توجد طلبات معلقة')}</h3>
+                    <h3 className="text-xl font-bold text-slate-400 dark:text-slate-755 mb-2">{t('لا توجد طلبات معلقة')}</h3>
                     <p className="text-sm font-medium text-slate-400 dark:text-slate-600">{t('سيظهر هنا طلبات تسجيل الجراجات الجديدة المقدمة من المندوبين')}</p>
                   </div>
                 )}
@@ -1991,7 +2054,7 @@ export const AdminDashboard = memo(({
               {/* Form Column */}
               <section className="lg:col-span-1">
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm">
-                  <h2 className="text-lg font-black text-slate-900 dark:text-white mb-6 flex items-center gap-3">
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white mb-6 flex items-center gap-4">
                     <div className="w-8 h-8 bg-emerald-600 rounded-xl flex items-center justify-center shrink-0 text-white">
                       <Plus className="w-5 h-5 stroke-[3]" />
                     </div>
@@ -2091,7 +2154,7 @@ export const AdminDashboard = memo(({
                         const pkgData: Omit<Package, 'id' | 'createdAt' | 'isActive'> = {
                           name,
                           price,
-                          vehiclesCount: durationDays,
+                          vehiclesCount: dailyCapacity,
                           durationDays,
                           dailyCapacity
                         };
@@ -2138,7 +2201,7 @@ export const AdminDashboard = memo(({
                     </div>
 
                     {/* Duration & Daily Capacity */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-xs font-black text-slate-800 dark:text-slate-200 block">
                           {t('مدة الاشتراك (بالأيام)')}
@@ -2146,7 +2209,7 @@ export const AdminDashboard = memo(({
                         <select 
                           name="pkgDurationDays" 
                           defaultValue="30"
-                          className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 font-bold font-mono text-sm outline-none focus:border-emerald-500 cursor-pointer"
+                          className="w-full p-4.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 font-bold font-mono text-sm outline-none focus:border-emerald-500 cursor-pointer"
                         >
                           <option value="15">15 {t('يوم')}</option>
                           <option value="30">30 {t('يوم')}</option>
@@ -2159,7 +2222,7 @@ export const AdminDashboard = memo(({
                         <select 
                           name="pkgDailyCapacity" 
                           defaultValue=""
-                          className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold font-mono text-sm outline-none focus:border-emerald-500" 
+                          className="w-full p-4.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold font-mono text-sm outline-none focus:border-emerald-500" 
                           dir="rtl"
                         >
                           <option value="40">40 {t('سيارة')}</option>
@@ -2179,7 +2242,7 @@ export const AdminDashboard = memo(({
                       </label>
                       <select 
                         name="pkgDiscountValue"
-                        className="w-full p-3.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 cursor-pointer"
+                        className="w-full p-4.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-sm font-black text-slate-900 dark:text-white outline-none focus:border-emerald-500 cursor-pointer"
                       >
                         <option value="">{t('بدون خصم (0%)')}</option>
                         {[10, 15, 20, 25, 30, 50].map((num) => (
@@ -2192,7 +2255,7 @@ export const AdminDashboard = memo(({
 
                     <button 
                       type="submit" 
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-base transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-base transition-all shadow-md flex items-center justify-center gap-4 cursor-pointer mt-2"
                     >
                       <Plus className="w-5 h-5 stroke-[3]" />
                       <span>{t('حفظ وإضافة خطة الاشتراك')}</span>
@@ -2205,7 +2268,7 @@ export const AdminDashboard = memo(({
               <section className="lg:col-span-2 space-y-6">
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
                   <div className="p-6 border-b-2 border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                    <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-3">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-4">
                       <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center shrink-0">
                         <Zap className="w-5 h-5" />
                       </div>
@@ -2308,7 +2371,7 @@ export const AdminDashboard = memo(({
                                     </button>
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-2 border-t border-slate-200 dark:border-slate-700/80 pt-4 mt-auto text-center font-sans">
+                                  <div className="grid grid-cols-3 gap-4 border-t border-slate-200 dark:border-slate-700/80 pt-4 mt-auto text-center font-sans">
                                     <div className="flex flex-col items-center">
                                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">{t('سعر الاشتراك')}</span>
                                       <div className="flex flex-col items-center">
@@ -2441,7 +2504,7 @@ export const AdminDashboard = memo(({
                       <button 
                         type="submit"
                         disabled={isSavingWallet}
-                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all outline-none animate-none"
+                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-4 active:scale-[0.98] transition-all outline-none animate-none"
                       >
                         {isSavingWallet ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
@@ -2465,6 +2528,10 @@ export const AdminDashboard = memo(({
               </div>
             );
           })()
+        ) : activeTab === 'announcements' ? (
+          <AdminAnnouncementsView allGarages={allGarages} showToast={showToast} />
+        ) : activeTab === 'global_settings' ? (
+          <AdminGlobalSettingsView showToast={showToast} />
         ) : activeTab === 'admin-pin' ? (
           <div className="max-w-2xl mx-auto font-sans">
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
@@ -2520,7 +2587,7 @@ export const AdminDashboard = memo(({
                     <div className="flex gap-4 pt-2">
                       <button
                         type="submit"
-                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all outline-none cursor-pointer"
+                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-4 active:scale-[0.98] transition-all outline-none cursor-pointer"
                       >
                         <Check className="w-5 h-5 stroke-[3]" />
                         <span>{t('تأكيد ودخول')}</span>
@@ -2595,7 +2662,7 @@ export const AdminDashboard = memo(({
                       <button
                         type="submit"
                         disabled={isSavingAdminPin}
-                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all outline-none cursor-pointer"
+                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-4 active:scale-[0.98] transition-all outline-none cursor-pointer"
                       >
                         {isSavingAdminPin ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
@@ -2632,7 +2699,7 @@ export const AdminDashboard = memo(({
             onClick={e => e.stopPropagation()}
           >
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 transition-colors">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
                   <SettingsIcon className="w-5 h-5" />
                 </div>
@@ -2653,12 +2720,22 @@ export const AdminDashboard = memo(({
                   const form = e.target as HTMLFormElement;
                   const name = (form.elements.namedItem('name') as HTMLInputElement).value;
                   const price = Number((form.elements.namedItem('price') as HTMLInputElement).value);
-                  const count = Number((form.elements.namedItem('count') as HTMLInputElement).value);
+                  const durationDays = Number((form.elements.namedItem('durationDays') as HTMLInputElement).value) || 30;
+                  const dailyCapacity = Number((form.elements.namedItem('dailyCapacity') as HTMLInputElement).value) || 100;
                   
                   try {
-                    await firestoreService.addPackage({ name, price, vehiclesCount: count });
+                    await firestoreService.addPackage({ 
+                      name, 
+                      price, 
+                      durationDays, 
+                      dailyCapacity, 
+                      vehiclesCount: dailyCapacity 
+                    });
                     form.reset();
-                  } catch (err) {}
+                    showToast(t('تم إضافة خطة الاشتراك بنجاح'));
+                  } catch (err) {
+                    showToast(t('حدث خطأ أثناء إضافة خطة الاشتراك'), 'error');
+                  }
                 }}
                 className="mb-10 space-y-4"
               >
@@ -2672,9 +2749,15 @@ export const AdminDashboard = memo(({
                     <input name="price" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="200" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase pr-2">{t('عدد السيارات')}</label>
-                  <input name="count" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="100" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase pr-2">{t('مدة الاشتراك (أيام)')}</label>
+                    <input name="durationDays" type="text" inputMode="numeric" pattern="[0-9]*" defaultValue="30" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase pr-2">{t('السعة اليومية (سيارة/يوم)')}</label>
+                    <input name="dailyCapacity" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="100" defaultValue="100" required className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono" />
+                  </div>
                 </div>
                 <button 
                   type="submit"
@@ -2745,7 +2828,7 @@ export const AdminDashboard = memo(({
         <div className="fixed inset-0 z-50 flex items-center justify-start sm:justify-center overflow-y-auto bg-slate-900/60 dark:bg-slate-950/80 p-4" onClick={() => setShowOverview(false)}>
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl relative z-10 my-auto overflow-hidden border border-slate-100 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
             <div className="p-8 border-b-2 border-slate-50 dark:border-slate-800 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 z-20 transition-colors">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-4">
                 <div className="w-12 h-12 bg-slate-900 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-white transition-colors">
                   <Shield className="w-6 h-6 stroke-[3]" />
                 </div>
@@ -2776,7 +2859,17 @@ export const AdminDashboard = memo(({
                   onSubmit={async (e) => {
                     await handleAddGarage(e);
                     // Clear form on success
-                    setGarageForm({ name: '', hourlyRate: '', overnightRate: '', phone: '', initialPackageId: '', hasMonthlySubscribers: false });
+                    setGarageForm({ 
+                      name: '', 
+                      hourlyRate: '', 
+                      overnightRate: '', 
+                      phone: '', 
+                      initialPackageId: '', 
+                      hasMonthlySubscribers: false,
+                      isTrial: false,
+                      priceScope: 'new_only',
+                      ownerPin: ''
+                    });
                   }}
                   className="space-y-6"
                 >
@@ -2866,6 +2959,42 @@ export const AdminDashboard = memo(({
                     </label>
                   </div>
 
+                  {/* Price Scope Selector */}
+                  <div className="space-y-2 text-right">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest block font-black">
+                      {t('نطاق تطبيق السعر')}
+                    </label>
+                    <select
+                      name="priceScope"
+                      value={garageForm.priceScope}
+                      onChange={(e) => setGarageForm({ ...garageForm, priceScope: e.target.value as 'new_only' | 'all' })}
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 text-center transition-all"
+                      dir="rtl"
+                    >
+                      <option value="new_only">{t('جراجات جديدة فقط')}</option>
+                      <option value="all">{t('جميع الجراجات (بما فيها الحالية)')}</option>
+                    </select>
+                  </div>
+
+                  {/* Free Trial Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl transition-colors">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-blue-950 dark:text-blue-200 block">{t('تفعيل فترة تجريبية مجانية (15 يوم)')}</span>
+                      <span className="text-[10px] font-bold text-blue-500/80 block mt-0.5">{t('صلاحية مجانية لمدة 15 يوماً للجراج الجديد')}</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input 
+                        type="checkbox"
+                        name="isTrial"
+                        checked={garageForm.isTrial}
+                        onChange={(e) => setGarageForm({ ...garageForm, isTrial: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <input type="hidden" name="isTrial" value={garageForm.isTrial ? 'true' : 'false'} />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest text-center block font-black">{t('رقم الموبايل (اختياري)')}</label>
@@ -2927,7 +3056,7 @@ export const AdminDashboard = memo(({
                   <button 
                     type="submit" 
                     disabled={isLoading}
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-xl font-bold text-lg hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-3 mt-4 uppercase tracking-widest transition-all outline-none"
+                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-xl font-bold text-lg hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 uppercase tracking-widest transition-all outline-none"
                   >
                     {isLoading ? <Spinner /> : (
                       <>
@@ -2961,7 +3090,7 @@ export const AdminDashboard = memo(({
                 <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">نقترح عليك أحد الحلول التالية:</h4>
                 <ul className="space-y-2">
                   {packageValidationError.suggestions.map((sug, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-sm font-bold text-slate-600 dark:text-slate-400">
+                    <li key={idx} className="flex items-start gap-4 text-sm font-bold text-slate-600 dark:text-slate-400">
                       <span className="text-emerald-500 mt-0.5"><Check className="w-4 h-4" /></span>
                       <span className="leading-relaxed">{sug}</span>
                     </li>
@@ -3003,7 +3132,7 @@ export const AdminDashboard = memo(({
                 {confirmDialog.message}
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex gap-4">
                 <button
                   onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
                   className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all outline-none"

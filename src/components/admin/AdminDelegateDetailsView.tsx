@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Delegate, ActivityLog } from '../../types';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { Spinner } from '../ui/Spinner';
 import { safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';

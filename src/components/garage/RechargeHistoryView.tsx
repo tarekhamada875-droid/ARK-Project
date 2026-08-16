@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, memo } from 'react';
 import { X, Zap, Clock, User, Menu } from 'lucide-react';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { ActivityLog, Garage } from '../../types';
 import { safeDate } from '../../utils';
 
@@ -122,7 +122,7 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
               <p className="text-sm font-bold text-slate-400">جاري تحميل سجل الشحن...</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-xl p-12 text-center border border-slate-200 dark:border-slate-850">
+            <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-xl p-12 text-center border border-slate-200 dark:border-slate-800">
               <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 dark:border-slate-800">
                 <Zap className="w-8 h-8 text-slate-300 dark:text-slate-700" />
               </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useEffect, useCallback } from 'react';
 import { 
   X, 
   RefreshCw, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
 import { safeDate, getRemainingDays } from '../../utils';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 
 interface GarageReportsViewProps {
   garage: Garage;
@@ -40,16 +41,48 @@ export const GarageReportsView = memo(({
   const [isStaffPerformanceCollapsed, setIsStaffPerformanceCollapsed] = useState(true);
   const [isTotalRevenueCollapsed, setIsTotalRevenueCollapsed] = useState(true);
 
+  // Sync state whenever props update in real time
+  useEffect(() => {
+    setLocalVehiclesInside(vehiclesInside);
+  }, [vehiclesInside]);
+
+  useEffect(() => {
+    setLocalTodayExitedVehicles(todayExitedVehicles);
+  }, [todayExitedVehicles]);
+
+  useEffect(() => {
+    setLocalGarage(garage);
+  }, [garage]);
+
+  // Live direct refresh from Firestore
+  const refreshFromFirestore = useCallback(async () => {
+    if (!garage?.id) return;
+    setIsRefreshing(true);
+    try {
+      const [freshGarage, freshExited, freshInside] = await Promise.all([
+        firestoreService.getGarageById(garage.id),
+        firestoreService.getTodayTransactionsOnce(garage.id),
+        firestoreService.getVehiclesInsideOnce(garage.id)
+      ]);
+      if (freshGarage) setLocalGarage(freshGarage);
+      if (freshExited) setLocalTodayExitedVehicles(freshExited);
+      if (freshInside) setLocalVehiclesInside(freshInside);
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error('Failed to refresh reports from Firestore:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [garage?.id]);
+
+  // Always refresh fresh data on mount when opening the reports view
+  useEffect(() => {
+    refreshFromFirestore();
+  }, [refreshFromFirestore]);
+
   // Manual Trigger
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setLocalVehiclesInside(vehiclesInside);
-      setLocalTodayExitedVehicles(todayExitedVehicles);
-      setLocalGarage(garage);
-      setLastRefreshed(new Date());
-      setIsRefreshing(false);
-    }, 600);
+    refreshFromFirestore();
   };
 
   const formatLastRefreshed = (date: Date) => {
@@ -74,7 +107,10 @@ export const GarageReportsView = memo(({
     // Financial calculations
     const today = new Date().toISOString().split('T')[0];
     const isTodayValid = localGarage.lastTransactionDate === today;
-    const todayRevenue = isTodayValid ? (localGarage.todayRevenue || 0) : 0;
+    const actualCalculatedTodayRevenue = localTodayExitedVehicles.reduce((sum, v) => sum + (typeof v.totalCost === 'number' ? v.totalCost : 0), 0);
+    const todayRevenue = localTodayExitedVehicles.length > 0 
+      ? actualCalculatedTodayRevenue 
+      : (isTodayValid ? (localGarage.todayRevenue || 0) : 0);
     const totalRevenue = localGarage.totalRevenue || 0;
     const currentBalance = localGarage.balance || 0;
     // Calculate remaining subscription days
@@ -330,7 +366,7 @@ export const GarageReportsView = memo(({
                   {stats.totalRevenue} <span className="text-xs text-white">ج.م</span>
                 </p>
               </div>
-              <span className="text-[8px] font-bold text-slate-500">متراكم منذ تفعيل الحساب</span>
+              <span className="text-[10px] font-bold text-slate-500">متراكم منذ تفعيل الحساب</span>
             </div>
           )}
         </div>

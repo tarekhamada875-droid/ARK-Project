@@ -24,7 +24,7 @@ import {
   safeDate, 
   getDuration
 } from '../../utils';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 
 interface PlateLookupModalProps {
   allGarages: Garage[];

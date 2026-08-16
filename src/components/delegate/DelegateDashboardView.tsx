@@ -65,6 +65,7 @@ export const DelegateDashboardView = memo(({
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showAddGarage, setShowAddGarage] = useState(false);
+  const [isTrial, setIsTrial] = useState(false);
   const [newGaragePin, setNewGaragePin] = useState('');
   const [pinGenerationsRemaining, setPinGenerationsRemaining] = useState(3);
   const [showMenu, setShowMenu] = useState(false);
@@ -353,6 +354,10 @@ export const DelegateDashboardView = memo(({
               {filteredGarages.map(g => {
                 const isPending = g.status === 'pending';
                 const hasPending = pendingRequests.some(r => r.garageId === g.id);
+                const remDays = getRemainingDays(g);
+                const isExpiringSoon = !isPending && !hasPending && remDays <= 3 && remDays > 0;
+                const isExpired = !isPending && !hasPending && remDays <= 0;
+
                 return (
                   <button
                     key={g.id}
@@ -370,6 +375,10 @@ export const DelegateDashboardView = memo(({
                     className={`bg-white dark:bg-slate-900/40 border-2 rounded-2xl sm:rounded-[2rem] cursor-pointer group flex flex-col justify-between h-36 sm:h-48 md:h-56 overflow-hidden transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 relative text-right w-full ${
                       isPending 
                         ? 'border-dashed border-slate-200 dark:border-slate-800 opacity-75' 
+                        : isExpired
+                        ? 'border-red-300 dark:border-red-900/80 hover:border-red-500'
+                        : isExpiringSoon
+                        ? 'border-amber-300 dark:border-amber-900/80 hover:border-amber-500'
                         : 'border-slate-105 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500'
                     } ${hasPending ? 'opacity-95' : ''}`}
                   >
@@ -377,6 +386,10 @@ export const DelegateDashboardView = memo(({
                     <div className={`px-4 py-3.5 sm:py-5 text-center border-b border-emerald-600/10 shadow-sm shrink-0 flex items-center justify-center w-full ${
                       isPending 
                         ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' 
+                        : isExpired
+                        ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white'
+                        : isExpiringSoon
+                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
                         : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white'
                     }`}>
                       <h3 className={`font-black text-center text-xs sm:text-base md:text-lg lg:text-xl truncate leading-none w-full ${isPending ? 'text-slate-500 dark:text-slate-400' : 'text-white'}`}>
@@ -389,6 +402,10 @@ export const DelegateDashboardView = memo(({
                       <Building2 className={`w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 transition-all duration-300 ${
                         isPending 
                           ? 'text-slate-300 dark:text-slate-700' 
+                          : isExpired
+                          ? 'text-red-300 dark:text-red-800 group-hover:text-red-500'
+                          : isExpiringSoon
+                          ? 'text-amber-300 dark:text-amber-800 group-hover:text-amber-500'
                           : 'text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 dark:group-hover:text-emerald-400'
                       }`} />
                       
@@ -398,13 +415,31 @@ export const DelegateDashboardView = memo(({
                             قيد مراجعة الإنشاء
                           </span>
                         </div>
-                      ) : hasPending && (
+                      ) : hasPending ? (
                         <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[8px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-widest leading-none">
+                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-widest leading-none">
                             طلب معلق
                           </span>
                         </div>
-                      )}
+                      ) : isExpired ? (
+                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
+                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-red-500 text-white shadow-sm uppercase tracking-widest leading-none">
+                            منتهي الاشتراك
+                          </span>
+                        </div>
+                      ) : isExpiringSoon ? (
+                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
+                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-amber-500 text-white shadow-sm uppercase tracking-widest leading-none">
+                            ينتهي خلال {remDays} {remDays === 1 ? 'يوم' : remDays === 2 ? 'يومين' : 'أيام'}
+                          </span>
+                        </div>
+                      ) : g.isTrial ? (
+                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
+                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 uppercase tracking-widest leading-none">
+                            تجريبي ({remDays} يوم)
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </button>
                 );
@@ -472,7 +507,7 @@ export const DelegateDashboardView = memo(({
                   <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
                     {totalRechargedAmount.toLocaleString('en-US')} <span className="text-xs font-bold text-slate-400 mr-1">ج.م</span>
                   </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-550 mt-3 font-semibold">مجموع المبيعات التي قمت بإجرائها لكل الجراجات الخاصة بك</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">مجموع المبيعات التي قمت بإجرائها لكل الجراجات الخاصة بك</p>
                 </div>
               </div>
 
@@ -490,7 +525,7 @@ export const DelegateDashboardView = memo(({
                   <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
                     {commissionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-400 mr-1">ج.م</span>
                   </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-550 mt-3 font-semibold">
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">
                     محسوبة بناءً على نسبة عمولاتك المحددة وهي <span className="font-bold text-emerald-500 font-mono text-xs">{commissionRate}%</span>
                   </p>
                 </div>
@@ -510,7 +545,7 @@ export const DelegateDashboardView = memo(({
                   <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
                     {allGarages.length} <span className="text-xs font-bold text-slate-400 mr-1">موقع</span>
                   </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-550 mt-3 font-semibold">عدد الجراجات النشطة التي قمت بإنشائها وتفعيلها</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">عدد الجراجات النشطة التي قمت بإنشائها وتفعيلها</p>
                 </div>
               </div>
 
@@ -530,7 +565,7 @@ export const DelegateDashboardView = memo(({
               <div className="flex gap-4">
                 <div className="bg-white/50 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-800 rounded-xl px-4 py-2 text-center shrink-0">
                   <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">طلبات معلقة</span>
-                  <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-550 font-mono tracking-tight">
+                  <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
                     {sortedRequests.filter(r => r.status === 'pending').length}
                   </span>
                 </div>
@@ -563,7 +598,7 @@ export const DelegateDashboardView = memo(({
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 font-black text-sm shrink-0">
-                        <Coins className="w-5 h-5 text-emerald-550" />
+                        <Coins className="w-5 h-5 text-emerald-500" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-900 dark:text-white text-sm">{req.garageName}</h4>
@@ -575,7 +610,7 @@ export const DelegateDashboardView = memo(({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 border-t border-dashed border-slate-200/50 dark:border-slate-850 pt-2 sm:pt-0">
+                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 border-t border-dashed border-slate-200/50 dark:border-slate-800 pt-2 sm:pt-0">
                       <div className="text-right pl-4">
                         <span className="text-[9px] font-bold text-slate-400 block leading-none">مبلغ الشحن</span>
                         <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{req.revenueAmount} ج.م</span>
@@ -712,6 +747,25 @@ export const DelegateDashboardView = memo(({
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input type="checkbox" name="hasMonthlySubscribers" className="sr-only peer" />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {/* Free Trial Toggle */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between">
+                <div className="space-y-0.5 text-right">
+                  <label className="text-xs font-black text-blue-950 dark:text-blue-200 block">تفعيل فترة تجريبية مجانية (15 يوم)</label>
+                  <span className="text-[10px] font-bold text-blue-500/80 block">صلاحية مجانية لمدة 15 يوماً للجراج الجديد</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input 
+                    type="checkbox" 
+                    name="isTrial" 
+                    checked={isTrial} 
+                    onChange={(e) => setIsTrial(e.target.checked)} 
+                    className="sr-only peer" 
+                  />
+                  <input type="hidden" name="isTrial_hidden" value={isTrial ? 'true' : 'false'} />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
                 </label>
               </div>
 
@@ -876,14 +930,14 @@ export const DelegateDashboardView = memo(({
                           className="flex-none w-[170px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-4 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group relative overflow-hidden"
                         >
                           {hasDiscount && (
-                            <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                            <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
                               <Tag className="w-2.5 h-2.5" />
                               {pkg.discountType === 'percentage' ? `%${pkg.discountValue}` : `${pkg.discountValue}ج`}
                             </span>
                           )}
 
                           {selectedGarage.hasMonthlySubscribers && (
-                            <span className="absolute top-2 left-2 bg-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
+                            <span className="absolute top-2 left-2 bg-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10">
                               +25%
                             </span>
                           )}

@@ -87,7 +87,7 @@ export const EgyptianPlate: React.FC<EgyptianPlateProps> = memo(({
         {/* Letters Section (Right side) - Spaced out properly */}
         <div className={`flex-1 h-full flex justify-center items-center font-black text-slate-800 truncate px-1 transition-all ${
           letters.length >= 4 
-            ? (size === 'sm' ? 'text-[8px] gap-0.5' : size === 'md' ? 'text-base gap-1' : 'text-3xl gap-1') 
+            ? (size === 'sm' ? 'text-[10px] gap-0.5' : size === 'md' ? 'text-base gap-1' : 'text-3xl gap-1') 
             : (size === 'sm' ? 'text-[10px] gap-1' : size === 'md' ? 'text-xl gap-2' : 'text-4xl gap-2')
         }`} dir="rtl">
           {letters.split('').map((char, index) => (

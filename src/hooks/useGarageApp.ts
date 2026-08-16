@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Timestamp, serverTimestamp, onSnapshot, doc, collection, query, where, limit, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { serverTimestamp, Timestamp, onSnapshot, doc, collection, query, where, limit, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { APP_TEXT, ADMIN_PIN } from '../constants';
-import { firestoreService } from '../services/firestoreService';
+import { firestoreServiceV2 as firestoreService, firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
 import { Garage, Vehicle, Package, Staff, RechargeRequest, Supervisor, GeneralManager } from '../types';
 import { 
   safeDate, 
@@ -45,7 +45,6 @@ export function useGarageApp() {
     try {
       const savedVersion = localStorage.getItem('app_version');
       if (savedVersion && savedVersion !== CURRENT_VERSION) {
-        console.log('Version mismatch, updating...');
         localStorage.setItem('app_version', CURRENT_VERSION);
         localStorage.removeItem('app_view'); 
         window.location.reload();
@@ -184,6 +183,14 @@ export function useGarageApp() {
     }
     const unsub = firestoreService.subscribeToTodayTransactions(garage.id, (completedTransactions) => {
       setTodayTransactions(completedTransactions);
+      const actualRevenue = (completedTransactions || []).reduce((sum, v) => sum + (typeof v.totalCost === 'number' ? v.totalCost : 0), 0);
+      const actualCount = (completedTransactions || []).length;
+      if (garage.todayRevenue !== actualRevenue || garage.todayCount !== actualCount) {
+        firestoreService.updateGarage(garage.id, {
+          todayRevenue: actualRevenue,
+          todayCount: actualCount
+        }).catch(() => {});
+      }
     });
     return () => unsub();
   }, [isSessionReady, garage?.id]);
@@ -287,9 +294,10 @@ export function useGarageApp() {
       await signOut(auth);
     } catch (e) {
       console.error('Logout error:', e);
+      showToast('حدث خطأ، يرجى المحاولة مرة أخرى', 'error');
     } finally {
       Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('app_')) {
+        if (key.startsWith('app_') && key !== 'app_admin_color' && key !== 'app_theme' && key !== 'app_session_id') {
           localStorage.removeItem(key);
         }
       });
@@ -335,6 +343,43 @@ export function useGarageApp() {
     }
     setIsInputFocused(false);
   }, []);
+
+  // === AUTO-LOGOUT IF SESSION INVALID (Phase 2) ===
+  useEffect(() => {
+    if (!user || isAuthReady === false) return;
+    if (view === 'login' || view === 'admin_login' || view === 'delegate_login') return;
+
+    const checkInterval = setInterval(async () => {
+      let collectionName = '';
+      if (view === 'garage') collectionName = currentStaff ? 'staff_sessions' : 'garage_sessions';
+      else if (view === 'delegate_dashboard') collectionName = 'delegate_sessions';
+      else if (view === 'general_manager_dashboard') collectionName = 'general_manager_sessions';
+      else if (view.startsWith('admin_')) collectionName = currentSupervisor ? 'supervisor_sessions' : 'admin_sessions';
+      
+      if (!collectionName) return;
+
+      try {
+        const sessionRef = doc(db, collectionName, user.uid);
+        const sessionSnap = await getDoc(sessionRef);
+
+        if (!sessionSnap.exists() || sessionSnap.data()?.sessionId !== sessionId) {
+          // Only kick out if the existing session has a different sessionId AND was active recently
+          if (sessionSnap.exists() && sessionSnap.data()?.sessionId !== sessionId) {
+            showToast('تم تسجيل خروجك من جهاز آخر', 'error');
+            handleLogout(true);
+          } else if (!sessionSnap.exists()) {
+            // Session was deleted — try to recreate it (don't kick out, just re-authenticate)
+            // The effect below will handle re-creating the session
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Session check error', err);
+      }
+    }, 30000);
+
+    return () => clearInterval(checkInterval);
+  }, [user, view, currentStaff, currentSupervisor, isAuthReady, handleLogout, showToast]);
 
   // Auth States Listener
   useEffect(() => {
@@ -391,6 +436,21 @@ export function useGarageApp() {
     }
   }, [isAuthReady, user, showToast]);
 
+  // === HARD SESSION LOGIN (Phase 2) ===
+  const loginWithSession = useCallback(async (collectionName: string, data: any, uid: string) => {
+    if (!uid) return;
+    const sessionRef = doc(db, collectionName, uid);
+    
+    // Create fresh session (rules require !exists)
+    await setDoc(sessionRef, {
+      ...data,
+      sessionId,
+      lastActive: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      deviceInfo: navigator.userAgent
+    });
+  }, [sessionId, fetchServerTimeOffset]);
+
   // Synchronize secure temporary auth sessions
   useEffect(() => {
     if (view === 'login' || view === 'admin_login' || view === 'delegate_login') {
@@ -406,34 +466,32 @@ export function useGarageApp() {
       try {
         const normalizedPin = normalizeDigits(adminPin);
         if (normalizedPin === activeAdminPin && view.startsWith('admin_')) {
-          await setDoc(doc(db, 'admin_sessions', user.uid), { pin: activeAdminPin, createdAt: serverTimestamp() });
+          await loginWithSession('admin_sessions', { pin: activeAdminPin }, user.uid);
           if (adminPin !== activeAdminPin) {
             setAdminPin(activeAdminPin);
           }
-          try {
-            await getDoc(doc(db, 'admin_sessions', user.uid));
-          } catch (tempErr: any) {
-            console.error('Failed to read back admin session:', tempErr);
-            showToast('تنبيه: فشل قراءة جلسة المدير النشطة. التفاصيل: ' + (tempErr?.message || tempErr), 'error');
-          }
         } else if (view.startsWith('admin_') && currentSupervisor) {
-          await setDoc(doc(db, 'supervisor_sessions', user.uid), { supervisorId: currentSupervisor.id, pin: currentSupervisor.pin, createdAt: serverTimestamp() });
+          await loginWithSession('supervisor_sessions', { supervisorId: currentSupervisor.id, pin: currentSupervisor.pin }, user.uid);
         } else if (view === 'general_manager_dashboard' && currentGeneralManager) {
-          await setDoc(doc(db, 'general_manager_sessions', user.uid), { generalManagerId: currentGeneralManager.id, pin: currentGeneralManager.pin, createdAt: serverTimestamp() });
+          await loginWithSession('general_manager_sessions', { generalManagerId: currentGeneralManager.id, pin: currentGeneralManager.pin }, user.uid);
         } else if (view === 'delegate_dashboard' && delegate) {
-          await setDoc(doc(db, 'delegate_sessions', user.uid), { delegateId: delegate.id, pin: delegate.pin, createdAt: serverTimestamp() });
+          await loginWithSession('delegate_sessions', { delegateId: delegate.id, pin: delegate.pin }, user.uid);
         } else if (view === 'garage') {
           if (currentStaff) {
-            await setDoc(doc(db, 'staff_sessions', user.uid), { staffId: currentStaff.id, pin: currentStaff.pin, garageId: currentStaff.garageId, createdAt: serverTimestamp() });
+            await loginWithSession('staff_sessions', { staffId: currentStaff.id, pin: currentStaff.pin, garageId: currentStaff.garageId }, user.uid);
           } else if (garage) {
-            await setDoc(doc(db, 'garage_sessions', user.uid), { garageId: garage.id, pin: garage.pin || '', phone: garage.phone || '', createdAt: serverTimestamp() });
+            await loginWithSession('garage_sessions', { garageId: garage.id, pin: garage.pin || '', phone: garage.phone || '' }, user.uid);
           }
         }
         setIsSessionReady(true);
       } catch (err: any) {
         console.warn('Silent security session recovery deferred:', err);
-        if (normalizeDigits(adminPin) === activeAdminPin) {
-          showToast('تنبيه أمني: فشل مزامنة جلسة المدير، يرجى إعادة الدخول. التفاصيل: ' + (err?.message || err), 'error');
+        const errMsg = err?.message || '';
+        if (errMsg.includes('مستخدم على جهاز آخر')) {
+          showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+          handleLogout(true);
+        } else if (normalizeDigits(adminPin) === activeAdminPin) {
+          showToast('تنبيه أمني: فشل مزامنة جلسة المدير، يرجى إعادة الدخول. التفاصيل: ' + errMsg, 'error');
         }
         setIsSessionReady(true);
       }
@@ -507,6 +565,27 @@ export function useGarageApp() {
           if (snapshot.exists()) {
             const data = { id: snapshot.id, ...snapshot.data() } as Garage;
             
+            // Auto-heal legacy corrupted/stale data in Firestore
+            const todayStr = new Date().toISOString().split('T')[0];
+            const updatesToHeal: any = {};
+            
+            if (data.balanceExpiry) {
+              const diffDays = Math.ceil((safeDate(data.balanceExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+              if (data.isTrial && diffDays > 15) {
+                updatesToHeal.balanceExpiry = Timestamp.fromDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000));
+              } else if (!data.isTrial && diffDays > 365) {
+                updatesToHeal.balanceExpiry = Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+              }
+            }
+            
+            if (data.todayRevenue !== undefined && data.todayRevenue !== null && (!data.lastTransactionDate || data.lastTransactionDate !== todayStr)) {
+              updatesToHeal.todayRevenue = 0;
+            }
+
+            if (Object.keys(updatesToHeal).length > 0) {
+              firestoreService.updateGarage(data.id, updatesToHeal).catch(() => {});
+            }
+
             if (data.isMonthlyGiftEnabled && data.monthlyGiftAmount && data.monthlyGiftAmount > 0) {
               const currentMonth = new Date().toISOString().slice(0, 7);
               if (data.lastGiftMonth !== currentMonth) {
@@ -565,6 +644,20 @@ export function useGarageApp() {
     const syncSession = async () => {
       try {
         if (collectionName) await firestoreService.updateSession(collectionName, id!, sessionId);
+        
+        // Also update security session
+        if (user) {
+          let secCollection = '';
+          if (collectionName === 'garages') secCollection = 'garage_sessions';
+          else if (collectionName === 'staff') secCollection = 'staff_sessions';
+          else if (collectionName === 'delegates') secCollection = 'delegate_sessions';
+          else if (collectionName === 'supervisors') secCollection = 'supervisor_sessions';
+          else if (collectionName === 'general_managers') secCollection = 'general_manager_sessions';
+          
+          if (secCollection) {
+            await setDoc(doc(db, secCollection, user.uid), { lastActive: serverTimestamp() }, { merge: true });
+          }
+        }
       } catch (err) {
         console.error('Session sync failed:', err);
       }
@@ -595,7 +688,7 @@ export function useGarageApp() {
       unsubscribe();
       if (heartbeatTimer) clearInterval(heartbeatTimer);
     };
-  }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, currentGeneralManager?.id, sessionId]);
+  }, [view, garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id, currentGeneralManager?.id, sessionId, user?.uid]);
 
   // Fast typing auto-checkout trigger disabled to prevent unexpected checkout modal popups on incomplete/colliding plate prefixes
   /*
@@ -637,9 +730,11 @@ export function useGarageApp() {
     if (normalizedInput === activeAdminPin) {
       if (auth.currentUser) {
         try {
-          await setDoc(doc(db, 'admin_sessions', auth.currentUser.uid), { pin: activeAdminPin, createdAt: serverTimestamp() });
+          await loginWithSession('admin_sessions', { pin: activeAdminPin }, auth.currentUser.uid);
         } catch (err) {
           console.error("Failed to write admin security session:", err);
+          showToast("هذا الحساب مستخدم على جهاز آخر", "error");
+          return;
         }
       }
       setAdminPin(activeAdminPin);
@@ -676,8 +771,13 @@ export function useGarageApp() {
           }
 
           const proceed = async () => {
-            if (auth.currentUser) {
-              await setDoc(doc(db, 'general_manager_sessions', auth.currentUser.uid), { generalManagerId: gmData.id, pin: gmData.pin, createdAt: serverTimestamp() });
+            try {
+              if (auth.currentUser) {
+                await loginWithSession('general_manager_sessions', { generalManagerId: gmData.id, pin: gmData.pin }, auth.currentUser.uid);
+              }
+            } catch (err: any) {
+              showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+              return;
             }
             await firestoreService.updateGeneralManagerSession(gmData.id, sessionId);
             setCurrentGeneralManager(gmData);
@@ -700,8 +800,13 @@ export function useGarageApp() {
           }
 
           const proceed = async () => {
-            if (auth.currentUser) {
-              await setDoc(doc(db, 'supervisor_sessions', auth.currentUser.uid), { supervisorId: supervisorData.id, pin: supervisorData.pin, createdAt: serverTimestamp() });
+            try {
+              if (auth.currentUser) {
+                await loginWithSession('supervisor_sessions', { supervisorId: supervisorData.id, pin: supervisorData.pin }, auth.currentUser.uid);
+              }
+            } catch (err: any) {
+              showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+              return;
             }
             await firestoreService.updateSupervisorSession(supervisorData.id, sessionId);
             setCurrentSupervisor(supervisorData);
@@ -724,8 +829,13 @@ export function useGarageApp() {
           }
 
           const proceed = async () => {
-            if (auth.currentUser) {
-              await setDoc(doc(db, 'delegate_sessions', auth.currentUser.uid), { delegateId: delegateData.id, pin: delegateData.pin, createdAt: serverTimestamp() });
+            try {
+              if (auth.currentUser) {
+                await loginWithSession('delegate_sessions', { delegateId: delegateData.id, pin: delegateData.pin }, auth.currentUser.uid);
+              }
+            } catch (err: any) {
+              showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+              return;
             }
             await firestoreService.updateDelegateSession(delegateData.id, sessionId);
             setDelegate(delegateData);
@@ -756,8 +866,13 @@ export function useGarageApp() {
                 return;
               }
 
-              if (auth.currentUser) {
-                await setDoc(doc(db, 'staff_sessions', auth.currentUser.uid), { staffId: staffData.id, pin: staffData.pin, garageId: staffData.garageId, createdAt: serverTimestamp() });
+              try {
+                if (auth.currentUser) {
+                  await loginWithSession('staff_sessions', { staffId: staffData.id, pin: staffData.pin, garageId: staffData.garageId }, auth.currentUser.uid);
+                }
+              } catch (err: any) {
+                showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+                return;
               }
               await firestoreService.updateStaffSession(staffData.id, sessionId);
 
@@ -797,8 +912,13 @@ export function useGarageApp() {
           }
 
           const proceed = async () => {
-            if (auth.currentUser) {
-              await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
+            try {
+              if (auth.currentUser) {
+                await loginWithSession('garage_sessions', { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '' }, auth.currentUser.uid);
+              }
+            } catch (err: any) {
+              showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+              return;
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
 
@@ -837,8 +957,13 @@ export function useGarageApp() {
           }
 
           const proceed = async () => {
-            if (auth.currentUser) {
-              await setDoc(doc(db, 'garage_sessions', auth.currentUser.uid), { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '', createdAt: serverTimestamp() });
+            try {
+              if (auth.currentUser) {
+                await loginWithSession('garage_sessions', { garageId: garageData.id, pin: garageData.pin, phone: garageData.phone || '' }, auth.currentUser.uid);
+              }
+            } catch (err: any) {
+              showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+              return;
             }
             await firestoreService.updateGarageSession(garageData.id, sessionId);
 
@@ -902,8 +1027,13 @@ export function useGarageApp() {
         showToast('عذراً، هذا الحساب يعمل حالياً على جهاز آخر.', 'error');
       } else {
         const proceed = async () => {
-          if (auth.currentUser) {
-            await setDoc(doc(db, 'delegate_sessions', auth.currentUser.uid), { delegateId: delegateData.id, pin: delegateData.pin, createdAt: serverTimestamp() });
+          try {
+            if (auth.currentUser) {
+              await loginWithSession('delegate_sessions', { delegateId: delegateData.id, pin: delegateData.pin }, auth.currentUser.uid);
+            }
+          } catch (err: any) {
+            showToast('هذا الحساب مستخدم على جهاز آخر', 'error');
+            return;
           }
           await firestoreService.updateDelegateSession(delegateData.id, sessionId);
           setDelegate(delegateData);
@@ -938,7 +1068,7 @@ export function useGarageApp() {
           return;
         }
         
-        const durationDays = pkg ? pkg.vehiclesCount : 30;
+        const durationDays = pkg ? (pkg.durationDays || 30) : 30;
         let revenueIncrement = pkg ? pkg.price : amount;
         const originalRev = discountInfo?.originalRevenueAmount !== undefined ? discountInfo.originalRevenueAmount : revenueIncrement;
 
@@ -955,8 +1085,9 @@ export function useGarageApp() {
           delegateName: delegate.name,
           packageId: pkg?.id || 'custom',
           packageName: pkg?.name || 'مبلغ مخصص',
+          amount: revenueIncrement,
           durationDays: durationDays,
-          carsCount: durationDays,
+          carsCount: pkg ? (pkg.dailyCapacity || 0) : 0,
           dailyCapacity: pkg?.dailyCapacity !== undefined ? pkg.dailyCapacity : 0,
           revenueAmount: revenueIncrement,
           originalRevenueAmount: originalRev,
@@ -1068,16 +1199,14 @@ export function useGarageApp() {
       
       try {
         const res = await withAsyncLock(`checkin-${garage.id}-${raw}`, () =>
-          firestoreService.checkInVehicleTransaction(garage.id, {
+          firestoreServiceV2.checkInVehicle(garage.id, {
             plateNumber: formatted,
             plateNumberRaw: raw,
-            entryTime: serverTimestamp() as any,
             type: type,
             garageId: garage.id,
-            status: 'inside',
             staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
             isSubscriber: isSubscriber
-          }, 0)
+          })
         );
 
         if (!res.success) {
@@ -1120,11 +1249,17 @@ export function useGarageApp() {
           } catch (e) {}
         }
 
-        if (message === 'ALREADY_INSIDE') {
-          showToast('هذه السيارة موجودة بالفعل بالداخل (تم رصدها من جهاز آخر)', 'error');
+        if (message === 'ALREADY_INSIDE' || message.includes('مسجلة بالفعل')) {
+          showToast('هذه السيارة موجودة بالفعل بالداخل', 'error');
+        } else if (message.includes('permission') || message.includes('PERMISSION_DENIED')) {
+          setNewPlateNumber(formatted);
+          showToast('انتهت صلاحية الجلسة أو لا توجد صلاحيات لتسجيل الدخول', 'error');
+        } else if (message.includes('الحد اليومي') || message.includes('اشتراك')) {
+          setNewPlateNumber(formatted);
+          showToast(message, 'error');
         } else {
           setNewPlateNumber(formatted);
-          showToast('حدث خطأ أثناء الدخول، تأكد من الاتصال بالإنترنت', 'error');
+          showToast(message || 'حدث خطأ أثناء الدخول، تأكد من الاتصال بالإنترنت', 'error');
         }
       } finally {
         setIsLoading(false);
@@ -1156,9 +1291,13 @@ export function useGarageApp() {
       try {
         const cost = calculateCost(vehicleToOut, garage, now);
 
-        await withAsyncLock(`checkout-${garage.id}-${vehicleToOut.id}`, () =>
-          firestoreService.checkOutVehicle(garage.id, vehicleToOut.id, cost)
+        const res = await withAsyncLock(`checkout-${garage.id}-${vehicleToOut.id}`, () =>
+          firestoreServiceV2.checkOutVehicle(garage.id, vehicleToOut.id, cost)
         );
+
+        if (!res.success) {
+          throw new Error(res.error);
+        }
         
         firestoreService.addActivityLog({
           garageId: garage.id,
@@ -1309,78 +1448,34 @@ export function useGarageApp() {
       return;
     }
     e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const name = (formData.get('name') as string || '').trim();
-    const phone = normalizePhone(formData.get('phone') as string || '');
-    const pin = (formData.get('pin') as string || '').trim();
-    const hourlyRate = Number(normalizeDigits(formData.get('hourlyRate') as string || '0'));
-    const overnightRate = Number(normalizeDigits(formData.get('overnightRate') as string || '0'));
-    const initialPackageId = formData.get('initialPackageId') as string;
-    const commissionPerVehicle = 1;
-    const billingModel = 'subscription';
-    const subscriptionType = (formData.get('subscriptionType') as string) || 'weekly';
-    const hasMonthlySubscribersRaw = formData.get('hasMonthlySubscribers');
-    const hasMonthlySubscribers = hasMonthlySubscribersRaw === 'true' || hasMonthlySubscribersRaw === 'on' || hasMonthlySubscribersRaw === '1';
-    const referredByGarageId = (formData.get('referredByGarageId') as string || '').trim();
-    const referringGarage = referredByGarageId ? allGarages.find(g => g.id === referredByGarageId) : null;
-    const referredByGarageName = referringGarage ? referringGarage.name : null;
-
-    const activePkgs = packages;
-    const selectedPkg = activePkgs.find(p => p.id === initialPackageId) || activePkgs[0];
-
-    let initialBalance = 0;
-    let initialCars = 0;
-    let initialRevenue = 0;
-    let subDurationDays = 30;
-    let selectedDailyCap = 0;
-    let selectedPkgName = '';
-    const expiryDate = new Date();
-
-    const derivedDuration = (selectedPkg?.durationDays && selectedPkg.durationDays <= 365) 
-      ? selectedPkg.durationDays 
-      : (selectedPkg?.vehiclesCount && selectedPkg.vehiclesCount <= 365 ? selectedPkg.vehiclesCount : null);
-    subDurationDays = derivedDuration || (subscriptionType === 'weekly' ? 7 : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? 15 : 30);
-    selectedDailyCap = selectedPkg?.dailyCapacity !== undefined && selectedPkg.dailyCapacity > 0
-      ? selectedPkg.dailyCapacity 
-      : (selectedPkg?.vehiclesCount && selectedPkg.vehiclesCount <= 500 ? selectedPkg.vehiclesCount : 50);
-    selectedPkgName = selectedPkg?.name || 'خطة الاشتراك الدوريّة';
-    expiryDate.setDate(expiryDate.getDate() + subDurationDays);
-    let baseSubPrice = selectedPkg ? selectedPkg.price : (subscriptionType === 'weekly' ? subscriptionPrices.weekly : (subscriptionType === 'biweekly' || subscriptionType === '15days') ? (subscriptionPrices.biweekly || 1500) : subscriptionPrices.monthly);
-    if (selectedPkg && selectedPkg.discountValue && selectedPkg.discountValue > 0) {
-      baseSubPrice = selectedPkg.discountType === 'percentage'
-        ? Math.round(selectedPkg.price * (1 - selectedPkg.discountValue / 100))
-        : Math.max(0, selectedPkg.price - selectedPkg.discountValue);
-    }
-    initialRevenue = applyMonthlySubscribersSurcharge(baseSubPrice, hasMonthlySubscribers);
-    initialCars = 9999;
-    initialBalance = 0;
-
-    if (!name || name.trim().length === 0) {
-      showToast('يرجى إدخال اسم الجراج', 'error');
-      return;
-    }
-
-    if (phone && (phone.length < 3 || phone.length > 20)) {
-      showToast('يرجى إدخال رقم هاتف صحيح يتكون من 3 أرقام على الأقل', 'error');
-      return;
-    }
-
-    if (hourlyRate < 0 || overnightRate < 0) {
-      showToast('الأسعار يجب أن تكون أرقاماً موجبة', 'error');
-      return;
-    }
-
     setIsLoading(true);
     try {
+      const form = e.currentTarget;
+      const formData = new FormData(form);
+      const data: any = Object.fromEntries(formData.entries());
+
+      // Pass packages for lookup
+      data.packages = packages;
+
+      // Handle isTrial
+      const isTrialRaw = formData.get('isTrial') || formData.get('isTrial_hidden');
+      const isTrial = isTrialRaw === 'true' || isTrialRaw === 'on' || isTrialRaw === '1';
+      data.isTrial = isTrial;
+      if (isTrial) {
+        data.initialPackageId = '';
+      }
+
+      // Handle monthly subscribers
+      const hasMonthlySubscribersRaw = formData.get('hasMonthlySubscribers');
+      data.hasMonthlySubscribers = hasMonthlySubscribersRaw === 'true' || hasMonthlySubscribersRaw === 'on' || hasMonthlySubscribersRaw === '1';
+
+      // Delegate check and metadata
       if (delegate && delegate.id) {
         const today = new Date();
         const delegateGaragesCreatedToday = allGarages.filter(g => {
           if (g.createdByDelegateId !== delegate.id) return false;
           if (!g.createdAt) return false;
-          
           const createdDate = safeDate(g.createdAt);
-
           return createdDate.getDate() === today.getDate() &&
                  createdDate.getMonth() === today.getMonth() &&
                  createdDate.getFullYear() === today.getFullYear();
@@ -1391,8 +1486,14 @@ export function useGarageApp() {
           setIsLoading(false);
           return;
         }
+
+        data.createdByDelegateId = delegate.id;
+        data.createdByDelegateName = delegate.name;
+        data.isPending = true;
       }
 
+      // Check pin taken
+      const pin = ((data.pin as string) || '').trim();
       const pinCheck = await firestoreService.isPinTaken(pin);
       if (pinCheck.taken) {
         showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
@@ -1400,6 +1501,8 @@ export function useGarageApp() {
         return;
       }
 
+      const name = ((data.name as string) || '').trim();
+      const phone = normalizePhone((data.phone as string) || '');
       const existing = allGarages.find(g => (phone && g.phone === phone) || g.name === name);
       if (existing) {
         showToast(APP_TEXT.ADMIN.DUPLICATE_ERROR, 'error');
@@ -1407,61 +1510,22 @@ export function useGarageApp() {
         return;
       }
 
-      const isPending = delegate !== null;
-      const actualBalance = isPending ? 0 : initialBalance;
-      const actualCars = isPending ? 0 : initialCars;
-      const actualRevenue = isPending ? 0 : initialRevenue;
+      const result = await firestoreServiceV2.createGarage(data);
 
-      const newGarageDoc = await firestoreService.createGarage({
-        name,
-        phone,
-        pin,
-        hourlyRate,
-        overnightRate,
-        balanceExpiry: Timestamp.fromDate(expiryDate),
-        createdAt: serverTimestamp(),
-        balanceDays: subDurationDays,
-        dailyCapacity: selectedDailyCap,
-        activePackageName: selectedPkgName,
-        billingModel: billingModel,
-        commissionPerVehicle: commissionPerVehicle,
-        balance: actualBalance,
-        totalRechargedCars: actualCars,
-        totalAdminRevenue: actualRevenue,
-        isLocked: false,
-        lastBalanceDeduction: serverTimestamp(),
-        createdByDelegateId: delegate?.id || null,
-        createdByDelegateName: delegate?.name || null,
-        referredByGarageId: referredByGarageId || null,
-        referredByGarageName: referredByGarageName || null,
-        hasMonthlySubscribers: hasMonthlySubscribers,
-        status: isPending ? 'pending' : 'approved'
-      });
-
-      if (!isPending && newGarageDoc && newGarageDoc.id && (actualBalance > 0 || actualRevenue > 0)) {
-        try {
-          await firestoreService.processReferralRewardForRecharge(newGarageDoc.id);
-        } catch (e) {
-          console.error('Failed to award initial referral reward:', e);
-        }
+      if (result.success) {
+        showToast(delegate ? 'تم إرسال طلب إنشاء الجراج بنجاح بانتظار موافقة الإدارة' : APP_TEXT.ADMIN.ADD_SUCCESS);
+        form.reset();
+        closeKeyboard();
+      } else {
+        showToast(result.error || 'حدث خطأ أثناء إنشاء الجراج', 'error');
       }
-
-      if (!isPending && delegate && delegate.id) {
-        await firestoreService.updateDelegate(delegate.id, {
-          totalRechargedAmount: (delegate.totalRechargedAmount || 0) + actualRevenue
-        });
-      }
-
-      showToast(isPending ? 'تم إرسال طلب إنشاء الجراج بنجاح بانتظار موافقة الإدارة' : APP_TEXT.ADMIN.ADD_SUCCESS);
-      form.reset();
-      closeKeyboard();
-    } catch (error) {
-      console.error('Failed to create garage:', error);
-      showToast('عذراً، حدث خطأ أثناء حفظ الجراج. يرجى التأكد من البيانات والمحاولة مرة أخرى.', 'error');
+    } catch (err: any) {
+      console.error('createNewGarage error:', err);
+      showToast(err.message || 'حدث خطأ أثناء إنشاء الجراج', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [isOnline, packages, allGarages, closeKeyboard, showToast, delegate]);
+  }, [isOnline, delegate, allGarages, packages, showToast, closeKeyboard]);
 
   const addDelegate = useCallback((data: any) => firestoreService.addDelegate(data), []);
   const removeDelegate = useCallback((id: string) => firestoreService.removeDelegate(id), []);

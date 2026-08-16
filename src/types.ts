@@ -79,6 +79,7 @@ export interface Garage {
   dailyCapacity?: number; // Daily car limit (50, 100, 150, or 0/undefined for unlimited)
   activePackageName?: string; // Current package name
   status?: 'pending' | 'approved' | 'rejected';
+  isTrial?: boolean; // 15-day free trial indicator
 }
 
 export interface Staff {
@@ -197,3 +198,32 @@ export interface RechargeRequest {
   createdAt: any;
   resolvedAt?: any;
 }
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  target: 'all' | 'specific';
+  targetGarageId?: string | null;
+  targetGarageName?: string | null;
+  priority: 'normal' | 'important' | 'urgent';
+  isActive: boolean;
+  createdAt: any;
+  authorName?: string;
+}
+
+export interface SystemConfig {
+  id?: string;
+  defaultTrialDays: number; // e.g. 15
+  warningDaysThreshold: number; // e.g. 3
+  supportPhone?: string;
+  walletNumber?: string;
+  monthlySubscribersSurchargePercent: number; // e.g. 25
+  isMaintenanceMode?: boolean;
+  maintenanceMessage?: string;
+  updatedAt?: any;
+}
+
+// Domain V2 Types
+export type { BillingModel, GarageStatus, PackageType, PackageV2, GarageV2, RechargeRequestV2 } from './domain/types';
+

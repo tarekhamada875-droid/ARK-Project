@@ -1,8 +1,8 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, Menu } from 'lucide-react';
-import { firestoreService, Garage } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { auth } from '../../firebase';
-import { Subscriber } from '../../types';
+import { Subscriber, Garage } from '../../types';
 import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersSurcharge } from '../../utils';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';

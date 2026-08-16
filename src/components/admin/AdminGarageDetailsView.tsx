@@ -20,9 +20,10 @@ import {
   Moon,
   MoreVertical,
   Check,
-  Gift
+  Gift,
+  RotateCcw
 } from 'lucide-react';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
 import { normalizeDigits, safeDate, getRemainingDays } from '../../utils';
 import { Garage, Staff, Package } from '../../types';
@@ -218,7 +219,9 @@ export const AdminGarageDetailsView = memo(({
       if (pkg.id === 'weekly_sub') days = 7;
       else if (pkg.id === 'biweekly_sub') days = 15;
       else if (pkg.id === 'monthly_sub') days = 30;
-      else if (pkg.vehiclesCount && typeof pkg.vehiclesCount === 'number') days = pkg.vehiclesCount;
+      else if (pkg.durationDays && typeof pkg.durationDays === 'number' && pkg.durationDays > 0) days = pkg.durationDays;
+      else if (pkg.vehiclesCount && typeof pkg.vehiclesCount === 'number' && pkg.vehiclesCount <= 365) days = pkg.vehiclesCount;
+      // If vehiclesCount > 365, it's clearly a capacity value (not days), use default 30
 
       baseDate.setDate(baseDate.getDate() + days);
       
@@ -250,6 +253,27 @@ export const AdminGarageDetailsView = memo(({
       showToast(t('فشل'), 'error'); 
     } finally { 
       setIsLoading(false); 
+    }
+  };
+
+  const handleResetTodayCounters = async () => {
+    if (!window.confirm(adminLang === 'en' ? 'Are you sure you want to reset today counters (revenue & cars)?' : 'هل أنت متأكد من تصفير عداد وإيراد اليوم لهذا الجراج؟')) return;
+    setIsLoading(true);
+    try {
+      await firestoreService.updateGarage(selectedGarageForDetails.id, {
+        todayRevenue: 0,
+        todayCount: 0
+      });
+      setSelectedGarageForDetails({
+        ...selectedGarageForDetails,
+        todayRevenue: 0,
+        todayCount: 0
+      });
+      showToast(adminLang === 'en' ? 'Today counters reset successfully' : 'تم تصفير عداد وإيراد اليوم بنجاح');
+    } catch (e) {
+      showToast(t('فشل'), 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -312,7 +336,7 @@ export const AdminGarageDetailsView = memo(({
             </button>
             <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">{t('تفاصيل الجراج')}</h1>
           </div>
-          <div className="flex items-center gap-2 relative" ref={menuRef}>
+          <div className="flex items-center gap-4 relative" ref={menuRef}>
             <button 
               type="button"
               onClick={() => setShowMenu(!showMenu)}
@@ -330,9 +354,9 @@ export const AdminGarageDetailsView = memo(({
                 />
                 
                 <div className={`absolute top-14 ${adminLang === 'en' ? 'right-0' : 'left-0'} w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl z-50 overflow-hidden`}>
-                  <div className="p-4 flex flex-col gap-2">
+                  <div className="p-4 flex flex-col gap-4">
                     <span className={`font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none ${adminLang === 'en' ? 'text-left' : 'text-right'}`}>{t('وضع الشاشة:')}</span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-4">
                       {/* النهارى (Light Mode) Button */}
                       <button 
                         type="button"
@@ -372,10 +396,20 @@ export const AdminGarageDetailsView = memo(({
                   <div className="p-2 space-y-1 border-t border-slate-100 dark:border-slate-800/60">
                     <button 
                       onClick={() => {
+                        setShowMenu(false);
+                        handleResetTodayCounters();
+                      }}
+                      className={`w-full flex items-center gap-4 px-4 py-3 ${adminLang === 'en' ? 'text-left' : 'text-right'} hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-2xl transition-colors group`}
+                    >
+                      <RotateCcw className="w-5 h-5 group-hover:-rotate-90 transition-transform" />
+                      <span className="font-bold text-sm">{t('تصفير عدادات اليوم')}</span>
+                    </button>
+                    <button 
+                      onClick={() => {
                         setShowDeleteConfirm(true);
                         setShowMenu(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 ${adminLang === 'en' ? 'text-left' : 'text-right'} hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 rounded-2xl transition-colors group`}
+                      className={`w-full flex items-center gap-4 px-4 py-3 ${adminLang === 'en' ? 'text-left' : 'text-right'} hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 rounded-2xl transition-colors group`}
                     >
                       <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       <span className="font-bold text-sm">{t('حذف الجراج')}</span>
@@ -398,14 +432,14 @@ export const AdminGarageDetailsView = memo(({
                 </div>
                 <div className="text-right">
                     <h3 className="text-xl font-black text-slate-900 dark:text-white">{selectedGarageForDetails.name}</h3>
-                    <div className="flex items-center gap-3 mt-0.5">
+                    <div className="flex items-center gap-4 mt-0.5">
                         <div className="flex items-center gap-1">
                             <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 font-mono">{selectedGarageForDetails.phone}</span>
                         </div>
                         {isEditingGaragePin ? (
                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 dark:bg-amber-400/5 border border-amber-200 dark:border-amber-400/20 rounded-lg transition-colors">
-                                <span className="text-[8px] font-black text-amber-600 dark:text-amber-500 uppercase">{t('الرمز:')}</span>
+                                <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase">{t('الرمز:')}</span>
                                 <input
                                     type="tel"
                                     inputMode="numeric"
@@ -451,21 +485,21 @@ export const AdminGarageDetailsView = memo(({
                                         setGaragePinInput(selectedGarageForDetails.pin || '');
                                         setIsEditingGaragePin(false);
                                     }}
-                                    className="text-[8px] font-black text-slate-400 dark:text-slate-500 hover:underline px-0.5 animate-in fade-in cursor-pointer"
+                                    className="text-[10px] font-black text-slate-400 dark:text-slate-500 hover:underline px-0.5 animate-in fade-in cursor-pointer"
                                 >
                                     {t('إلغاء')}
                                 </button>
                             </div>
                         ) : (
                             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 dark:bg-amber-400/5 border border-amber-200 dark:border-amber-400/20 rounded-lg transition-colors">
-                                <span className="text-[8px] font-black text-amber-600 dark:text-amber-500 uppercase">{t('الرمز:')}</span>
+                                <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase">{t('الرمز:')}</span>
                                 <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 font-mono tracking-widest">{selectedGarageForDetails.pin || t('لا يوجد')}</span>
                                 <button
                                     onClick={() => {
                                         setIsEditingGaragePin(true);
                                         setGaragePinInput(selectedGarageForDetails.pin || '');
                                     }}
-                                    className="text-[8px] text-amber-500 font-bold hover:underline cursor-pointer"
+                                    className="text-[10px] text-amber-500 font-bold hover:underline cursor-pointer"
                                 >
                                     {t('تعديل')}
                                 </button>
@@ -480,19 +514,31 @@ export const AdminGarageDetailsView = memo(({
         </div>
 
         {/* Performance Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center transition-colors">
-            <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('اليوم')}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center transition-colors relative group">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('اليوم')}</p>
+              {(dailyCount > 0 || dailyRevenue > 0) && (
+                <button
+                  type="button"
+                  onClick={handleResetTodayCounters}
+                  title={adminLang === 'en' ? 'Reset today counters' : 'تصفير عداد وإيراد اليوم'}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-amber-500 transition-opacity p-0.5"
+                >
+                  <RotateCcw className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
             <div className="text-xl font-bold text-slate-900 dark:text-white font-mono leading-none">{dailyCount}</div>
             <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-1">{Number(dailyRevenue).toFixed(0)} {adminLang === 'en' ? 'EGP' : 'ج.م'}</p>
           </div>
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center transition-colors">
-            <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('تراكمي')}</p>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('تراكمي')}</p>
             <div className="text-xl font-bold text-slate-900 dark:text-white font-mono leading-none">{totalCount}</div>
             <p className="text-[9px] font-bold text-amber-500 dark:text-amber-400 font-mono mt-1">{Number(totalRevenue).toFixed(0)} {adminLang === 'en' ? 'EGP' : 'ج.م'}</p>
           </div>
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center transition-colors">
-            <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('إجمالي الوحدات')}</p>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('إجمالي الوحدات')}</p>
             <div className="text-xl font-bold text-slate-900 dark:text-white font-mono leading-none">{selectedGarageForDetails.totalRechargedCars || 0}</div>
             <p className="text-[9px] font-bold text-slate-300 dark:text-slate-600 uppercase mt-1 transition-colors">{t('وحدة')}</p>
           </div>
@@ -500,7 +546,7 @@ export const AdminGarageDetailsView = memo(({
             (selectedGarageForDetails.lastRefundDate === new Date().toISOString().split('T')[0] ? selectedGarageForDetails.dailyRefundCount || 0 : 0) >= 5 
             ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
           }`}>
-            <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 text-center">{t('المرتجع')}</p>
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 text-center">{t('المرتجع')}</p>
             <div className={`text-xl font-bold font-mono leading-none ${
                 (selectedGarageForDetails.lastRefundDate === new Date().toISOString().split('T')[0] ? selectedGarageForDetails.dailyRefundCount || 0 : 0) >= 5 
                 ? 'text-red-500 dark:text-red-400' : 'text-slate-900 dark:text-white'
@@ -513,13 +559,13 @@ export const AdminGarageDetailsView = memo(({
 
         {/* Price Config Row - MOVED HERE */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
-          <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+          <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-4">
             <Settings className="w-3 h-3" />
             {t('الإعدادات والتعريفة')}
           </h4>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('ساعة')}</label>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('ساعة')}</label>
               <input 
                 type="text" inputMode="numeric"
                 value={hourlyRateInput}
@@ -528,7 +574,7 @@ export const AdminGarageDetailsView = memo(({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('مبيت')}</label>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('مبيت')}</label>
               <input 
                 type="text" inputMode="numeric"
                 value={overnightRateInput}
@@ -543,7 +589,7 @@ export const AdminGarageDetailsView = memo(({
               type="button"
               disabled={!hasRateChanges || isSavingRates}
               onClick={handleSaveRates}
-              className={`w-full py-3.5 text-center rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-2 transition-all duration-300 outline-none ${
+              className={`w-full py-3.5 text-center rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-4 transition-all duration-300 outline-none ${
                 hasRateChanges 
                   ? 'bg-amber-500 hover:bg-amber-600 text-slate-900 shadow-lg shadow-amber-500/10 active:scale-95 cursor-pointer' 
                   : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-600 cursor-not-allowed select-none'
@@ -568,7 +614,7 @@ export const AdminGarageDetailsView = memo(({
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
           <div className="flex items-center justify-between">
             <div className="space-y-1 text-right">
-              <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <h4 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-4">
                 <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 {t('خدمة المشتركين الشهريين / الإيواء')}
               </h4>
@@ -603,13 +649,13 @@ export const AdminGarageDetailsView = memo(({
 
         {/* Monthly Gift Config */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors">
-          <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+          <h4 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-4">
             <Zap className="w-3 h-3 text-amber-500" />
             {t('هدايا الرصيد الشهرية')}
           </h4>
           <div className="flex items-center gap-4">
             <div className="flex-1 space-y-1.5">
-              <label className="block text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t('عدد السيارات المجانية كل شهر')}</label>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t('عدد السيارات المجانية كل شهر')}</label>
               <input 
                 type="text" inputMode="numeric"
                 value={monthlyGiftInput}
@@ -619,7 +665,7 @@ export const AdminGarageDetailsView = memo(({
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('تفعيل الهدية')}</label>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase text-center">{t('تفعيل الهدية')}</label>
               <button 
                 onClick={() => {
                   const newState = !selectedGarageForDetails.isMonthlyGiftEnabled;
@@ -644,7 +690,7 @@ export const AdminGarageDetailsView = memo(({
               type="button"
               disabled={!hasGiftChanges || isSavingGift}
               onClick={handleSaveGift}
-              className={`w-full py-3 text-center rounded-xl font-black text-[11px] flex items-center justify-center gap-2 transition-all duration-300 outline-none ${
+              className={`w-full py-3 text-center rounded-xl font-black text-[11px] flex items-center justify-center gap-4 transition-all duration-300 outline-none ${
                 hasGiftChanges 
                   ? 'bg-amber-500 hover:bg-amber-600 text-slate-900 shadow-lg shadow-amber-500/10 active:scale-95 cursor-pointer' 
                   : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-600 cursor-not-allowed select-none'
@@ -664,7 +710,7 @@ export const AdminGarageDetailsView = memo(({
             </button>
           </div>
 
-          <div className="mt-4 flex justify-between items-center text-[8px] font-bold">
+          <div className="mt-4 flex justify-between items-center text-[10px] font-bold">
             <p className="text-slate-400 dark:text-slate-600">
               {t('* سيتم زيادة رصيد الجراج تلقائياً بهذا العدد من السيارات في أول يوم من كل شهر.')}
             </p>
@@ -680,8 +726,8 @@ export const AdminGarageDetailsView = memo(({
 
         {/* Referral Cash Reward Config Card */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 transition-colors space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h4 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4">
               <Gift className="w-4 h-4 text-emerald-500" />
               {t('نظام مكافآت الإحالة التلقائي (50 ج.م شهرياً لمدة 6 شهور)')}
             </h4>
@@ -702,7 +748,7 @@ export const AdminGarageDetailsView = memo(({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
               {t('تم ترشيح هذا الجراج بواسطة:')}
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <select
                 value={selectedGarageForDetails.referredByGarageId || ''}
                 onChange={async (e) => {
@@ -759,12 +805,12 @@ export const AdminGarageDetailsView = memo(({
                     const isExpired = diffDays > 183 || (refG.referralRewardMonthsCount || 0) >= 6;
 
                     return (
-                      <div key={refG.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl gap-2 border border-slate-100 dark:border-slate-800">
+                      <div key={refG.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl gap-4 border border-slate-100 dark:border-slate-800">
                         <div>
                           <p className="text-xs font-bold text-slate-900 dark:text-white">{refG.name}</p>
                           <p className="text-[10px] text-slate-400 font-mono" dir="ltr">{refG.phone || 'بدون هاتف'}</p>
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <div className="flex items-center gap-4 self-end sm:self-auto">
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
                             (الشهور: {refG.referralRewardMonthsCount || 0} من 6)
                           </span>
@@ -794,7 +840,7 @@ export const AdminGarageDetailsView = memo(({
             <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">
               {t('تعديل يدوياً إجمالي رصيد المكافآت (في حالة التصحيح أو التسوية)')}
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <input
                 type="text"
                 inputMode="numeric"
@@ -829,7 +875,7 @@ export const AdminGarageDetailsView = memo(({
             {/* Staff Management - Compact */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
                 <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
                         <Users className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                         <h4 className="text-[10px] font-bold text-slate-900 dark:text-white uppercase">{t('الموظفين')}</h4>
                     </div>
@@ -839,7 +885,7 @@ export const AdminGarageDetailsView = memo(({
                     <div className="max-h-[160px] overflow-y-auto space-y-2 pr-1 custom-scrollbar-slate">
                         {staffList.map(s => (
                             <div key={s.id} className="flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 group transition-all">
-                                <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-4.5">
                                     <div className="w-7 h-7 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center text-xs font-black text-amber-500 border border-slate-100 dark:border-slate-800 transition-colors">
                                         {s.name.charAt(0)}
                                     </div>
@@ -888,7 +934,7 @@ export const AdminGarageDetailsView = memo(({
                                                 </button>
                                                 <button
                                                     onClick={() => setEditingStaffPinId(null)}
-                                                    className="text-[8px] font-black text-slate-400 dark:text-slate-500 hover:underline cursor-pointer"
+                                                    className="text-[10px] font-black text-slate-400 dark:text-slate-500 hover:underline cursor-pointer"
                                                 >
                                                     {t('إلغاء')}
                                                 </button>
@@ -904,7 +950,7 @@ export const AdminGarageDetailsView = memo(({
                                                         setEditingStaffPinId(s.id);
                                                         setEditingStaffPinValue(s.pin || '');
                                                     }}
-                                                    className="text-[8px] text-amber-500 font-bold hover:underline cursor-pointer"
+                                                    className="text-[10px] text-amber-500 font-bold hover:underline cursor-pointer"
                                                 >
                                                     {t('تعديل')}
                                                 </button>
@@ -912,7 +958,7 @@ export const AdminGarageDetailsView = memo(({
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => setStaffToDelete(s)} className="w-7 h-7 bg-red-600 text-white rounded-lg flex items-center justify-center hover:bg-red-700 transition-all outline-none cursor-pointer">
+                                <button onClick={() => setStaffToDelete(s)} className="w-10 h-10 bg-red-600 text-white rounded-lg flex items-center justify-center hover:bg-red-700 transition-all outline-none cursor-pointer">
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             </div>
@@ -921,7 +967,7 @@ export const AdminGarageDetailsView = memo(({
                     </div>
                     <button 
                         onClick={openAddStaffModal}
-                        className="w-full py-2.5 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 rounded-xl font-black text-[10px] hover:bg-slate-800 dark:hover:bg-amber-500 flex items-center justify-center gap-2 mt-2 transition-all outline-none cursor-pointer"
+                        className="w-full py-2.5 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 rounded-xl font-black text-[10px] hover:bg-slate-800 dark:hover:bg-amber-500 flex items-center justify-center gap-4 mt-2 transition-all outline-none cursor-pointer"
                     >
                         <Plus className="w-3.5 h-3.5" />
                         {t('إضافة موظف')}
@@ -939,7 +985,7 @@ export const AdminGarageDetailsView = memo(({
                   <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.5em] mb-4">
                     {t('الاشتراك المتبقي للجراج')}
                   </p>
-                  <div className="flex items-end gap-3 justify-center md:justify-start">
+                  <div className="flex items-end gap-4 justify-center md:justify-start">
                     <span className={`text-8xl font-black tracking-tighter transition-colors ${getRemainingDays(selectedGarageForDetails) <= 0 ? 'text-red-400' : 'text-white'}`}>
                       {getRemainingDays(selectedGarageForDetails)}
                     </span>
@@ -959,7 +1005,7 @@ export const AdminGarageDetailsView = memo(({
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 w-full md:w-auto shrink-0">
+                <div className="flex flex-col gap-4 w-full md:w-auto shrink-0">
                   <button 
                     onClick={() => firestoreService.updateGarage(selectedGarageForDetails.id, { isLocked: !selectedGarageForDetails.isLocked })}
                     className={`px-10 py-5 rounded-2xl font-black text-sm flex items-center justify-center gap-4 transition-all outline-none cursor-pointer ${
@@ -982,7 +1028,7 @@ export const AdminGarageDetailsView = memo(({
                       {t('تصفير المحفظة')}
                     </button>
                   ) : (
-                    <div className="flex gap-2 p-1 bg-white/5 dark:bg-slate-900/50 rounded-2xl border border-white/10 dark:border-slate-800 transition-colors shrink-0">
+                    <div className="flex gap-4 p-1 bg-white/5 dark:bg-slate-900/50 rounded-2xl border border-white/10 dark:border-slate-800 transition-colors shrink-0">
                       <button 
                         onClick={async () => {
                           setIsLoading(true);
@@ -1050,7 +1096,7 @@ export const AdminGarageDetailsView = memo(({
                                             }`}
                                         >
                                             {selectedGarageForDetails.hasMonthlySubscribers && (
-                                              <span className="absolute top-2 right-2 bg-purple-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full z-10">
+                                              <span className="absolute top-2 right-2 bg-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10">
                                                 +25% شهريين
                                               </span>
                                             )}
@@ -1156,7 +1202,7 @@ export const AdminGarageDetailsView = memo(({
                             </div>
                         </div>
  
-                        <div className="flex gap-3 pt-4">
+                        <div className="flex gap-4 pt-4">
                             <button 
                                 type="submit" 
                                 disabled={isLoading || !staffForm.name} 
@@ -1210,7 +1256,7 @@ export const AdminGarageDetailsView = memo(({
             </div>
 
             {selectedGarageForDetails.hasMonthlySubscribers && (
-              <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
+              <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-4 mb-6 text-center">
                 <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
                   <Users className="w-3.5 h-3.5 shrink-0" />
                   {t('تتضمن زيادة 25% لحساب المشتركين الشهريين')}
@@ -1218,11 +1264,11 @@ export const AdminGarageDetailsView = memo(({
               </div>
             )}
  
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               <button
                 disabled={isLoading}
                 onClick={() => handleRechargeSubmit(pendingPackage)}
-                className="flex-1 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 outline-none cursor-pointer"
+                className="flex-1 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-4 outline-none cursor-pointer"
               >
                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{t('تأكيد التجديد')}</span>}
               </button>
@@ -1251,7 +1297,7 @@ export const AdminGarageDetailsView = memo(({
                         {t('هل أنت متأكد من حذف الموظف')} <span className="text-slate-900 dark:text-slate-100">"{staffToDelete.name}"</span>؟ {t('لن يتمكن من تسجيل الدخول مرة أخرى بهذا الرمز.')}
                     </p>
                     
-                    <div className="flex gap-3">
+                    <div className="flex gap-4">
                         <button 
                             onClick={async () => {
                                 setIsLoading(true);

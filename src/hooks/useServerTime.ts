@@ -23,8 +23,8 @@ export function useServerTime() {
         setServerTimeOffset(offset);
         return offset;
       }
-    } catch (err) {
-      console.log('Could not fetch server time offset, using local lock instead:', err);
+    } catch {
+      // Fallback to local lock if server time offset fetch fails
     }
     return offsetRef.current;
   }, []); // Stable callback, empty dependencies!

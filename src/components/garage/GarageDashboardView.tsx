@@ -19,14 +19,17 @@ import {
   Gift,
   Clock,
   Search,
+  Megaphone,
+  Sparkles,
 } from "lucide-react";
+import { Announcement } from "../../types";
 import { FlipNumber } from "../ui/FlipNumber";
 import { AnimatedCounter } from "../AnimatedCounter";
 import { useTheme } from "../../utils/ThemeContext";
 import { resolveShimmerColor, isLightColor, getRemainingDays, safeDate } from "../../utils";
 import { soundManager } from "../../utils/sounds";
 import { auth } from "../../firebase";
-import { firestoreService } from "../../services/firestoreService";
+import { firestoreServiceV2 as firestoreService } from "../../services/domain/firestoreServiceV2";
 import { RegistrationCard } from "./RegistrationCard";
 import { VehicleItem } from "./VehicleItem";
 import { SubscribersView } from "./SubscribersView";
@@ -92,7 +95,17 @@ export const GarageDashboardView = memo((props: any) => {
     [zt, Xt] = useState(!1),
     Wt = useRef(null),
     Ft = useRef(null),
-    [De, He] = useState(!!Qt.currentUser);
+    [De, He] = useState(!!Qt.currentUser),
+    [activeAnnouncements, setActiveAnnouncements] = useState<Announcement[]>([]),
+    [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const unsub = me.onAnnouncementsChange((list) => {
+      const relevant = list.filter(a => a.isActive && (a.target === 'all' || a.targetGarageId === (t == null ? void 0 : t.id)));
+      setActiveAnnouncements(relevant);
+    });
+    return () => unsub();
+  }, [t == null ? void 0 : t.id]);
   useEffect(() => {
     const _e = Qt.onAuthStateChanged((st) => {
       He(!!st);
@@ -610,113 +623,200 @@ export const GarageDashboardView = memo((props: any) => {
       }
       {
         <main
-          className={"max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto p-4 w-full flex-1 flex flex-col gap-4 md:gap-10 overscroll-contain overflow-y-auto ".concat(
+          className={"max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto p-4 w-full flex-1 flex flex-col gap-4 md:gap-6 overscroll-contain overflow-y-auto ".concat(
             s ? "gap-3 pt-3 pb-3" : "gap-4",
           )}
         >
-          {(!s || ie !== "main") && (
-            <div
-              className="flex gap-4 shrink-0 w-full select-none"
-              id="persistent_balance_card"
-            >
-              {
-                <div
-                  className={"flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-10 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden ".concat(
-                    L <= 1
-                      ? "bg-red-600 dark:bg-red-700 border-red-700 dark:border-red-600 text-white shadow-md shadow-red-500/20"
-                      : L === 2
-                        ? "bg-red-500/10 dark:bg-red-950/40 border-red-300 dark:border-red-800/80 text-red-600 dark:text-red-400"
-                        : Ae === "decrease"
-                          ? "border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900"
-                          : Ae === "increase"
-                            ? "border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900"
-                            : "bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800",
-                  )}
-                >
-                  {<MovingBalanceArrows transitionType={Ae} />}
-                  {
-                    <div className="py-1 flex items-center justify-center overflow-visible z-10">
-                      {
-                        <div
-                          className={"text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ".concat(
-                            L <= 1
-                              ? "text-white"
-                              : L === 2 || Ae === "decrease"
-                                ? "text-red-600 dark:text-red-400"
-                                : Ae === "increase"
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : We
-                                    ? "text-red-500"
-                                    : "text-slate-900 dark:text-slate-100",
-                          )}
-                        >
-                          {<span>باقي</span>}
-                          {
-                            <span className="text-4xl md:text-7xl font-extrabold font-mono tracking-tight">
-                              {
-                                <AnimatedCounter
-                                  value={L}
-                                  disableColorChange={!0}
-                                />
-                              }
-                            </span>
-                          }
-                          {
-                            <span>
-                              {L === 1
-                                ? "يوم"
-                                : L === 2
-                                  ? "يومين"
-                                  : L >= 3 && L <= 10
-                                    ? "أيام"
-                                    : "يوم"}
-                            </span>
-                          }
+          {/* Feature 3: Announcements Banner for Garage */}
+          {!s && activeAnnouncements.length > 0 && (
+            <div className="space-y-2">
+              {activeAnnouncements.map((ann) => {
+                if (dismissedAnnouncements[ann.id]) return null;
+                const isUrgent = ann.priority === 'urgent';
+                const isImportant = ann.priority === 'important';
+
+                return (
+                  <div
+                    key={ann.id}
+                    className={`p-3.5 sm:p-4 rounded-2xl border flex items-start justify-between gap-3 shadow-sm transition-all animate-in fade-in duration-200 ${
+                      isUrgent
+                        ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300'
+                        : isImportant
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Megaphone className={`w-5 h-5 shrink-0 mt-0.5 ${
+                        isUrgent ? 'text-red-500' : isImportant ? 'text-amber-500' : 'text-emerald-500'
+                      }`} />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-xs sm:text-sm">{ann.title}</h4>
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                            isUrgent ? 'bg-red-500 text-white' : isImportant ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+                          }`}>
+                            {isUrgent ? 'عاجل' : isImportant ? 'هام' : 'إعلان'}
+                          </span>
                         </div>
-                      }
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap leading-relaxed">
+                          {ann.content}
+                        </p>
+                      </div>
                     </div>
-                  }
-                  {We && (
-                    <p
-                      className={"text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ".concat(
-                        L <= 1
-                          ? "text-white/90 font-black"
-                          : L === 2 || Ae === "decrease"
-                            ? "text-red-600 dark:text-red-400"
-                            : Ae === "increase"
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : L <= 0
-                                ? "text-red-500"
-                                : "text-red-400",
-                      )}
+                    <button
+                      type="button"
+                      onClick={() => setDismissedAnnouncements(prev => ({ ...prev, [ann.id]: true }))}
+                      className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0"
                     >
-                      {Ds}
-                    </p>
-                  )}
-                  {t.dailyCapacity !== void 0 && t.dailyCapacity > 0 && (
-                    <div className="mt-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full inline-flex items-center gap-1 z-10">
-                      {<span>المسجل اليوم:</span>}
-                      {
-                        <span className="font-mono font-black text-amber-600 dark:text-amber-400">
-                          {t.todayCount || 0}
-                        </span>
-                      }
-                      {<span>من</span>}
-                      {
-                        <span className="font-mono font-black">
-                          {t.dailyCapacity}
-                        </span>
-                      }
-                      {<span>سيارة/يوم</span>}
-                    </div>
-                  )}
+                      <XIcon className="w-4 h-4 opacity-60" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Feature 2: Expiry Warning Banner */}
+          {!s && We && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-200">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-white" />
                 </div>
-              }
+                <div>
+                  <h4 className="font-black text-sm">
+                    {t?.isTrial ? 'تنبيه: الفترة التجريبية تقترب من الانتهاء' : 'تنبيه: اشتراك الجراج شارف على الانتهاء'}
+                  </h4>
+                  <p className="text-xs text-red-100 font-bold">
+                    {Ds} - يرجى تجديد الاشتراك لتجنب إيقاف الخدمة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => Q(true)}
+                className="w-full sm:w-auto px-4 py-2 bg-white text-red-700 hover:bg-red-50 rounded-xl font-black text-xs transition-all shadow-sm shrink-0 cursor-pointer active:scale-95 text-center"
+              >
+                تجديد الاشتراك الآن
+              </button>
+            </div>
+          )}
+
+          {(!s || ie !== "main") && (
+            <div className="flex gap-4 shrink-0 w-full select-none" id="persistent_balance_card">
+              {/* RIGHT CARD: Subscription countdown */}
+              <div
+                className={"flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden ".concat(
+                  L <= 1
+                    ? "bg-red-600 dark:bg-red-700 border-red-700 dark:border-red-600 text-white shadow-md shadow-red-500/20"
+                    : L === 2
+                      ? "bg-red-500/10 dark:bg-red-950/40 border-red-300 dark:border-red-800/80 text-red-600 dark:text-red-400"
+                      : Ae === "decrease"
+                        ? "border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900"
+                        : Ae === "increase"
+                          ? "border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900"
+                          : "bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800",
+                )}
+              >
+                <MovingBalanceArrows transitionType={Ae} />
+
+                {/* Trial Badge */}
+                {t?.isTrial && (
+                  <div className="mb-2 z-10">
+                    <span className="bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-black px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>تجريبي</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Countdown */}
+                <div className="py-1 flex items-center justify-center overflow-visible z-10">
+                  <div
+                    className={"text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ".concat(
+                      L <= 1
+                        ? "text-white"
+                        : L === 2 || Ae === "decrease"
+                          ? "text-red-600 dark:text-red-400"
+                          : Ae === "increase"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : We
+                              ? "text-red-500"
+                              : "text-slate-900 dark:text-slate-100",
+                    )}
+                  >
+                    <span>باقي</span>
+                    <span className="text-4xl md:text-7xl font-extrabold font-mono tracking-tight">
+                      <AnimatedCounter value={L} disableColorChange={!0} />
+                    </span>
+                    <span>
+                      {L === 1
+                        ? "يوم"
+                        : L === 2
+                          ? "يومين"
+                          : L >= 3 && L <= 10
+                            ? "أيام"
+                            : "يوم"}
+                    </span>
+                  </div>
+                </div>
+
+                {We && (
+                  <p
+                    className={"text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ".concat(
+                      L <= 1
+                        ? "text-white/90 font-black"
+                        : L === 2 || Ae === "decrease"
+                          ? "text-red-600 dark:text-red-400"
+                          : Ae === "increase"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : L <= 0
+                              ? "text-red-500"
+                              : "text-red-400",
+                    )}
+                  >
+                    {Ds}
+                  </p>
+                )}
+              </div>
+
+              {/* LEFT CARD: Daily cars info */}
+              {t.dailyCapacity !== undefined && t.dailyCapacity > 0 && (
+                <div className="flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">السيارات بالداخل</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl md:text-6xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
+                      {t.carsInside || 0}
+                    </span>
+                    <span className="text-lg md:text-2xl font-bold text-slate-400">
+                      {t.dailyCapacity !== undefined && t.dailyCapacity > 0 ? `/${t.dailyCapacity}` : ''}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {ie === "main" ? (
             <React.Fragment>
-              {
+              {t.dailyCapacity !== undefined && t.dailyCapacity > 0 && (t.todayCount || 0) >= t.dailyCapacity ? (
+                <div className="bg-[#faf9f6] dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 w-full shadow-sm">
+                  <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-black text-red-700 dark:text-red-400 text-center mb-2">
+                    وصلت للحد الأقصى اليومي
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
+                    ({t.todayCount || 0} / {t.dailyCapacity} سيارة اليوم)
+                  </p>
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-200 text-center mt-3">
+                    لازم تختار اشتراك أكبر علشان تقدر تكمل شغل براحتك
+                  </p>
+                </div>
+              ) : (
                 <RegistrationCard
                   newPlateNumber={x}
                   setNewPlateNumber={b}
@@ -734,15 +834,17 @@ export const GarageDashboardView = memo((props: any) => {
                   shimmerActive={!0}
                   isBalanceOut={Ns}
                 />
-              }
+              )}
               {!s && (
                 <div className="bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-[2rem] overflow-hidden flex flex-col items-center pt-4 md:pt-10 transition-colors w-full shadow-sm relative">
                   {
                     <div
                       onClick={() => H("active_vehicles")}
-                      className="mb-4 md:mb-10 scale-100 md:scale-110 cursor-pointer"
+                      className="mb-4 md:mb-10 cursor-pointer w-full flex justify-center"
                     >
-                      {<FlipNumber value={se} size="lg" />}
+                      <div className="relative flex flex-col items-center w-full px-4 md:px-8">
+                        <FlipNumber value={t.carsInside || 0} size="lg" />
+                      </div>
                     </div>
                   }
                   {
@@ -846,19 +948,16 @@ export const GarageDashboardView = memo((props: any) => {
                         </div>
                       )}
                       {l.length === 0 && (
-                        <div className="py-24 text-center">
-                          {
-                            <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100 dark:border-slate-800 transition-colors">
-                              {
-                                <Car className="w-10 h-10 text-slate-200 dark:text-slate-700" />
-                              }
-                            </div>
-                          }
-                          {
-                            <p className="text-slate-400 dark:text-slate-600 font-bold text-base md:text-lg">
-                              لا توجد سيارات حالياً
-                            </p>
-                          }
+                        <div className="py-16 md:py-24 text-center flex flex-col items-center gap-4">
+                          <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700">
+                            <Car className="w-10 h-10 md:w-12 md:h-12 text-slate-300 dark:text-slate-600" />
+                          </div>
+                          <p className="text-lg md:text-xl font-black text-slate-400 dark:text-slate-500">
+                            لا توجد سيارات حالياً
+                          </p>
+                          <p className="text-xs font-bold text-slate-300 dark:text-slate-600">
+                            اكتب رقم اللوحة واضغط "ساعة" أو "مبيت" لتسجيل أول عربية
+                          </p>
                           {!Ns && (
                             <button
                               onClick={() => H("main")}
@@ -915,7 +1014,7 @@ export const GarageDashboardView = memo((props: any) => {
               {
                 <div className="space-y-4 mb-8">
                   {
-                    <p className="text-slate-400 text-sm font-medium leading-relaxed px-4">
+                    <p className="text-base md:text-lg font-bold text-slate-400 dark:text-slate-300 leading-relaxed px-4">
                       {t.lockReason ||
                         "تم تعليق الخدمة مؤقتاً، يرجى التواصل مع الإدارة."}
                     </p>
@@ -1017,7 +1116,7 @@ export const GarageDashboardView = memo((props: any) => {
         >
           {
             <div
-              className="w-full max-w-md bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-850 rounded-xl p-6 shadow-2xl relative overflow-hidden"
+              className="w-full max-w-md bg-[#faf9f6] dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-xl p-6 shadow-2xl relative overflow-hidden"
               onClick={(_e) => _e.stopPropagation()}
               dir="rtl"
             >
@@ -1066,7 +1165,7 @@ export const GarageDashboardView = memo((props: any) => {
                         </div>
                       }
                       {
-                        <div className="w-full border-t border-slate-200/40 dark:border-slate-850/40" />
+                        <div className="w-full border-t border-slate-200/40 dark:border-slate-800/40" />
                       }
                       {
                         <div className="flex justify-between items-center">
@@ -1085,7 +1184,7 @@ export const GarageDashboardView = memo((props: any) => {
                         </div>
                       }
                       {
-                        <div className="w-full border-t border-slate-200/40 dark:border-slate-850/40" />
+                        <div className="w-full border-t border-slate-200/40 dark:border-slate-800/40" />
                       }
                       {
                         <div className="flex justify-between items-center">
@@ -1104,7 +1203,7 @@ export const GarageDashboardView = memo((props: any) => {
                       {Re.staffName && (
                         <React.Fragment>
                           {
-                            <div className="w-full border-t border-slate-200/40 dark:border-slate-850/40" />
+                            <div className="w-full border-t border-slate-200/40 dark:border-slate-800/40" />
                           }
                           {
                             <div className="flex justify-between items-center">

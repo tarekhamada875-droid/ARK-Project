@@ -11,10 +11,12 @@ import {
   Car, 
   Search,
   RefreshCw,
-  ClipboardList
+  ClipboardList,
+  AlertTriangle,
+  Phone
 } from 'lucide-react';
 import { Garage, Delegate, ActivityLog } from '../../types';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { getRemainingDays, safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -147,6 +149,18 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
     ).sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0)); // Sort by highest revenue generated
   }, [localGarages, garageStatsSearch]);
 
+  // Feature 6: Expiring Soon Garages (<= 7 days)
+  const expiringGarages = useMemo(() => {
+    return localGarages
+      .filter(g => g.status !== 'pending' && g.balanceExpiry)
+      .map(g => ({
+        ...g,
+        remainingDays: getRemainingDays(g)
+      }))
+      .filter(g => g.remainingDays <= 7)
+      .sort((a, b) => a.remainingDays - b.remainingDays);
+  }, [localGarages]);
+
   return (
     <div className="space-y-8 font-sans pb-20 select-none" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
       
@@ -207,6 +221,88 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
           </div>
         </div>
       </div>
+
+      {/* Feature 6: Expiring Subscriptions Alert & Report (<= 7 days) */}
+      {expiringGarages.length > 0 && (
+        <section className="bg-amber-500/5 dark:bg-amber-500/10 border-2 border-amber-500/20 rounded-2xl p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
+                <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>جراجات تقترب من انتهاء الاشتراك</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-mono">
+                    {expiringGarages.length} جراج
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  جراجات متبقي في اشتراكها 7 أيام أو أقل وتتطلب المتابعة أو التجديد
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {expiringGarages.map((g) => {
+              const isExpired = g.remainingDays <= 0;
+              return (
+                <div 
+                  key={g.id}
+                  className={`p-4 rounded-xl border flex flex-col justify-between gap-3 transition-all ${
+                    isExpired 
+                      ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50' 
+                      : 'bg-white dark:bg-slate-900 border-amber-200/80 dark:border-amber-900/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white truncate">
+                        {g.name}
+                      </h4>
+                      {g.phone && (
+                        <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                          <Phone className="w-3 h-3" />
+                          <span>{g.phone}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full font-mono shrink-0 ${
+                      isExpired 
+                        ? 'bg-red-500 text-white' 
+                        : g.remainingDays <= 3 
+                        ? 'bg-amber-500 text-white' 
+                        : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                    }`}>
+                      {isExpired ? 'منتهي' : `متبقي ${g.remainingDays} يوم`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
+                    <div className="text-slate-500 dark:text-slate-400">
+                      <span>الباقة: </span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {g.activePackageName || 'باقة قياسية'}
+                      </span>
+                      {g.isTrial && (
+                        <span className="mr-1 text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
+                          تجريبي
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-slate-400 font-mono text-[9px]">
+                      {g.balanceExpiry ? safeDate(g.balanceExpiry).toLocaleDateString('ar-EG') : '—'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Main Row: Activity Analysis & Comparisons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
@@ -275,7 +371,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
                         {g.name}
                       </span>
                       
-                      <div className="flex items-center gap-2 text-[8px] font-bold text-slate-400 mt-1">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 mt-1">
                         <span className="text-blue-500 bg-blue-500/10 px-1 py-0.2 rounded">{activeCarsCount} {t('سيارات بالداخل')}</span>
                         <span className="text-slate-500 bg-slate-500/10 px-1 py-0.2 rounded">{checkedOutCount} {t('سيارة مغادرة بالكامل')}</span>
                         {g.isLocked && <span className="text-red-500 bg-red-500/10 px-1 py-0.2 rounded font-sans">{t('معطل')}</span>}
@@ -285,7 +381,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
 
                   <div className={`font-mono shrink-0 ${adminLang === 'en' ? 'text-right' : 'text-left'}`}>
                     <span className="text-xs font-black text-amber-500 block">
-                      {remainingDisplay} <span className="text-[8px] font-bold font-sans text-slate-400">{remainingLabel}</span>
+                      {remainingDisplay} <span className="text-[10px] font-bold font-sans text-slate-400">{remainingLabel}</span>
                     </span>
                     <span className="text-[9px] font-bold text-slate-400 block mt-1">
                       {t('الأرباح الإجمالية')}: {(g.totalRevenue || 0).toLocaleString(adminLang === 'en' ? 'en-US' : 'ar-EG')} {t('ج.م')}
@@ -317,13 +413,13 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
                     </div>
                     <div>
                       <span className="text-xs font-black text-slate-900 dark:text-white block truncate uppercase">{d.name}</span>
-                      <span className="text-[8px] font-bold text-slate-400 font-mono block mt-0.5">{d.phone}</span>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono block mt-0.5">{d.phone}</span>
                     </div>
                   </div>
 
                   <div className={`text-left font-mono shrink-0 ${adminLang === 'en' ? 'text-right' : 'text-left'}`}>
                     <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block">
-                      +{delegatedSum.toLocaleString(adminLang === 'en' ? 'en-US' : 'ar-EG')} <span className="text-[8px] font-bold font-sans text-slate-400">{t('ج.م')}</span>
+                      +{delegatedSum.toLocaleString(adminLang === 'en' ? 'en-US' : 'ar-EG')} <span className="text-[10px] font-bold font-sans text-slate-400">{t('ج.م')}</span>
                     </span>
                     {d.canCreateGarage && (
                       <span className="text-[7px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-widest block mt-1">
@@ -336,7 +432,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
             })}
 
             {localDelegates.length === 0 && (
-              <div className="text-center py-10 text-slate-350 dark:text-slate-650 font-bold">
+              <div className="text-center py-10 text-slate-400 dark:text-slate-600 font-bold">
                 {t('لا يوجد بيانات مندوبين لشحن النظام')}
               </div>
             )}

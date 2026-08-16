@@ -2,7 +2,7 @@ import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Sun, Moon, Palette, Check, Sparkles, Sliders, Menu } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { soundManager } from '../../utils/sounds';
 import { Garage, Staff } from '../../types';
 import { isLightColor, resolveShimmerColor } from '../../utils';

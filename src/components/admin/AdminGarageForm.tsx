@@ -25,6 +25,8 @@ export const AdminGarageForm: React.FC<AdminGarageFormProps> = ({
   const [hourlyRate, setHourlyRate] = useState('10');
   const [overnightRate, setOvernightRate] = useState('20');
   const [hasMonthlySubscribers, setHasMonthlySubscribers] = useState(false);
+  const [isTrial, setIsTrial] = useState(false);
+  const [priceScope, setPriceScope] = useState<'new_only' | 'all'>('new_only');
   const [selectedPackageId, setSelectedPackageId] = useState<string>('monthly_sub');
   const [selectedDelegateId, setSelectedDelegateId] = useState<string>('');
 
@@ -52,6 +54,8 @@ export const AdminGarageForm: React.FC<AdminGarageFormProps> = ({
       hourlyRate: parseFloat(hourlyRate) || 0,
       overnightRate: parseFloat(overnightRate) || 0,
       hasMonthlySubscribers,
+      isTrial,
+      priceScope,
       selectedPackageId,
       selectedDelegateId
     });
@@ -209,9 +213,40 @@ export const AdminGarageForm: React.FC<AdminGarageFormProps> = ({
       {priceInfo && (
         <div className="p-4 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-xl border border-emerald-500/30 flex items-center justify-between">
           <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">إجمالي المبلغ المطلوب للتفعيل:</span>
-          <span className="text-lg font-mono font-black text-emerald-600 dark:text-emerald-400">{priceInfo.finalPrice} ج.م</span>
+          <span className="text-lg font-mono font-black text-emerald-600 dark:text-emerald-400">
+            {isTrial ? '0 ج.م (فترة تجريبية مجانية)' : `${priceInfo.finalPrice} ج.م`}
+          </span>
         </div>
       )}
+
+      {/* Price Scope Selector */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">نطاق تطبيق السعر:</label>
+        <select
+          value={priceScope}
+          onChange={(e) => setPriceScope(e.target.value as 'new_only' | 'all')}
+          className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          <option value="new_only">جراجات جديدة فقط</option>
+          <option value="all">جميع الجراجات (بما فيها الحالية)</option>
+        </select>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          {priceScope === 'all'
+            ? '⚠️ هيأثر على كل الجراجات الحالية كمان'
+            : '✅ هيأثر على الجراجات الجديدة بس'}
+        </p>
+      </div>
+
+      {/* Free Trial Checkbox */}
+      <label className="flex items-center gap-3 cursor-pointer p-3 border border-blue-200 dark:border-blue-900/60 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 transition-all select-none">
+        <input
+          type="checkbox"
+          checked={isTrial}
+          onChange={(e) => setIsTrial(e.target.checked)}
+          className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+        />
+        <span className="text-xs font-black text-blue-950 dark:text-blue-200">تفعيل فترة تجريبية مجانية (15 يوم)</span>
+      </label>
 
       <button
         type="submit"

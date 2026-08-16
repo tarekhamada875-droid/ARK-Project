@@ -29,8 +29,7 @@ import { LogoutConfirmModal } from './components/modals/LogoutConfirmModal';
 import { SubscriberWarningModal } from './components/modals/SubscriberWarningModal';
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
-import { firestoreService } from './services/firestoreService';
-import { useAppStore } from './store/appStore';
+import { firestoreServiceV2 as firestoreService } from './services/domain/firestoreServiceV2';
 
 // Lazy Loaded Dashboard Views
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
@@ -183,9 +182,6 @@ export default function App() {
     setRecentVehicle,
     setSubscriberWarningPlate,
   });
-
-  const storeToasts = useAppStore((state) => state.toasts);
-  const removeToast = useAppStore((state) => state.removeToast);
 
   const renderView = () => {
     // Balance/Lock Block
@@ -554,30 +550,6 @@ export default function App() {
             onCancel={() => setShowLogoutConfirm(false)}
             correctPin={activeAdminPin}
           />
-        )}
-
-
-
-        {storeToasts.length > 0 && (
-          <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm">
-            {storeToasts.map((t) => (
-              <div
-                key={t.id}
-                onClick={() => removeToast(t.id)}
-                className={`px-4 py-3 rounded-xl shadow-lg font-bold text-xs flex items-center justify-between cursor-pointer transition-all ${
-                  t.type === 'error'
-                    ? 'bg-red-600 text-white'
-                    : t.type === 'warning'
-                    ? 'bg-amber-500 text-white'
-                    : t.type === 'info'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-emerald-600 text-white'
-                }`}
-              >
-                <span>{t.message}</span>
-              </div>
-            ))}
-          </div>
         )}
 
         <Suspense fallback={

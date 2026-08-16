@@ -277,8 +277,8 @@ export const isSessionActive = (lastActive: any, serverTimeOffset: number = 0): 
   } else {
     lastActiveMillis = new Date(lastActive).getTime();
   }
-  // If last activity was within 5 minutes (300000ms), session is active
-  return Date.now() + serverTimeOffset - lastActiveMillis < 300000;
+  // If last activity was within 10 minutes (600000ms), session is active
+  return Date.now() + serverTimeOffset - lastActiveMillis < 600000;
 };
 
 export const getStorage = <T>(key: string, defaultValue: T): T => {
@@ -356,42 +356,14 @@ export const isLightColor = (color: string | undefined): boolean => {
   return false;
 };
 
-/**
- * Calculates remaining subscription days for a garage, handling legacy 10-year commission expiries gracefully.
- */
-export const getRemainingDays = (garage: any): number => {
-  if (!garage) return 0;
-  if (garage.balanceExpiry) {
-    const expiryDate = safeDate(garage.balanceExpiry);
-    const diff = expiryDate.getTime() - Date.now();
-    const rawDays = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-    // If rawDays > 90 (e.g. 3612 or 3650 days from legacy 10-year commission setup)
-    if (rawDays > 90) {
-      if (typeof garage.balanceDays === 'number' && garage.balanceDays > 0 && garage.balanceDays <= 365) {
-        return garage.balanceDays;
-      }
-      return 30; // Default subscription fallback for converted legacy garages
-    }
-    return rawDays;
-  }
-  if (typeof garage.balanceDays === 'number' && garage.balanceDays > 0 && garage.balanceDays <= 365) {
-    return garage.balanceDays;
-  }
-  if (typeof garage.balance === 'number' && garage.balance > 0) {
-    return Math.max(1, Math.min(30, Math.ceil(garage.balance / 15)));
-  }
-  return 0;
-};
-
-/**
- * Checks if a garage's subscription has expired.
- */
-export const isSubscriptionExpired = (garage: any): boolean => {
-  if (!garage) return true;
-  if (!garage.balanceExpiry) return true;
-  const expiryDate = safeDate(garage.balanceExpiry);
-  return expiryDate < new Date();
-};
+export { 
+  isSubscriptionExpired, 
+  getRemainingDays, 
+  isTrialActive, 
+  isUnlimitedCapacity, 
+  calculateCapacityUsed 
+} from '../domain/garage/subscription';
+export { validateVehicleEntry, validateGarageCreation, validateRechargeRequest } from '../domain/garage/validation';
 
 /**
  * Applies the 25% surcharge for garages with monthly subscribers.
@@ -444,30 +416,36 @@ export const packageIdToDays = (packageId: string, pkgName?: string): number => 
   if (packageId === 'biweekly_sub' || packageId === '15days') return 15;
   if (packageId === 'monthly_sub') return 30;
   if (pkgName) {
-    if (pkgName.includes('أسبوع') || pkgName.includes('7')) return 7;
-    if (pkgName.includes('15') || pkgName.includes('نصف')) return 15;
-    if (pkgName.includes('30') || pkgName.includes('شهر')) return 30;
+    if (pkgName.includes('أسبوع') || pkgName.includes('7 يوم') || pkgName.includes('7 days')) return 7;
+    if (pkgName.includes('15 يوم') || pkgName.includes('نصف شهر') || pkgName.includes('15 days')) return 15;
+    if (pkgName.includes('شهر') || pkgName.includes('30 يوم') || pkgName.includes('monthly') || pkgName.includes('30 days')) return 30;
   }
-  return 30;
+  return 30; // Default: 30 days (not 365+)
 };
 
 /**
- * Retries a Firestore operation with exponential backoff.
+ * Retries a Firestore operation with exponential backoff and network checks.
  * Prevents transient failures from breaking the user experience.
  */
 export const withRetry = async <T>(
-  fn: () => Promise<T>,
-  maxAttempts: number = 3,
-  delayMs: number = 1000
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delayMs: number = 300
 ): Promise<T> => {
-  let lastError: Error | null = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('لا يوجد اتصال بالإنترنت. يرجى التأكد من اتصالك بشبكة الإنترنت ثم المحاولة مرة أخرى.');
+  }
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-      if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('انقطع الاتصال بالإنترنت أثناء تنفيذ العملية. يرجى إعادة الاتصال والمحاولة مرة أخرى.');
+      }
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, attempt - 1)));
       }
     }
   }

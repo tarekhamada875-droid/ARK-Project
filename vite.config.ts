@@ -29,6 +29,16 @@ export default defineConfig(({mode}) => {
       emptyOutDir: true,
       sourcemap: false,
       minify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['firebase/app', 'firebase/firestore', 'firebase/auth', 'react', 'react-dom', 'zustand'],
+            admin: ['./src/components/admin/AdminDashboard.tsx', './src/components/admin/AdminGarageDetailsView.tsx', './src/components/admin/AdminReportsView.tsx'],
+            garage: ['./src/components/garage/GarageDashboardView.tsx', './src/components/garage/GarageReportsView.tsx', './src/components/garage/SubscribersView.tsx'],
+            delegate: ['./src/components/delegate/DelegateDashboardView.tsx'],
+          }
+        }
+      }
     },
     resolve: {
       alias: {

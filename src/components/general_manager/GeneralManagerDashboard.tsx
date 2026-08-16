@@ -15,7 +15,7 @@ import {
 import { Garage, GeneralManager } from '../../types';
 import { getRemainingDays } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
-import { firestoreService } from '../../services/firestoreService';
+import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 
 interface GeneralManagerDashboardProps {
   currentGeneralManager: GeneralManager;
@@ -118,7 +118,7 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = m
             {/* Logout */}
             <button
               onClick={onLogout}
-              className="flex items-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl font-bold text-xs sm:text-sm border border-red-150 dark:border-red-900/30 outline-none"
+              className="flex items-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl font-bold text-xs sm:text-sm border border-red-200 dark:border-red-900/30 outline-none"
             >
               <LogOut className="w-4.5 h-4.5 stroke-[2.5]" />
               <span className="hidden sm:inline">تسجيل الخروج</span>

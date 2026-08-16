@@ -125,10 +125,10 @@ describe('Parking Duration & Cost Calculation Comprehensive Scenarios', () => {
 });
 
 describe('Security & Helper Utils', () => {
-  it('detects active vs expired user sessions (5 minute threshold)', () => {
+  it('detects active vs expired user sessions (10 minute threshold)', () => {
     const now = Date.now();
-    expect(isSessionActive(now - 4 * 60 * 1000)).toBe(true);  // 4 mins ago -> active
-    expect(isSessionActive(now - 6 * 60 * 1000)).toBe(false); // 6 mins ago -> inactive
+    expect(isSessionActive(now - 8 * 60 * 1000)).toBe(true);  // 8 mins ago -> active
+    expect(isSessionActive(now - 12 * 60 * 1000)).toBe(false); // 12 mins ago -> inactive
     expect(isSessionActive(undefined)).toBe(false);
   });
 

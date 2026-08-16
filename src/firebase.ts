@@ -14,7 +14,6 @@ export const db = initializeFirestore(app, {
 }, firebaseConfig.firestoreDatabaseId);
 
 enableIndexedDbPersistence(db)
-  .then(() => console.log('IndexedDB persistence enabled'))
   .catch((err) => {
     if (err.code === 'failed-precondition') console.warn('Multiple tabs open');
     if (err.code === 'unimplemented') console.warn('Not supported');
