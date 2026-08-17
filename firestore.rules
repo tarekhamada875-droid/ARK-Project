@@ -150,6 +150,12 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isRateLimited(collectionPath) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admin_rate_limits/$(request.auth.uid)/$(collectionPath)) &&
+        (request.time.toMillis() - get(/databases/$(database)/documents/admin_rate_limits/$(request.auth.uid)/$(collectionPath)).data.lastOperationAt.toMillis()) < 5000;
+    }
+
     // ===============================================================
     // Verification Schema Rules
     // ===============================================================
@@ -504,8 +510,10 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if (isAdmin() || isDelegate() || isSupervisor()) && isValidId(garageId) && 
                       incoming().keys().hasAll(['name', 'phone', 'hourlyRate', 'overnightRate', 'createdAt', 'billingModel', 'pin']) &&
-                      isValidGarage(incoming());
-      allow delete: if (isAdmin() || isSupervisor()) && isValidId(garageId);
+                      isValidGarage(incoming()) &&
+                      (!isAdmin() || !isRateLimited('garage_create'));
+      allow delete: if (isAdmin() || isSupervisor()) && isValidId(garageId) &&
+                      (!isAdmin() || !isRateLimited('garage_delete'));
       
       // Detailed Update Logic
       allow update: if isValidId(garageId) && isSignedIn() && (
@@ -552,13 +560,26 @@ service cloud.firestore {
                          ) &&
                          incoming().keys().hasAll(['plateNumber', 'entryTime', 'type', 'garageId', 'status', 'plateNumberRaw']) &&
                          isValidVehicle(incoming());
-        allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming());
+        allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming()) &&
+                      (
+                        existing().status == 'outside' ? incoming().status == 'inside' :
+                        existing().status == 'inside' ? incoming().status == 'outside' :
+                        true
+                      );
         allow delete: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
       }
 
       match /daily_stats/{dateId} {
         allow get: if isSignedIn() && isValidId(dateId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
-        allow write, delete: if (isAdmin() || isSupervisor() || isDelegate() || isGarageSession(garageId)) && isValidId(dateId);
+        allow create: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
+                         request.resource.data.dateId == dateId &&
+                         request.resource.data.keys().hasOnly(['dateId', 'count', 'revenue', 'createdAt']);
+        allow update: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
+                         (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['count']) && (incoming().count == existing().count + 1)) ||
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['revenue']) && (incoming().revenue >= existing().revenue))
+                         );
+        allow delete: if false;
       }
 
       match /subscribers/{subscriberId} {
@@ -568,6 +589,11 @@ service cloud.firestore {
         allow update: if isSignedIn() && isValidId(subscriberId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidSubscriber(incoming());
         allow delete: if isSignedIn() && isValidId(subscriberId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
       }
+    }
+
+    match /admin_rate_limits/{adminUid}/{collectionPath} {
+      allow read: if isAdmin() && adminUid == request.auth.uid;
+      allow write: if isAdmin() && adminUid == request.auth.uid;
     }
 
     // === DAILY COUNTER RULES (Phase 1) ===

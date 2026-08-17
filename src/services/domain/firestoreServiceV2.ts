@@ -640,11 +640,15 @@ export const firestoreServiceV2 = {
         const dateId = `${todayCounter.getFullYear()}-${String(todayCounter.getMonth() + 1).padStart(2, '0')}-${String(todayCounter.getDate()).padStart(2, '0')}`;
         const countRef = doc(db, `garages/${garageId}/daily_counts/${dateId}`);
 
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
+
         // Read all documents FIRST before executing any writes
-        const [garageSnap, countSnap, vehicleSnap] = await Promise.all([
+        const [garageSnap, countSnap, vehicleSnap, dailyStatsSnap] = await Promise.all([
           transaction.get(garageRef),
           transaction.get(countRef),
-          transaction.get(vehicleRef)
+          transaction.get(vehicleRef),
+          transaction.get(dailyStatsRef)
         ]);
         
         if (!garageSnap.exists()) throw new Error('الجراج غير موجود');
@@ -682,7 +686,6 @@ export const firestoreServiceV2 = {
           status: 'inside'
         });
         
-        const today = new Date().toISOString().split('T')[0];
         const isNewDay = garageData.lastTransactionDate !== today;
         
         transaction.update(garageRef, {
@@ -690,6 +693,18 @@ export const firestoreServiceV2 = {
           todayCount: isNewDay ? 1 : increment(1),
           lastTransactionDate: today
         });
+
+        // Update daily_stats subcollection (authoritative backup)
+        if (!dailyStatsSnap.exists()) {
+          transaction.set(dailyStatsRef, {
+            dateId: today,
+            count: 1,
+            revenue: 0,
+            createdAt: serverTimestamp()
+          });
+        } else {
+          transaction.update(dailyStatsRef, { count: increment(1) });
+        }
 
         // Write activity log INSIDE the transaction
         const logRef = doc(collection(db, 'activity_logs'));
@@ -718,10 +733,13 @@ export const firestoreServiceV2 = {
       await runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
         
-        const [vehicleSnap, garageSnap] = await Promise.all([
+        const [vehicleSnap, garageSnap, dailyStatsSnap] = await Promise.all([
           transaction.get(vehicleRef),
-          transaction.get(garageRef)
+          transaction.get(garageRef),
+          transaction.get(dailyStatsRef)
         ]);
         
         if (!vehicleSnap.exists()) throw new Error('العربية غير موجودة');
@@ -736,7 +754,6 @@ export const firestoreServiceV2 = {
           totalCost: cost
         });
         
-        const today = new Date().toISOString().split('T')[0];
         const garageData = garageSnap.data() || {};
         const isNewDay = garageData.lastTransactionDate !== today;
         
@@ -747,6 +764,18 @@ export const firestoreServiceV2 = {
           lastTransactionDate: today,
           carsInside: increment(-1)
         });
+
+        // Update daily_stats revenue
+        if (!dailyStatsSnap.exists()) {
+          transaction.set(dailyStatsRef, {
+            dateId: today,
+            count: 0,
+            revenue: cost,
+            createdAt: serverTimestamp()
+          });
+        } else {
+          transaction.update(dailyStatsRef, { revenue: increment(cost) });
+        }
 
         // Write activity log INSIDE the transaction
         const logRef = doc(collection(db, 'activity_logs'));
