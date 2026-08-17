@@ -1,7 +1,7 @@
 import React, { useState, memo } from 'react';
 import { Package } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
-import { X, Menu, Clock, ShieldCheck, Car, Sparkles, Filter } from 'lucide-react';
+import { ArrowRight, Clock, Car, Sparkles, Filter } from 'lucide-react';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -18,8 +18,7 @@ export { getCleanPackageInfo };
 export const PackagesModal: React.FC<PackagesModalProps> = memo(({ 
   packages, 
   onClose, 
-  walletNumber = "01552411323", 
-  onToggleMenu,
+  walletNumber = "01552411323",
   hasMonthlySubscribers = false
 }) => {
   const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
@@ -63,38 +62,18 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
   return (
     <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
-              الاشتراكات
-            </h3>
-            <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-              اختار الباقة اللي تناسب جراجك
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none cursor-pointer"
-            title="إغلاق"
-          >
-            <X className="w-6 h-6 stroke-[2.5]" />
-          </button>
-          {onToggleMenu && (
-            <button 
-              type="button"
-              onClick={onToggleMenu}
-              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none cursor-pointer"
-            >
-              <Menu className="w-6 h-6 stroke-[3]" />
-            </button>
-          )}
+      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
+        <button 
+          onClick={onClose}
+          className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-xl flex items-center justify-center hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          title="الرجوع"
+        >
+          <ArrowRight className="w-6 h-6 stroke-[2.5]" />
+        </button>
+        <div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
+            الاشتراكات
+          </h3>
         </div>
       </div>
 

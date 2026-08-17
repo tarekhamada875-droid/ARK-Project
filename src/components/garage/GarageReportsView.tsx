@@ -1,13 +1,12 @@
 import { useState, useMemo, memo, useEffect, useCallback } from 'react';
 import { 
-  X, 
+  ArrowRight, 
   RefreshCw, 
   TrendingUp, 
   CheckCircle2,
   BarChart2,
   ChevronDown,
-  ChevronUp,
-  Menu
+  ChevronUp
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
@@ -26,7 +25,6 @@ export const GarageReportsView = memo(({
   todayExitedVehicles,
   staffList,
   onClose,
-  onToggleMenu,
 }: GarageReportsViewProps) => {
   // Manual toggle state
   const [localTodayExitedVehicles, setLocalTodayExitedVehicles] = useState<Vehicle[]>(() => todayExitedVehicles);
@@ -130,30 +128,16 @@ export const GarageReportsView = memo(({
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors select-none" dir="rtl">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 transition-colors">
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="text-xs font-black text-slate-900 dark:text-slate-100">تقارير وأحصائيات الجراج</h2>
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 leading-none mt-1">ملخص الأداء المالي والتشغيلي</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          {onToggleMenu && (
-            <button 
-              type="button"
-              onClick={onToggleMenu}
-              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
-            >
-              <Menu className="w-6 h-6 stroke-[3]" />
-            </button>
-          )}
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors">
+        <button 
+          onClick={onClose}
+          className="w-10 h-10 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 rounded-xl flex items-center justify-center hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors shadow-sm outline-none shrink-0"
+          aria-label="الرجوع"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </button>
+        <div>
+          <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">تقارير وأحصائيات الجراج</h2>
         </div>
       </div>
 

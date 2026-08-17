@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sun, Moon, Palette, Check, Sparkles, Sliders, Menu } from 'lucide-react';
+import { ArrowRight, Sun, Moon, Palette, Check, Sparkles } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { soundManager } from '../../utils/sounds';
@@ -33,7 +33,6 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
   currentStaff = null,
   onClose,
   showToast,
-  onToggleMenu,
   adminColor,
   onUpdateAdminColor
 }) => {
@@ -70,37 +69,17 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors duration-300" dir="rtl">
       {/* Header */}
-      <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-900 flex items-center justify-between bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
-        <div className="flex items-center gap-3">
-          <div 
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-              isLightColor(resolvedActiveColor) ? 'text-slate-900' : 'text-white'
-            }`} 
-            style={{ backgroundColor: resolvedActiveColor }}
-          >
-            <Sliders className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 transition-colors">إعدادات المظهر</h3>
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter transition-colors">تخصيص وضع الشاشة ولون إضاءة لوحات السيارات</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-sm outline-none cursor-pointer"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          {onToggleMenu && (
-            <button 
-              type="button"
-              onClick={onToggleMenu}
-              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none cursor-pointer"
-            >
-              <Menu className="w-6 h-6 stroke-[3]" />
-            </button>
-          )}
+      <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-900 flex items-center gap-4 bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
+        <button 
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 rounded-xl flex items-center justify-center hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          aria-label="الرجوع"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </button>
+        <div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 transition-colors">إعدادات المظهر</h3>
         </div>
       </div>
 

@@ -40,6 +40,7 @@ import { RewardsModal } from "../modals/RewardsModal";
 import { StaffStatsModal } from "../modals/StaffStatsModal";
 import { AppearanceSettingsModal } from "../modals/AppearanceSettingsModal";
 import { MovingBalanceArrows } from "./MovingBalanceArrows";
+import { BorderShimmer } from "./BorderShimmer";
 
 // Helper functions (mapped to actual modules)
 const uo = resolveShimmerColor;
@@ -703,108 +704,110 @@ export const GarageDashboardView = memo((props: any) => {
             </div>
           )}
 
-          {(!s || ie !== "main") && (
-            <div className="flex gap-4 shrink-0 w-full select-none" id="persistent_balance_card">
-              {/* RIGHT CARD: Subscription countdown */}
-              <div
-                className={"flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden ".concat(
-                  L <= 1
-                    ? "bg-red-600 dark:bg-red-700 border-red-700 dark:border-red-600 text-white shadow-md shadow-red-500/20"
-                    : L === 2
-                      ? "bg-red-500/10 dark:bg-red-950/40 border-red-300 dark:border-red-800/80 text-red-600 dark:text-red-400"
-                      : Ae === "decrease"
-                        ? "border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900"
-                        : Ae === "increase"
-                          ? "border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900"
-                          : "bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800",
-                )}
-              >
-                <MovingBalanceArrows transitionType={Ae} />
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
+            const isDailyLimitReached = !isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t);
 
-                {/* Trial Badge */}
-                {t?.isTrial && (
-                  <div className="mb-2 z-10">
-                    <span className="bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-black px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>تجريبي</span>
-                    </span>
-                  </div>
-                )}
+            if ((s && ie === "main") || isDailyLimitReached) {
+              return null;
+            }
 
-                {/* Countdown */}
-                <div className="py-1 flex items-center justify-center overflow-visible z-10">
-                  <div
-                    className={"text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ".concat(
-                      L <= 1
-                        ? "text-white"
-                        : L === 2 || Ae === "decrease"
-                          ? "text-red-600 dark:text-red-400"
+            return (
+              <div className="flex gap-4 shrink-0 w-full select-none" id="persistent_balance_card">
+                {/* RIGHT CARD: Subscription countdown */}
+                <div
+                  className={"flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden ".concat(
+                    L <= 1
+                      ? "bg-red-600 dark:bg-red-700 border-red-700 dark:border-red-600 text-white shadow-md shadow-red-500/20"
+                      : L === 2
+                        ? "bg-red-500/10 dark:bg-red-950/40 border-red-300 dark:border-red-800/80 text-red-600 dark:text-red-400"
+                        : Ae === "decrease"
+                          ? "border-red-500/50 shadow-[0_4px_24px_rgba(239,68,68,0.12)] bg-[#faf9f6] dark:bg-slate-900"
                           : Ae === "increase"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : We
-                              ? "text-red-500"
-                              : "text-slate-900 dark:text-slate-100",
-                    )}
-                  >
-                    <span>باقي</span>
-                    <span className="text-4xl md:text-7xl font-extrabold font-mono tracking-tight">
-                      <AnimatedCounter value={L} disableColorChange={!0} />
-                    </span>
-                    <span>
-                      {L === 1
-                        ? "يوم"
-                        : L === 2
-                          ? "يومين"
-                          : L >= 3 && L <= 10
-                            ? "أيام"
-                            : "يوم"}
-                    </span>
+                            ? "border-emerald-500/50 shadow-[0_4px_24px_rgba(16,185,129,0.12)] bg-[#faf9f6] dark:bg-slate-900"
+                            : "bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800",
+                  )}
+                >
+                  <MovingBalanceArrows transitionType={Ae} />
+
+                  {/* Trial Badge */}
+                  {t?.isTrial && (
+                    <div className="mb-2 z-10">
+                      <span className="bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-black px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>تجريبي</span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Countdown */}
+                  <div className="py-1 flex items-center justify-center overflow-visible z-10">
+                    <div
+                      className={"text-2xl md:text-4xl font-black transition-colors duration-300 flex items-center gap-2 ".concat(
+                        L <= 1
+                          ? "text-white"
+                          : L === 2 || Ae === "decrease"
+                            ? "text-red-600 dark:text-red-400"
+                            : Ae === "increase"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : We
+                                ? "text-red-500"
+                                : "text-slate-900 dark:text-slate-100",
+                      )}
+                    >
+                      <span>باقي</span>
+                      <span className="text-4xl md:text-7xl font-extrabold font-mono tracking-tight">
+                        <AnimatedCounter value={L} disableColorChange={!0} />
+                      </span>
+                      <span>
+                        {L === 1
+                          ? "يوم"
+                          : L === 2
+                            ? "يومين"
+                            : L >= 3 && L <= 10
+                              ? "أيام"
+                              : "يوم"}
+                      </span>
+                    </div>
                   </div>
+
+                  {We && (
+                    <p
+                      className={"text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ".concat(
+                        L <= 1
+                          ? "text-white/90 font-black"
+                          : L === 2 || Ae === "decrease"
+                            ? "text-red-600 dark:text-red-400"
+                            : Ae === "increase"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : L <= 0
+                                ? "text-red-500"
+                                : "text-red-400",
+                      )}
+                    >
+                      {Ds}
+                    </p>
+                  )}
                 </div>
 
-                {We && (
-                  <p
-                    className={"text-[10px] md:text-sm font-black uppercase tracking-widest mt-1 transition-colors duration-300 z-10 ".concat(
-                      L <= 1
-                        ? "text-white/90 font-black"
-                        : L === 2 || Ae === "decrease"
-                          ? "text-red-600 dark:text-red-400"
-                          : Ae === "increase"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : L <= 0
-                              ? "text-red-500"
-                              : "text-red-400",
-                    )}
-                  >
-                    {Ds}
-                  </p>
+                {/* LEFT CARD: Daily cars info (For Limited Subscriptions) */}
+                {!isUnlimitedCapacity(t) && (
+                  <div className="flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">العدد اليومي</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl md:text-6xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
+                        {displayTodayCount}
+                      </span>
+                      <span className="text-lg md:text-2xl font-bold text-slate-400 font-mono">
+                        /{getEffectiveDailyCapacity(t)}
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
-
-              {/* LEFT CARD: Daily cars info (For Limited Subscriptions) */}
-              {(() => {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
-                return (
-                  <>
-                    {!isUnlimitedCapacity(t) && (
-                      <div className="flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">العدد اليومي</span>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-4xl md:text-6xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
-                            {displayTodayCount}
-                          </span>
-                          <span className="text-lg md:text-2xl font-bold text-slate-400 font-mono">
-                            /{getEffectiveDailyCapacity(t)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
+            );
+          })()}
           {ie === "main" ? (
             <React.Fragment>
               {(() => {
@@ -812,21 +815,39 @@ export const GarageDashboardView = memo((props: any) => {
                 const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
                 if (!isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t)) {
                   return (
-                    <div className="bg-[#faf9f6] dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 w-full shadow-sm">
-                      <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-                        <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                        </svg>
+                    <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-[2rem] border border-red-200/80 dark:border-red-900/60 relative shrink-0 p-4 md:p-8 max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto w-full transition-all duration-150 shadow-sm overflow-hidden">
+                      {/* Outer Alternating Laser Shimmer: sweeps upwards during second half of cycle */}
+                      <BorderShimmer isActive={true} rx={32} ry={32} color="#ef4444" dur="3.5s" mode="alternate-second" />
+
+                      <div className="relative h-48 sm:h-56 md:h-72 lg:h-80 rounded-2xl overflow-hidden bg-gradient-to-b from-red-500/10 via-red-500/5 to-transparent dark:from-red-950/40 dark:via-red-950/20 dark:to-transparent border-2 border-red-500/30 dark:border-red-500/40 flex flex-col items-center justify-center p-4 sm:p-6 text-center shadow-[inset_0_0_25px_rgba(239,68,68,0.12)]">
+                        {/* Inner Alternating Laser Shimmer: sweeps downwards during first half of cycle */}
+                        <BorderShimmer isActive={true} rx={16} ry={16} color="#ef4444" dur="3.5s" mode="alternate-first" />
+
+                        {/* Subtle Laser Radar Ambient Glow */}
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+                          <div 
+                            className="absolute -inset-[100%] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-500/15 via-transparent to-transparent animate-pulse" 
+                            style={{ animationDuration: '3s' }}
+                          />
+                        </div>
+
+                        {/* Content */}
+                        <div className="relative z-20 w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-red-100 dark:bg-red-900/60 flex items-center justify-center text-red-600 dark:text-red-400 mb-3 shadow-md shadow-red-500/20 shrink-0">
+                          <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8" />
+                        </div>
+                        
+                        <h3 className="relative z-20 text-base sm:text-xl md:text-2xl font-black text-red-600 dark:text-red-400 leading-tight drop-shadow-sm mb-1.5 sm:mb-2">
+                          وصلت للحد الأقصى اليومي
+                        </h3>
+                        
+                        <p className="relative z-20 text-sm sm:text-base md:text-lg font-bold text-slate-800 dark:text-slate-200 font-mono tracking-wide mb-2">
+                          ({displayTodayCount} / {getEffectiveDailyCapacity(t)} سيارة اليوم)
+                        </p>
+                        
+                        <p className="relative z-20 text-xs sm:text-sm md:text-base font-medium text-slate-500 dark:text-slate-400 max-w-xs sm:max-w-md">
+                          يرجى اختيار اشتراك أكبر لمتابعة تسجيل السيارات
+                        </p>
                       </div>
-                      <h3 className="text-lg font-black text-red-700 dark:text-red-400 text-center mb-2">
-                        وصلت للحد الأقصى اليومي
-                      </h3>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
-                        ({displayTodayCount} / {getEffectiveDailyCapacity(t)} سيارة اليوم)
-                      </p>
-                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 text-center mt-3">
-                        لازم تختار اشتراك أكبر علشان تقدر تكمل شغل براحتك
-                      </p>
                     </div>
                   );
                 }

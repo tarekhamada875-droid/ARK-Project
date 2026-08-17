@@ -28,93 +28,26 @@ interface BackTrappingProps {
   setSubscriberWarningPlate: (plate: string) => void;
 }
 
-export function useBackTrapping({
-  view,
-  setView,
-  showCheckInModal,
-  setShowCheckInModal,
-  showCheckOutModal,
-  setShowCheckOutModal,
-  showDeleteConfirm,
-  setShowDeleteConfirm,
-  showLogoutConfirm,
-  setShowLogoutConfirm,
-  showRecentExitWarning,
-  setShowRecentExitWarning,
-  showSubscriberWarning,
-  setShowSubscriberWarning,
-  showPackages,
-  setShowPackages,
-  showStaffStats,
-  setShowStaffStats,
-  showSubscribers,
-  setShowSubscribers,
-  setSelectedVehicle,
-  setSelectedGarageForDetails,
-  setSelectedDelegateForDetails,
-  setRecentVehicle,
-  setSubscriberWarningPlate
-}: BackTrappingProps) {
+export function useBackTrapping(_props: BackTrappingProps) {
+  // The mobile back button is now fully disabled.
+  // All navigation is handled by in-app close (X) buttons.
+  // This hook only pushes a history entry on mount and re-pushes on popstate
+  // to prevent the browser from navigating away or exiting the app.
+
   useEffect(() => {
-    if (!window.history.state || !window.history.state.trapped) {
-      window.history.pushState({ trapped: true }, '');
-    }
-
     const handlePopState = () => {
-      const isModalOpen = !!(
-        showCheckInModal || showCheckOutModal || showDeleteConfirm || 
-        showLogoutConfirm || showRecentExitWarning || showSubscriberWarning ||
-        showPackages || showStaffStats || showSubscribers
-      );
-      const isSubView = ['admin_login', 'delegate_login', 'admin_garage_details', 'admin_delegate_details', 'packages', 'staff_stats'].includes(view);
-
-      if (isModalOpen || isSubView) {
+      // Re-push immediately to keep the back button trapped.
+      // No navigation, no modal closing — the user must use in-app X buttons.
+      try {
         window.history.pushState({ trapped: true }, '');
-        
-        if (showPackages) setShowPackages(false);
-        if (showStaffStats) setShowStaffStats(false);
-        if (showSubscribers) setShowSubscribers(false);
-        if (showLogoutConfirm) setShowLogoutConfirm(false);
-        if (showCheckInModal) setShowCheckInModal(false);
-        if (showCheckOutModal) { setShowCheckOutModal(false); setSelectedVehicle(null); }
-        if (showDeleteConfirm) { setShowDeleteConfirm(false); setSelectedVehicle(null); }
-        if (showRecentExitWarning) { setShowRecentExitWarning(false); setRecentVehicle(null); }
-        if (showSubscriberWarning) { setShowSubscriberWarning(false); setSubscriberWarningPlate(''); }
-
-        if (view === 'admin_login' || view === 'delegate_login') setView('login');
-        if (view === 'admin_garage_details') { setView('admin_dashboard'); setSelectedGarageForDetails(null); }
-        if (view === 'admin_delegate_details') { setView('admin_dashboard'); setSelectedDelegateForDetails(null); }
-        if (view === 'packages' || view === 'staff_stats') setView('garage');
+      } catch {
+        /* ignore */
       }
     };
 
+    // Push on mount to trap the current history entry
+    window.history.pushState({ trapped: true }, '');
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [
-    view,
-    showCheckInModal,
-    showCheckOutModal,
-    showDeleteConfirm,
-    showLogoutConfirm,
-    showRecentExitWarning,
-    showSubscriberWarning,
-    showPackages,
-    showStaffStats,
-    showSubscribers,
-    setView,
-    setShowCheckInModal,
-    setShowCheckOutModal,
-    setShowDeleteConfirm,
-    setShowLogoutConfirm,
-    setShowRecentExitWarning,
-    setShowSubscriberWarning,
-    setShowPackages,
-    setShowStaffStats,
-    setShowSubscribers,
-    setSelectedVehicle,
-    setSelectedGarageForDetails,
-    setSelectedDelegateForDetails,
-    setRecentVehicle,
-    setSubscriberWarningPlate
-  ]);
+  }, []);
 }

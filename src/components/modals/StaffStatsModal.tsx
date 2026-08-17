@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Users, X, Car, Menu } from 'lucide-react';
+import { Users, ArrowRight, Car } from 'lucide-react';
 import { Staff, Vehicle } from '../../types';
 import { safeDate } from '../../utils';
 
@@ -17,8 +17,7 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
   vehiclesInside,
   todayExitedVehicles,
   onClose,
-  now,
-  onToggleMenu
+  now
 }) => {
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
@@ -35,29 +34,16 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900 shrink-0 transition-colors">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-sm font-black text-slate-900 dark:text-white">موظفي الوردية</h2>
-              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">إحصائيات اليوم</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={onClose}
-              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            {onToggleMenu && (
-              <button 
-                type="button"
-                onClick={onToggleMenu}
-                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
-              >
-                <Menu className="w-6 h-6 stroke-[3]" />
-              </button>
-            )}
+      <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 bg-slate-50 dark:bg-slate-900 shrink-0 transition-colors">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400 rounded-xl flex items-center justify-center hover:bg-teal-200 dark:hover:bg-teal-900/60 transition-colors shadow-sm outline-none shrink-0"
+            aria-label="الرجوع"
+          >
+            <ArrowRight className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">موظفي الوردية</h2>
           </div>
         </div>
 

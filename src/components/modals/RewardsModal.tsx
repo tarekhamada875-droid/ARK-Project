@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { X, Menu, HelpCircle } from 'lucide-react';
+import { ArrowRight, HelpCircle } from 'lucide-react';
 import { Garage } from '../../types';
 
 interface RewardsModalProps {
@@ -12,38 +12,24 @@ interface RewardsModalProps {
 
 export const RewardsModal: React.FC<RewardsModalProps> = memo(({
   garage,
-  onClose,
-  onToggleMenu
+  onClose
 }) => {
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
+      <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
+        <button 
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 rounded-xl flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          aria-label="الرجوع"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </button>
         <div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none transition-colors">
             المكافآت
           </h3>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={onClose}
-            className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none cursor-pointer"
-            aria-label="إغلاق"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          {onToggleMenu && (
-            <button 
-              type="button"
-              onClick={onToggleMenu}
-              className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none cursor-pointer"
-              aria-label="القائمة"
-            >
-              <Menu className="w-6 h-6 stroke-[3]" />
-            </button>
-          )}
         </div>
       </div>
 

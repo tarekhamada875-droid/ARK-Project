@@ -1374,10 +1374,20 @@ export const firestoreServiceV2 = {
           staffId: request.delegateId,
           staffName: request.delegateName,
           actionType: 'recharge',
-          plateNumber: `شحن ${request.packageName} (${request.dailyCapacity || request.carsCount || 0} سيارة) - ${request.revenueAmount} ج`,
+          plateNumber: `شحن ${request.packageName} (${request.durationDays || 30} يوم - ${request.dailyCapacity || request.carsCount || 0} سيارة) - الأصلي ${request.originalRevenueAmount !== undefined ? request.originalRevenueAmount : request.revenueAmount} ج${request.discountAmount ? ` | بعد الخصم ${request.revenueAmount} ج` : ''}`,
           timestamp: serverTimestamp(),
           amount: request.revenueAmount,
-          packageId: request.packageId
+          packageId: request.packageId,
+          details: {
+            packageName: request.packageName,
+            durationDays: request.durationDays || 30,
+            carsCount: request.dailyCapacity || request.carsCount || 0,
+            revenueAmount: request.revenueAmount,
+            originalRevenueAmount: request.originalRevenueAmount,
+            discountAmount: request.discountAmount,
+            couponCode: request.couponCode,
+            requestId: request.id
+          }
         });
       });
       

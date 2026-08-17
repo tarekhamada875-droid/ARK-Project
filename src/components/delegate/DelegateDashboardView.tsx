@@ -229,7 +229,6 @@ export const DelegateDashboardView = memo(({
             </div>
             <div>
               <h1 className="text-base font-semibold text-slate-900 dark:text-white leading-tight">لوحة المندوب</h1>
-              <p className="text-[10px] font-medium text-slate-400">{delegate.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 relative" ref={menuRef}>

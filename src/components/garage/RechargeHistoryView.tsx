@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, memo } from 'react';
-import { X, Zap, Clock, User, Menu } from 'lucide-react';
+import { ArrowRight, Zap, Clock, User } from 'lucide-react';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { ActivityLog, Garage } from '../../types';
 import { safeDate } from '../../utils';
@@ -11,7 +11,7 @@ interface RechargeHistoryViewProps {
   onToggleMenu?: () => void;
 }
 
-export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToast, onToggleMenu }: RechargeHistoryViewProps) => {
+export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToast }: RechargeHistoryViewProps) => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -80,31 +80,19 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
     <div className="fixed inset-0 bg-[#faf9f6] dark:bg-slate-950 z-[100] flex flex-col pt-safe px-safe overflow-hidden transition-colors" dir="rtl">
       {/* Header */}
       <header className="relative bg-[#faf9f6] dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3.5 z-40 w-full shrink-0">
-        <div className="max-w-4xl mx-auto flex justify-between items-center w-full">
+        <div className="max-w-4xl mx-auto flex items-center gap-4 w-full">
+          <button 
+            type="button"
+            onClick={onClose}
+            className="w-10 h-10 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 rounded-xl flex items-center justify-center hover:bg-rose-200 dark:hover:bg-rose-900/60 transition-colors shadow-sm outline-none shrink-0"
+            aria-label="الرجوع"
+          >
+            <ArrowRight className="w-5 h-5" />
+          </button>
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-sm md:text-base font-black text-slate-900 dark:text-slate-100 tracking-tight leading-tight">تاريخ شحن الباقات</h1>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">سجل عمليات الشحن الخاصة بالجراج</p>
+              <h1 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">تاريخ شحن الباقات</h1>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button 
-              type="button"
-              onClick={onClose}
-              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            {onToggleMenu && (
-              <button 
-                type="button"
-                onClick={onToggleMenu}
-                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
-              >
-                <Menu className="w-6 h-6 stroke-[3]" />
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -142,21 +130,54 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
                       <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider bg-rose-500/10 px-2 py-0.5 rounded-md">
                         عملية شحن باقة
                       </span>
-                      <h4 className="text-sm md:text-base font-black text-slate-800 dark:text-slate-100 leading-snug mt-1.5">
-                        {log.plateNumber}
-                      </h4>
+                      {log.details ? (
+                        <div className="flex flex-col gap-2 mt-2">
+                          <div className="flex items-center flex-wrap gap-2">
+                            <h4 className="text-sm md:text-base font-black text-slate-800 dark:text-slate-100 leading-snug">
+                              {log.details.packageName}
+                            </h4>
+                            {(log.details.discountAmount ?? 0) > 0 && (
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                                خصم {log.details.discountAmount} ج.م {log.details.couponCode ? `[${log.details.couponCode}]` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
+                              {log.details.durationDays} يوم
+                            </span>
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
+                              {log.details.carsCount === 0 ? 'سعة مفتوحة' : `${log.details.carsCount} سيارة/يوم`}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <h4 className="text-sm md:text-base font-black text-slate-800 dark:text-slate-100 leading-snug mt-1.5">
+                          {log.plateNumber}
+                        </h4>
+                      )}
                     </div>
-
                     <div className="flex flex-col items-end shrink-0 text-left">
-                      <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono">
-                        {log.amount !== undefined 
-                          ? `${log.amount} ج.م` 
-                          : (log.details?.revenueAmount !== undefined 
-                              ? `${log.details.revenueAmount} ج.م` 
-                              : (log.plateNumber?.match(/-\s*(\d+)\s*ج/)?.[1] 
-                                  ? `${log.plateNumber.match(/-\s*(\d+)\s*ج/)?.[1]} ج.م` 
-                                  : ''))}
-                      </span>
+                      {log.details && log.details.originalRevenueAmount !== undefined && log.details.originalRevenueAmount !== (log.details.revenueAmount ?? log.amount) ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
+                            {log.details.originalRevenueAmount} ج.م
+                          </span>
+                          <span className="text-sm md:text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                            {log.details.revenueAmount ?? log.amount} ج.م
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm md:text-base font-black text-slate-900 dark:text-white font-mono">
+                          {log.amount !== undefined 
+                            ? `${log.amount} ج.م` 
+                            : (log.details?.revenueAmount !== undefined 
+                                ? `${log.details.revenueAmount} ج.م` 
+                                : (log.plateNumber?.match(/-\s*(\d+)\s*ج/)?.[1] 
+                                    ? `${log.plateNumber.match(/-\s*(\d+)\s*ج/)?.[1]} ج.م` 
+                                    : ''))}
+                        </span>
+                      )}
                       <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/10 px-2 py-0.5 rounded-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                         مكتملة

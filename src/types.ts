@@ -143,8 +143,12 @@ export interface ActivityLog {
   operatorName?: string;
   details?: {
     packageName?: string;
+    durationDays?: number;
     carsCount?: number;
     revenueAmount?: number;
+    originalRevenueAmount?: number;
+    discountAmount?: number;
+    couponCode?: string;
     requestId?: string;
   };
 }

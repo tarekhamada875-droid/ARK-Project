@@ -99,7 +99,6 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = m
                     مالك النظام
                   </span>
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider">شاشة الإحصائيات الحية</p>
               </div>
             </div>
           )}

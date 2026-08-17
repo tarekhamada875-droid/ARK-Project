@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, Menu } from 'lucide-react';
+import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, ArrowRight } from 'lucide-react';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { auth } from '../../firebase';
 import { Subscriber, Garage } from '../../types';
@@ -14,7 +14,7 @@ interface SubscribersViewProps {
   onToggleMenu?: () => void;
 }
 
-export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu }: SubscribersViewProps) => {
+export const SubscribersView = memo(({ garage, onClose, showToast }: SubscribersViewProps) => {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -369,30 +369,19 @@ export const SubscribersView = memo(({ garage, onClose, showToast, onToggleMenu 
     <div className="fixed inset-0 bg-[#faf9f6] dark:bg-slate-950 z-[100] flex flex-col pt-safe px-safe overflow-hidden transition-colors" dir="rtl">
       {/* Header */}
       <header className="relative bg-[#faf9f6] dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 z-40 w-full shrink-0">
-        <div className="max-w-4xl mx-auto flex justify-between items-center w-full">
+        <div className="max-w-4xl mx-auto flex items-center gap-4 w-full">
+          <button 
+            type="button"
+            onClick={onClose}
+            className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-xl flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-colors shadow-sm outline-none shrink-0"
+            aria-label="الرجوع"
+          >
+            <ArrowRight className="w-5 h-5" />
+          </button>
           <div className="flex items-center gap-3">
             <div className="flex flex-col">
-              <h1 className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">الاشتراكات</h1>
+              <h1 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">الاشتراكات</h1>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button 
-              type="button"
-              onClick={onClose}
-              className="w-10 h-10 bg-red-500 text-white rounded-xl flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm outline-none"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            {onToggleMenu && (
-              <button 
-                type="button"
-                onClick={onToggleMenu}
-                className="w-10 h-10 bg-slate-900 dark:bg-slate-800 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors shadow-sm outline-none"
-              >
-                <Menu className="w-6 h-6 stroke-[3]" />
-              </button>
-            )}
           </div>
         </div>
       </header>
