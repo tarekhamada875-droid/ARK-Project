@@ -36,7 +36,8 @@ import type {
   SystemConfig 
 } from '../../types';
 import { ADMIN_PIN } from '../../constants';
-import { safeDate, packageIdToDays, withRetry } from '../../utils';
+import { getCleanPackageInfo } from '../../constants/packages';
+import { packageIdToDays, withRetry } from '../../utils';
 import { validateGarageCreation, validateRechargeRequest } from '../../domain/garage/validation';
 import { isSubscriptionExpired, calculateCapacityUsed } from '../../domain/garage/subscription';
 
@@ -109,6 +110,11 @@ export const firestoreServiceV2 = {
       isTrial: isTrial,
       dailyCapacity: isTrial ? 0 : (data.dailyCapacity || 0),
       hasMonthlySubscribers: data.hasMonthlySubscribers === true,
+      referredByGarageId: data.referredByGarageId || null,
+      referredByGarageName: data.referredByGarageName || null,
+      referralRewardClaimed: false,
+      totalReferralRewardDays: 0,
+      totalGaragesReferredCount: 0,
       carsInside: 0,
       todayCount: 0,
       todayRevenue: 0,
@@ -124,12 +130,14 @@ export const firestoreServiceV2 = {
     } else if (data.initialPackageId && data.packages) {
       const pkg = data.packages.find((p: any) => p.id === data.initialPackageId);
       if (pkg) {
-        const durationDays = pkg.durationDays || 30;
-        const dailyCapacity = pkg.dailyCapacity !== undefined ? pkg.dailyCapacity : 0;
+        const cleanPkg = getCleanPackageInfo(pkg);
+        const durationDays = cleanPkg.durationDays || 30;
+        const dailyCapacity = cleanPkg.isUnlimited ? 0 : (cleanPkg.dailyCapacity || 40);
         const expiryDate = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
         garageData.balanceExpiry = Timestamp.fromDate(expiryDate);
         garageData.dailyCapacity = dailyCapacity;
         garageData.activePackageName = pkg.name;
+        garageData.packageName = pkg.name;
       }
     }
     
@@ -166,77 +174,67 @@ export const firestoreServiceV2 = {
         if (!garageSnap.exists()) return;
         const garageData = garageSnap.data() as Garage;
 
+        // Must have been referred by another garage
         if (!garageData.referredByGarageId) return;
 
-        const createdAtDate = safeDate(garageData.createdAt);
-        const diffMs = Date.now() - createdAtDate.getTime();
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
-        if (diffDays > 183) return;
-        if ((garageData.referralRewardMonthsCount || 0) >= 6) return;
-
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        if (garageData.lastReferralRewardMonth === currentMonth) return;
-
-        const batch = writeBatch(db);
+        // Reward is granted ONCE with the first successful recharge of the referred garage
+        if (garageData.referralRewardClaimed) return;
 
         const referrerRef = doc(db, 'garages', garageData.referredByGarageId);
         const referrerSnap = await getDoc(referrerRef);
-        if (referrerSnap.exists()) {
-          const referrerData = referrerSnap.data() as Garage;
-          batch.update(referrerRef, {
-            referralBonusBalance: increment(50)
-          });
+        if (!referrerSnap.exists()) return;
+        const referrerData = referrerSnap.data() as Garage;
 
-          const logRef = doc(collection(db, 'activity_logs'));
-          batch.set(logRef, {
-            garageId: referrerData.id,
-            garageName: referrerData.name,
-            staffId: null,
-            staffName: 'النظام (مكافأة إحالة تلقائية)',
-            actionType: 'commission_payment',
-            plateNumber: `مكافأة ترشيح جراج (${garageData.name}) - شهر ${currentMonth}`,
-            timestamp: serverTimestamp(),
-            amount: 50
-          });
+        // Calculate 15 days addition for referrer
+        let baseDate = new Date();
+        const currentExpiry = referrerData.balanceExpiry;
+        if (currentExpiry) {
+          const expDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
+          if (expDate > baseDate) {
+            baseDate = expDate;
+          }
+        }
+        baseDate.setDate(baseDate.getDate() + 15);
+
+        const batch = writeBatch(db);
+
+        // Update Referrer garage: Add 15 days, unlock if locked, set capacity to at least 40
+        const referrerUpdates: any = {
+          balanceExpiry: Timestamp.fromDate(baseDate),
+          isLocked: false,
+          totalReferralRewardDays: increment(15),
+          totalGaragesReferredCount: increment(1)
+        };
+
+        if (!referrerData.dailyCapacity || referrerData.dailyCapacity <= 0) {
+          referrerUpdates.dailyCapacity = 40;
         }
 
+        batch.update(referrerRef, referrerUpdates);
+
+        // Update the referred garage so reward is only claimed once
         batch.update(garageRef, {
-          lastReferralRewardMonth: currentMonth,
-          referralRewardMonthsCount: increment(1)
+          referralRewardClaimed: true,
+          referralRewardAwardedAt: serverTimestamp()
+        });
+
+        // Add activity log for referrer
+        const logRef = doc(collection(db, 'activity_logs'));
+        batch.set(logRef, {
+          garageId: referrerData.id,
+          garageName: referrerData.name,
+          staffId: null,
+          staffName: 'النظام (مكافأة ترشيح تلقائية)',
+          actionType: 'recharge',
+          plateNumber: `مكافأة ترشيح جراج (${garageData.name}) - إضافة 15 يوم اشتراك مجاناً (سعة 40 سيارة)`,
+          timestamp: serverTimestamp(),
+          amount: 0
         });
 
         await batch.commit();
       });
     } catch (error) {
       console.error('Error in processReferralRewardForRecharge:', error);
-    }
-  },
-
-  awardMonthlyGift: async (garageId: string, month: string, carsCount: number) => {
-    try {
-      await withRetry(() => runTransaction(db, async (transaction) => {
-        const garageRef = doc(db, 'garages', garageId);
-        const garageDoc = await transaction.get(garageRef);
-        
-        if (!garageDoc.exists()) return;
-        
-        const garageData = garageDoc.data() as Garage;
-        
-        if (garageData.lastGiftMonth === month) return;
-
-        const commission = garageData.commissionPerVehicle || 1;
-        const balanceIncrement = carsCount * commission;
-
-        transaction.update(garageRef, {
-          balance: increment(balanceIncrement),
-          totalRechargedCars: increment(carsCount),
-          lastGiftMonth: month,
-          lastGiftAwardedAt: serverTimestamp(),
-          isLocked: false
-        });
-      }));
-    } catch (error) {
-       handleFirestoreError(error, OperationType.UPDATE, `garages/${garageId}/gift`);
     }
   },
 
@@ -642,11 +640,15 @@ export const firestoreServiceV2 = {
         const dateId = `${todayCounter.getFullYear()}-${String(todayCounter.getMonth() + 1).padStart(2, '0')}-${String(todayCounter.getDate()).padStart(2, '0')}`;
         const countRef = doc(db, `garages/${garageId}/daily_counts/${dateId}`);
 
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
+
         // Read all documents FIRST before executing any writes
-        const [garageSnap, countSnap, vehicleSnap] = await Promise.all([
+        const [garageSnap, countSnap, vehicleSnap, dailyStatsSnap] = await Promise.all([
           transaction.get(garageRef),
           transaction.get(countRef),
-          transaction.get(vehicleRef)
+          transaction.get(vehicleRef),
+          transaction.get(dailyStatsRef)
         ]);
         
         if (!garageSnap.exists()) throw new Error('الجراج غير موجود');
@@ -684,13 +686,37 @@ export const firestoreServiceV2 = {
           status: 'inside'
         });
         
-        const today = new Date().toISOString().split('T')[0];
         const isNewDay = garageData.lastTransactionDate !== today;
         
         transaction.update(garageRef, {
           carsInside: increment(1),
           todayCount: isNewDay ? 1 : increment(1),
           lastTransactionDate: today
+        });
+
+        // Update daily_stats subcollection (authoritative source)
+        if (!dailyStatsSnap.exists()) {
+          transaction.set(dailyStatsRef, {
+            dateId: today,
+            count: 1,
+            revenue: 0,
+            createdAt: serverTimestamp()
+          });
+        } else {
+          transaction.update(dailyStatsRef, { count: increment(1) });
+        }
+
+        // Write activity log INSIDE the transaction
+        const logRef = doc(collection(db, 'activity_logs'));
+        transaction.set(logRef, {
+          garageId: garageId,
+          garageName: garageData.name || '',
+          staffId: vehicleData.staffId || null,
+          staffName: vehicleData.staffName || 'مدير الجراج',
+          actionType: 'check_in',
+          plateNumber: vehicleData.plateNumber,
+          timestamp: serverTimestamp(),
+          amount: 0
         });
       });
       
@@ -700,17 +726,20 @@ export const firestoreServiceV2 = {
     }
   },
 
-  checkOutVehicle: async (garageId: string, vehicleId: string, cost: number): Promise<{ success: boolean; error?: string }> => {
+  checkOutVehicle: async (garageId: string, vehicleId: string, cost: number, staffName?: string, staffId?: string): Promise<{ success: boolean; error?: string }> => {
     if (cost < 0) return { success: false, error: 'المبلغ غير صالح' };
     
     try {
       await runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
         
-        const [vehicleSnap, garageSnap] = await Promise.all([
+        const [vehicleSnap, garageSnap, dailyStatsSnap] = await Promise.all([
           transaction.get(vehicleRef),
-          transaction.get(garageRef)
+          transaction.get(garageRef),
+          transaction.get(dailyStatsRef)
         ]);
         
         if (!vehicleSnap.exists()) throw new Error('العربية غير موجودة');
@@ -725,7 +754,6 @@ export const firestoreServiceV2 = {
           totalCost: cost
         });
         
-        const today = new Date().toISOString().split('T')[0];
         const garageData = garageSnap.data() || {};
         const isNewDay = garageData.lastTransactionDate !== today;
         
@@ -736,6 +764,31 @@ export const firestoreServiceV2 = {
           lastTransactionDate: today,
           carsInside: increment(-1)
         });
+
+        // Update daily_stats revenue
+        if (!dailyStatsSnap.exists()) {
+          transaction.set(dailyStatsRef, {
+            dateId: today,
+            count: 0,
+            revenue: cost,
+            createdAt: serverTimestamp()
+          });
+        } else {
+          transaction.update(dailyStatsRef, { revenue: increment(cost) });
+        }
+
+        // Write activity log INSIDE the transaction
+        const logRef = doc(collection(db, 'activity_logs'));
+        transaction.set(logRef, {
+          garageId: garageId,
+          garageName: garageData.name || '',
+          staffId: staffId || null,
+          staffName: staffName || 'مدير الجراج',
+          actionType: 'check_out',
+          plateNumber: vehicleData.plateNumber,
+          timestamp: serverTimestamp(),
+          amount: cost
+        });
       });
       
       return { success: true };
@@ -744,7 +797,7 @@ export const firestoreServiceV2 = {
     }
   },
 
-  deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, todayYMD: string) => {
+  deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, todayYMD: string, staffName?: string, staffId?: string) => {
     try {
       return await withRetry(() => runTransaction(db, async (transaction) => {
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
@@ -776,6 +829,20 @@ export const firestoreServiceV2 = {
         }
 
         transaction.update(garageRef, updates);
+
+        // Write activity log INSIDE the transaction
+        const logRef = doc(collection(db, 'activity_logs'));
+        transaction.set(logRef, {
+          garageId: garageId,
+          garageName: garageDoc.data()?.name || '',
+          staffId: staffId || null,
+          staffName: staffName || 'مدير الجراج',
+          actionType: 'delete_refund',
+          plateNumber: `مسح لوحة: ${vehicleData?.plateNumber || vehicleId}`,
+          timestamp: serverTimestamp(),
+          amount: refundAmount
+        });
+
         return true;
       }));
     } catch (error) {
@@ -1254,10 +1321,33 @@ export const firestoreServiceV2 = {
         }
         baseDate.setDate(baseDate.getDate() + days);
         
+        let effCapacity = request.dailyCapacity;
+        const pkgName = String(request.packageName || '');
+        const isUnlimitedPkg = 
+          pkgName.includes('مفتوح') || 
+          pkgName.includes('غير محدود') || 
+          pkgName.includes('غير محدودة') || 
+          pkgName.includes('بدون حدود') || 
+          pkgName.includes('سعة مفتوحة');
+
+        if (isUnlimitedPkg) {
+          effCapacity = 0;
+        } else if (typeof effCapacity !== 'number' || effCapacity <= 0) {
+          const match = pkgName.match(/(\d+)\s*سيارة/);
+          if (match && match[1]) {
+            effCapacity = parseInt(match[1], 10);
+          } else if (request.carsCount && request.carsCount > 0 && request.carsCount <= 1000 && ![7, 15, 30].includes(request.carsCount)) {
+            effCapacity = request.carsCount;
+          } else {
+            effCapacity = 40;
+          }
+        }
+
         transaction.update(garageRef, {
           balanceExpiry: Timestamp.fromDate(baseDate),
-          dailyCapacity: request.dailyCapacity !== undefined ? request.dailyCapacity : (garageData.dailyCapacity || 0),
+          dailyCapacity: effCapacity,
           activePackageName: request.packageName,
+          packageName: request.packageName,
           billingModel: 'subscription',
           isLocked: false,
           isTrial: false,

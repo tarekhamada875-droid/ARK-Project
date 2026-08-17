@@ -72,13 +72,74 @@ export const isTrialActive = (garage: any): boolean => {
   return garage.isTrial === true && !isSubscriptionExpired(garage);
 };
 
+export const getEffectiveDailyCapacity = (garage: any): number => {
+  if (!garage) return 0;
+  
+  // 1. Trial garages are unlimited
+  if (garage.isTrial === true) return 0;
+
+  // 2. Check package name or activePackageName
+  const pkgName = String(garage.activePackageName || garage.packageName || garage.lastPackageName || '');
+  const isExplicitlyUnlimited = 
+    pkgName.includes('مفتوح') || 
+    pkgName.includes('غير محدود') || 
+    pkgName.includes('غير محدودة') || 
+    pkgName.includes('بدون حدود') || 
+    pkgName.includes('سعة مفتوحة') ||
+    pkgName.includes('تجريبي');
+
+  if (isExplicitlyUnlimited) {
+    return 0; // Unlimited capacity
+  }
+
+  // 3. Explicit dailyCapacity > 0 stored on garage
+  if (typeof garage.dailyCapacity === 'number' && garage.dailyCapacity > 0) {
+    return garage.dailyCapacity;
+  }
+
+  // 4. Check carsCount / vehiclesCount if set as capacity (not duration days)
+  if (
+    typeof garage.carsCount === 'number' && 
+    garage.carsCount > 0 && 
+    garage.carsCount <= 1000 && 
+    ![7, 15, 30].includes(garage.carsCount)
+  ) {
+    return garage.carsCount;
+  }
+  if (
+    typeof garage.vehiclesCount === 'number' && 
+    garage.vehiclesCount > 0 && 
+    garage.vehiclesCount <= 1000 && 
+    ![7, 15, 30].includes(garage.vehiclesCount)
+  ) {
+    return garage.vehiclesCount;
+  }
+
+  // 5. Try parsing capacity from package name (e.g. "40 سيارة")
+  const match = pkgName.match(/(\d+)\s*سيارة/);
+  if (match && match[1]) {
+    const parsed = parseInt(match[1], 10);
+    if (parsed > 0 && parsed <= 1000) return parsed;
+  }
+
+  // 6. If dailyCapacity === 0 and package name was explicitly unlimited
+  if (garage.dailyCapacity === 0 && (pkgName.includes('مفتوح') || pkgName.includes('غير محدود'))) {
+    return 0;
+  }
+
+  // 7. Fallback for non-trial subscriptions without explicit capacity: default limited capacity is 40
+  return 40;
+};
+
 export const isUnlimitedCapacity = (garage: any): boolean => {
-  return !garage.dailyCapacity || garage.dailyCapacity <= 0;
+  return getEffectiveDailyCapacity(garage) <= 0;
 };
 
 export const calculateCapacityUsed = (garage: any): { used: number; limit: number; isUnlimited: boolean } => {
-  const used = garage.todayCount || 0;
-  const limit = garage.dailyCapacity || 0;
+  const today = new Date().toISOString().split('T')[0];
+  const isToday = garage?.lastTransactionDate === today;
+  const used = isToday ? (garage?.todayCount || 0) : 0;
+  const limit = getEffectiveDailyCapacity(garage);
   return {
     used,
     limit,

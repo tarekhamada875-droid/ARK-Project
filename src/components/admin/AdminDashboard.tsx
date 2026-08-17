@@ -31,8 +31,6 @@ import {
   Tag,
   AlertTriangle,
 } from 'lucide-react';
-import { getDocs, collection } from 'firebase/firestore';
-import { db } from '../../firebase';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { Spinner } from '../ui/Spinner';
@@ -539,47 +537,6 @@ export const AdminDashboard = memo(({
     setShowOverview(false);
   };
 
-  const exportAllData = async () => {
-    try {
-      showToast('جاري تصدير البيانات...');
-      
-      const garagesSnap = await getDocs(collection(db, 'garages'));
-      const activitySnap = await getDocs(collection(db, 'activity_logs'));
-      
-      const garagesWithVehicles: any[] = [];
-      for (const g of garagesSnap.docs) {
-        const vehiclesSnap = await getDocs(collection(db, `garages/${g.id}/vehicles`));
-        garagesWithVehicles.push({
-          ...g.data(),
-          id: g.id,
-          vehicles: vehiclesSnap.docs.map(v => ({ id: v.id, ...v.data() }))
-        });
-      }
-      
-      const data = {
-        exportDate: new Date().toISOString(),
-        garages: garagesWithVehicles,
-        activityLogs: activitySnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        delegates: delegates,
-        supervisors: supervisors,
-        generalManagers: generalManagers,
-        packages: packages
-      };
-      
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `parq-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('تم التصدير بنجاح');
-    } catch (err) {
-      console.error('Export failed:', err);
-      showToast('فشل التصدير', 'error');
-    }
-  };
-
   const [requestSubTab, setRequestSubTab] = React.useState<'recharge' | 'creation'>('recharge');
 
   const approvedGarages = React.useMemo(() => {
@@ -856,23 +813,6 @@ export const AdminDashboard = memo(({
                             <Sliders className="w-4 h-4 text-indigo-500" />
                           </div>
                           <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{t('إعدادات المظهر')}</span>
-                        </div>
-                      </button>
-
-                      {/* Export Backup Data Button */}
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setShowMenu(false);
-                          exportAllData();
-                        }}
-                        className="w-full flex items-center justify-between p-4 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 rounded-xl border-2 border-emerald-100 dark:border-emerald-800/60 transition-all outline-none cursor-pointer"
-                      >
-                        <div className="flex items-center gap-4.5">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                            <RefreshCw className="w-4 h-4" />
-                          </div>
-                          <span className="font-bold text-sm text-emerald-900 dark:text-emerald-300">تصدير نسخة احتياطية</span>
                         </div>
                       </button>
                     </div>

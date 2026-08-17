@@ -49,12 +49,11 @@ export interface GarageV2 {
   hasMonthlySubscribers?: boolean;
   referredByGarageId?: string;
   referredByGarageName?: string;
+  referralRewardClaimed?: boolean;
+  referralRewardAwardedAt?: any;
+  totalReferralRewardDays?: number;
+  totalGaragesReferredCount?: number;
   referralBonusBalance?: number;
-  lastReferralRewardMonth?: string;
-  referralRewardMonthsCount?: number;
-  monthlyGiftAmount?: number;
-  isMonthlyGiftEnabled?: boolean;
-  lastGiftMonth?: string;
   shimmerColor?: string;
   currentSessionId?: string;
   lastActive?: any;

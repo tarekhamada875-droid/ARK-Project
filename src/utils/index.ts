@@ -360,6 +360,7 @@ export {
   isSubscriptionExpired, 
   getRemainingDays, 
   isTrialActive, 
+  getEffectiveDailyCapacity,
   isUnlimitedCapacity, 
   calculateCapacityUsed 
 } from '../domain/garage/subscription';

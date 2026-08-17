@@ -3,21 +3,18 @@ import {
   X, 
   RefreshCw, 
   TrendingUp, 
-  Car, 
   CheckCircle2,
   BarChart2,
   ChevronDown,
   ChevronUp,
-  Menu,
-  CalendarDays
+  Menu
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
-import { safeDate, getRemainingDays } from '../../utils';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 
 interface GarageReportsViewProps {
   garage: Garage;
-  vehiclesInside: Vehicle[];
+  vehiclesInside?: Vehicle[];
   todayExitedVehicles: Vehicle[];
   staffList: Staff[];
   onClose: () => void;
@@ -26,26 +23,19 @@ interface GarageReportsViewProps {
 
 export const GarageReportsView = memo(({
   garage,
-  vehiclesInside,
   todayExitedVehicles,
   staffList,
   onClose,
   onToggleMenu,
 }: GarageReportsViewProps) => {
   // Manual toggle state
-  const [localVehiclesInside, setLocalVehiclesInside] = useState<Vehicle[]>(() => vehiclesInside);
   const [localTodayExitedVehicles, setLocalTodayExitedVehicles] = useState<Vehicle[]>(() => todayExitedVehicles);
   const [localGarage, setLocalGarage] = useState<Garage>(() => garage);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(() => new Date());
   const [isStaffPerformanceCollapsed, setIsStaffPerformanceCollapsed] = useState(true);
-  const [isTotalRevenueCollapsed, setIsTotalRevenueCollapsed] = useState(true);
 
   // Sync state whenever props update in real time
-  useEffect(() => {
-    setLocalVehiclesInside(vehiclesInside);
-  }, [vehiclesInside]);
-
   useEffect(() => {
     setLocalTodayExitedVehicles(todayExitedVehicles);
   }, [todayExitedVehicles]);
@@ -59,14 +49,12 @@ export const GarageReportsView = memo(({
     if (!garage?.id) return;
     setIsRefreshing(true);
     try {
-      const [freshGarage, freshExited, freshInside] = await Promise.all([
+      const [freshGarage, freshExited] = await Promise.all([
         firestoreService.getGarageById(garage.id),
-        firestoreService.getTodayTransactionsOnce(garage.id),
-        firestoreService.getVehiclesInsideOnce(garage.id)
+        firestoreService.getTodayTransactionsOnce(garage.id)
       ]);
       if (freshGarage) setLocalGarage(freshGarage);
       if (freshExited) setLocalTodayExitedVehicles(freshExited);
-      if (freshInside) setLocalVehiclesInside(freshInside);
       setLastRefreshed(new Date());
     } catch (err) {
       console.error('Failed to refresh reports from Firestore:', err);
@@ -96,10 +84,6 @@ export const GarageReportsView = memo(({
 
   // Calculations based on local state
   const stats = useMemo(() => {
-    const totalInside = localVehiclesInside.length;
-    const hourlyInside = localVehiclesInside.filter(v => v.type === 'hourly').length;
-    const overnightInside = localVehiclesInside.filter(v => v.type === 'overnight').length;
-
     const totalExited = localTodayExitedVehicles.length;
     const hourlyExited = localTodayExitedVehicles.filter(v => v.type === 'hourly').length;
     const overnightExited = localTodayExitedVehicles.filter(v => v.type === 'overnight').length;
@@ -111,17 +95,6 @@ export const GarageReportsView = memo(({
     const todayRevenue = localTodayExitedVehicles.length > 0 
       ? actualCalculatedTodayRevenue 
       : (isTodayValid ? (localGarage.todayRevenue || 0) : 0);
-    const totalRevenue = localGarage.totalRevenue || 0;
-    const currentBalance = localGarage.balance || 0;
-    // Calculate remaining subscription days
-    const remainingDays = getRemainingDays(localGarage);
-    let formattedExpiryDate = '';
-    if (localGarage.balanceExpiry) {
-      const expiryDate = safeDate(localGarage.balanceExpiry);
-      if (!isNaN(expiryDate.getTime())) {
-        formattedExpiryDate = expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
-      }
-    }
 
     // Staff Performance (Grouped by completed exits today)
     const staffPerformance: Record<string, { count: number; revenue: number }> = {};
@@ -144,22 +117,15 @@ export const GarageReportsView = memo(({
     });
 
     return {
-      totalInside,
-      hourlyInside,
-      overnightInside,
       totalExited,
       hourlyExited,
       overnightExited,
       todayRevenue,
-      totalRevenue,
-      currentBalance,
-      remainingDays,
-      formattedExpiryDate,
       staffPerformance: Object.entries(staffPerformance)
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => b.revenue - a.revenue)
     };
-  }, [localVehiclesInside, localTodayExitedVehicles, localGarage, staffList]);
+  }, [localTodayExitedVehicles, localGarage, staffList]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors select-none" dir="rtl">
@@ -215,34 +181,6 @@ export const GarageReportsView = memo(({
         {/* Row 1: Grid metrics */}
         <div className="grid grid-cols-2 gap-3.5">
           
-          {/* Card: Balance / Subscription */}
-          <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-xl flex flex-col justify-between shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500">
-                الاشتراك المتبقي
-              </span>
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                stats.remainingDays <= 2
-                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
-                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
-              }`}>
-                <CalendarDays className="w-3.5 h-3.5 stroke-[2.5]" />
-              </div>
-            </div>
-            <div>
-              <p className={`text-lg font-black leading-none font-mono ${stats.remainingDays <= 0 ? 'text-red-500 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
-                {stats.remainingDays} <span className="text-[10px] font-bold text-slate-400">يوم</span>
-              </p>
-              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1.5 block leading-none truncate">
-                {stats.remainingDays <= 0
-                  ? 'الاشتراك منتهي'
-                  : stats.formattedExpiryDate
-                  ? `ينتهي: ${stats.formattedExpiryDate}`
-                  : 'نظام الاشتراك'}
-              </span>
-            </div>
-          </div>
-
           {/* Card: Revenue */}
           <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-xl flex flex-col justify-between shadow-sm">
             <div className="flex items-center justify-between mb-2">
@@ -254,22 +192,6 @@ export const GarageReportsView = memo(({
             <p className="text-lg font-black text-slate-900 dark:text-white leading-none font-mono">
               {stats.todayRevenue} <span className="text-[10px] font-bold text-slate-400">ج.م</span>
             </p>
-          </div>
-
-          {/* Card: Inside Vehicles */}
-          <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-xl flex flex-col shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500">بالداخل الآن</span>
-              <div className="w-7 h-7 bg-amber-50 dark:bg-amber-950/40 rounded-lg flex items-center justify-center text-amber-500 dark:text-amber-400">
-                <Car className="w-3.5 h-3.5 stroke-[2.3]" />
-              </div>
-            </div>
-            <p className="text-lg font-black text-slate-900 dark:text-white leading-none font-mono">
-              {stats.totalInside} <span className="text-[10px] font-bold text-slate-400">مركبة</span>
-            </p>
-            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold mt-1.5 leading-none">
-              ساعة: {stats.hourlyInside} • مبيت: {stats.overnightInside}
-            </span>
           </div>
 
           {/* Card: Departures */}
@@ -336,37 +258,6 @@ export const GarageReportsView = memo(({
                   لا يوجد معاملات بيع مسجلة لأي موظف اليوم.
                 </div>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Row 3: Total Revenue Progression (Historical reference from database) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xs relative">
-          <button
-            onClick={() => setIsTotalRevenueCollapsed(!isTotalRevenueCollapsed)}
-            className="w-full p-4 flex items-center justify-between cursor-pointer select-none outline-none text-right"
-          >
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-              <h3 className="text-[11px] font-extrabold text-slate-400">مجموع المبيعات التاريخية</h3>
-            </div>
-            <div>
-              {isTotalRevenueCollapsed ? (
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 stroke-[3]" />
-              ) : (
-                <ChevronUp className="w-3.5 h-3.5 text-slate-400 stroke-[3]" />
-              )}
-            </div>
-          </button>
-          
-          {!isTotalRevenueCollapsed && (
-            <div className="p-4 pt-0 flex items-center justify-between border-t border-slate-800/40 relative overflow-hidden">
-              <div>
-                <p className="text-xl font-black font-mono text-emerald-400 mt-1">
-                  {stats.totalRevenue} <span className="text-xs text-white">ج.م</span>
-                </p>
-              </div>
-              <span className="text-[10px] font-bold text-slate-500">متراكم منذ تفعيل الحساب</span>
             </div>
           )}
         </div>

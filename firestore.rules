@@ -150,6 +150,12 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isRateLimited(collectionPath) {
+      let rateLimitRef = /databases/$(database)/documents/admin_rate_limits/$(request.auth.uid)/$(collectionPath);
+      let lastOp = exists(rateLimitRef) ? get(rateLimitRef).data.lastOperationAt : null;
+      return lastOp != null && (request.time.toMillis() - lastOp.toMillis()) < 5000;
+    }
+
     // ===============================================================
     // Verification Schema Rules
     // ===============================================================
@@ -171,7 +177,12 @@ service cloud.firestore {
              (!('recentExits' in data) || data.recentExits is list) &&
              (!('lastTransactionDate' in data) || data.lastTransactionDate is string) &&
              (!('lastRechargeDate' in data) || data.lastRechargeDate is timestamp) &&
-             (!('activePlates' in data) || data.activePlates is map);
+             (!('activePlates' in data) || data.activePlates is map) &&
+             (!('referredByGarageId' in data) || data.referredByGarageId == null || (data.referredByGarageId is string && isValidId(data.referredByGarageId))) &&
+             (!('referredByGarageName' in data) || data.referredByGarageName == null || data.referredByGarageName is string) &&
+             (!('referralRewardClaimed' in data) || data.referralRewardClaimed is bool) &&
+             (!('totalReferralRewardDays' in data) || data.totalReferralRewardDays is number) &&
+             (!('totalGaragesReferredCount' in data) || data.totalGaragesReferredCount is number);
     }
 
     function isGarageUpdateValid(data) {
@@ -199,7 +210,16 @@ service cloud.firestore {
              (!('lastGiftMonth' in data) || data.lastGiftMonth is string) &&
              (!('currentSessionId' in data) || data.currentSessionId == null || (data.currentSessionId is string && data.currentSessionId.size() <= 128)) &&
              (!('shimmerColor' in data) || data.shimmerColor is string) &&
-             (!('lastActive' in data) || data.lastActive == null || data.lastActive is timestamp);
+             (!('lastActive' in data) || data.lastActive == null || data.lastActive is timestamp) &&
+             (!('referredByGarageId' in data) || data.referredByGarageId == null || (data.referredByGarageId is string && isValidId(data.referredByGarageId))) &&
+             (!('referredByGarageName' in data) || data.referredByGarageName == null || data.referredByGarageName is string) &&
+             (!('referralRewardClaimed' in data) || data.referralRewardClaimed is bool) &&
+             (!('totalReferralRewardDays' in data) || data.totalReferralRewardDays is number) &&
+             (!('totalGaragesReferredCount' in data) || data.totalGaragesReferredCount is number) &&
+             (!('referralRewardAwardedAt' in data) || data.referralRewardAwardedAt == null || data.referralRewardAwardedAt is timestamp) &&
+             (!('balanceExpiry' in data) || data.balanceExpiry == null || data.balanceExpiry is timestamp) &&
+             (!('dailyCapacity' in data) || data.dailyCapacity is number) &&
+             (!('isLocked' in data) || data.isLocked is bool);
     }
 
     function isValidVehicle(data) {
@@ -415,6 +435,9 @@ service cloud.firestore {
       allow list: if isAdmin() || isDelegate() || isSupervisor() || isGarageSession(resource.data.garageId);
       allow create: if isSignedIn() && isValidActivityLog(incoming()) && isValidId(logId) && 
                     (isAdmin() || isDelegate() || isSupervisor() || isGarageSession(incoming().garageId));
+      // Logs are IMMUTABLE after creation — explicitly deny all updates
+      allow update: if false;
+      // Only Admin can delete logs (for cleanup purposes only)
       allow delete: if isAdmin() && isValidId(logId);
     }
 
@@ -482,13 +505,20 @@ service cloud.firestore {
       allow delete: if (isAdmin() || isGarageSession(existing().garageId)) && isValidId(staffId);
     }
 
+    match /admin_rate_limits/{adminUid}/{collectionPath} {
+      allow read: if isAdmin() && adminUid == request.auth.uid;
+      allow write: if isAdmin() && adminUid == request.auth.uid;
+    }
+
     match /garages/{garageId} {
       allow get: if isSignedIn() && isValidId(garageId);
       allow list: if isSignedIn();
       allow create: if (isAdmin() || isDelegate() || isSupervisor()) && isValidId(garageId) && 
                       incoming().keys().hasAll(['name', 'phone', 'hourlyRate', 'overnightRate', 'createdAt', 'billingModel', 'pin']) &&
-                      isValidGarage(incoming());
-      allow delete: if (isAdmin() || isSupervisor()) && isValidId(garageId);
+                      isValidGarage(incoming()) &&
+                      (!isAdmin() || !isRateLimited('garage_create'));
+      allow delete: if (isAdmin() || isSupervisor()) && isValidId(garageId) &&
+                      (!isAdmin() || !isRateLimited('garage_delete'));
       
       // Detailed Update Logic
       allow update: if isValidId(garageId) && isSignedIn() && (
@@ -496,7 +526,7 @@ service cloud.firestore {
         isSupervisor() ||
         isGarageSession(garageId) ||
         // Delegate can update balance, totalAdminRevenue, isLocked etc
-        (isDelegate() && incoming().diff(existing()).affectedKeys().hasAny(['balance', 'totalAdminRevenue', 'isLocked'])) ||
+        (isDelegate() && incoming().diff(existing()).affectedKeys().hasAny(['balance', 'totalAdminRevenue', 'isLocked', 'balanceExpiry', 'dailyCapacity', 'activePackageName', 'packageName', 'billingModel', 'isTrial']) && incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'totalAdminRevenue', 'isLocked', 'balanceExpiry', 'dailyCapacity', 'activePackageName', 'packageName', 'billingModel', 'isTrial'])) ||
         // Standard garage update
         (isGarageSession(garageId) && isGarageUpdateValid(incoming()) && (
           // Secure balance: can only be increased by Admin or isDelegate, otherwise must be a decrease (for commission / checkout)
@@ -535,13 +565,29 @@ service cloud.firestore {
                          ) &&
                          incoming().keys().hasAll(['plateNumber', 'entryTime', 'type', 'garageId', 'status', 'plateNumberRaw']) &&
                          isValidVehicle(incoming());
-        allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming());
+        allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming()) &&
+                      (
+                        existing().status == 'outside' ? incoming().status == 'inside' :
+                        existing().status == 'inside' ? incoming().status == 'outside' :
+                        true
+                      );
         allow delete: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
       }
 
       match /daily_stats/{dateId} {
         allow get: if isSignedIn() && isValidId(dateId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
-        allow write, delete: if (isAdmin() || isSupervisor() || isDelegate() || isGarageSession(garageId)) && isValidId(dateId);
+        allow create: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
+                         !exists(/databases/$(database)/documents/garages/$(garageId)/daily_stats/$(dateId)) &&
+                         request.resource.data.dateId == dateId &&
+                         request.resource.data.keys().hasOnly(['dateId', 'count', 'revenue', 'createdAt']);
+        allow update: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
+                         (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['count']) &&
+                            incoming().count == existing().count + 1) ||
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['revenue']) &&
+                            incoming().revenue >= existing().revenue)
+                         );
+        allow delete: if false;
       }
 
       match /subscribers/{subscriberId} {

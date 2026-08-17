@@ -3,6 +3,7 @@ import { serverTimestamp, Timestamp, onSnapshot, doc, collection, query, where, 
 import { onAuthStateChanged, User, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { APP_TEXT, ADMIN_PIN } from '../constants';
+import { getCleanPackageInfo } from '../constants/packages';
 import { firestoreServiceV2 as firestoreService, firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
 import { Garage, Vehicle, Package, Staff, RechargeRequest, Supervisor, GeneralManager } from '../types';
 import { 
@@ -15,6 +16,8 @@ import {
   getStorage,
   isSessionActive,
   isSubscriptionExpired,
+  getEffectiveDailyCapacity,
+  isUnlimitedCapacity,
   applyMonthlySubscribersSurcharge,
   createAsyncLock
 } from '../utils';
@@ -184,16 +187,14 @@ export function useGarageApp() {
     const unsub = firestoreService.subscribeToTodayTransactions(garage.id, (completedTransactions) => {
       setTodayTransactions(completedTransactions);
       const actualRevenue = (completedTransactions || []).reduce((sum, v) => sum + (typeof v.totalCost === 'number' ? v.totalCost : 0), 0);
-      const actualCount = (completedTransactions || []).length;
-      if (garage.todayRevenue !== actualRevenue || garage.todayCount !== actualCount) {
+      if (garage.todayRevenue !== actualRevenue) {
         firestoreService.updateGarage(garage.id, {
-          todayRevenue: actualRevenue,
-          todayCount: actualCount
+          todayRevenue: actualRevenue
         }).catch(() => {});
       }
     });
     return () => unsub();
-  }, [isSessionReady, garage?.id]);
+  }, [isSessionReady, garage?.id, garage?.todayRevenue]);
 
   const loadGarageData = useCallback(async (garageId: string) => {
     try {
@@ -578,19 +579,15 @@ export function useGarageApp() {
               }
             }
             
-            if (data.todayRevenue !== undefined && data.todayRevenue !== null && (!data.lastTransactionDate || data.lastTransactionDate !== todayStr)) {
-              updatesToHeal.todayRevenue = 0;
+            if (!data.lastTransactionDate || data.lastTransactionDate !== todayStr) {
+              if (data.todayRevenue !== 0) updatesToHeal.todayRevenue = 0;
+              if (data.todayCount !== 0) updatesToHeal.todayCount = 0;
+            } else if (data.todayCount && data.todayCount === data.carsInside && data.todayCount > 40) {
+              updatesToHeal.todayCount = 0;
             }
 
             if (Object.keys(updatesToHeal).length > 0) {
               firestoreService.updateGarage(data.id, updatesToHeal).catch(() => {});
-            }
-
-            if (data.isMonthlyGiftEnabled && data.monthlyGiftAmount && data.monthlyGiftAmount > 0) {
-              const currentMonth = new Date().toISOString().slice(0, 7);
-              if (data.lastGiftMonth !== currentMonth) {
-                firestoreService.awardMonthlyGift(data.id, currentMonth, data.monthlyGiftAmount);
-              }
             }
 
             if (view === 'admin_garage_details') {
@@ -1068,7 +1065,10 @@ export function useGarageApp() {
           return;
         }
         
-        const durationDays = pkg ? (pkg.durationDays || 30) : 30;
+        const cleanPkg = pkg ? getCleanPackageInfo(pkg) : null;
+        const durationDays = cleanPkg ? cleanPkg.durationDays : 30;
+        const effCap = cleanPkg ? (cleanPkg.isUnlimited ? 0 : (cleanPkg.dailyCapacity || 40)) : 0;
+        
         let revenueIncrement = pkg ? pkg.price : amount;
         const originalRev = discountInfo?.originalRevenueAmount !== undefined ? discountInfo.originalRevenueAmount : revenueIncrement;
 
@@ -1087,8 +1087,8 @@ export function useGarageApp() {
           packageName: pkg?.name || 'مبلغ مخصص',
           amount: revenueIncrement,
           durationDays: durationDays,
-          carsCount: pkg ? (pkg.dailyCapacity || 0) : 0,
-          dailyCapacity: pkg?.dailyCapacity !== undefined ? pkg.dailyCapacity : 0,
+          carsCount: effCap,
+          dailyCapacity: effCap,
           revenueAmount: revenueIncrement,
           originalRevenueAmount: originalRev,
           discountAmount: discountInfo?.discountAmount || 0
@@ -1182,10 +1182,11 @@ export function useGarageApp() {
       return;
     }
 
-    if (garage.dailyCapacity && garage.dailyCapacity > 0) {
+    if (!isUnlimitedCapacity(garage)) {
+      const effCap = getEffectiveDailyCapacity(garage);
       const todayCount = garage.todayCount || 0;
-      if (todayCount >= garage.dailyCapacity) {
-        showToast(`عفواً، وصلت للحد الأقصى اليومي للباقة (${garage.dailyCapacity} سيارة/يوم). يرجى ترقية الباقة لتسجيل المزيد.`, 'error');
+      if (todayCount >= effCap) {
+        showToast(`عفواً، وصلت للحد الأقصى اليومي للباقة (${effCap} سيارة/يوم). يرجى ترقية الباقة لتسجيل المزيد.`, 'error');
         soundManager.play('error');
         return;
       }
@@ -1212,15 +1213,6 @@ export function useGarageApp() {
         if (!res.success) {
           throw new Error(res.error);
         }
-
-        firestoreService.addActivityLog({
-          garageId: garage.id,
-          staffId: currentStaff ? currentStaff.id : null,
-          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-          actionType: 'check_in',
-          plateNumber: formatted,
-          timestamp: serverTimestamp() as any
-        }).catch(err => console.warn('CheckIn activity log error:', err));
 
         const newVehicleObj: Vehicle = {
           id: raw,
@@ -1292,21 +1284,18 @@ export function useGarageApp() {
         const cost = calculateCost(vehicleToOut, garage, now);
 
         const res = await withAsyncLock(`checkout-${garage.id}-${vehicleToOut.id}`, () =>
-          firestoreServiceV2.checkOutVehicle(garage.id, vehicleToOut.id, cost)
+          firestoreServiceV2.checkOutVehicle(
+            garage.id,
+            vehicleToOut.id,
+            cost,
+            currentStaff ? currentStaff.name : 'مدير الجراج',
+            currentStaff ? currentStaff.id : undefined
+          )
         );
 
         if (!res.success) {
           throw new Error(res.error);
         }
-        
-        firestoreService.addActivityLog({
-          garageId: garage.id,
-          staffId: currentStaff ? currentStaff.id : null,
-          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-          actionType: 'check_out',
-          plateNumber: vehicleToOut.plateNumber,
-          timestamp: serverTimestamp() as any
-        }).catch(err => console.warn('CheckOut activity log error:', err));
 
         setVehicles(prev => prev.filter(v => v.id !== vehicleToOut.id));
         setShowCheckOutModal(false);
@@ -1382,16 +1371,15 @@ export function useGarageApp() {
     setShowDeleteConfirm(false);
 
     try {
-      const success = await firestoreService.deleteVehicleWithRefund(garage.id, selectedVehicle.id, 0, garage.lastRefundDate || '');
+      const success = await firestoreService.deleteVehicleWithRefund(
+        garage.id,
+        selectedVehicle.id,
+        0,
+        garage.lastRefundDate || '',
+        currentStaff ? currentStaff.name : 'مدير الجراج',
+        currentStaff ? currentStaff.id : undefined
+      );
       if (success) {
-        await firestoreService.addActivityLog({
-          garageId: garage.id,
-          staffId: currentStaff ? currentStaff.id : null,
-          staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
-          actionType: 'delete_refund',
-          plateNumber: `مسح لوحة: ${selectedVehicle.plateNumber}`,
-          timestamp: serverTimestamp() as any
-        });
         showToast('اللوحة اتمسحت بنجاح');
       }
     } catch (err) {

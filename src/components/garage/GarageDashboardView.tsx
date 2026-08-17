@@ -26,7 +26,7 @@ import { Announcement } from "../../types";
 import { FlipNumber } from "../ui/FlipNumber";
 import { AnimatedCounter } from "../AnimatedCounter";
 import { useTheme } from "../../utils/ThemeContext";
-import { resolveShimmerColor, isLightColor, getRemainingDays, safeDate } from "../../utils";
+import { resolveShimmerColor, isLightColor, getRemainingDays, safeDate, getEffectiveDailyCapacity, isUnlimitedCapacity } from "../../utils";
 import { soundManager } from "../../utils/sounds";
 import { auth } from "../../firebase";
 import { firestoreServiceV2 as firestoreService } from "../../services/domain/firestoreServiceV2";
@@ -535,9 +535,9 @@ export const GarageDashboardView = memo((props: any) => {
                                   }
                                 </div>
                               }
-                              {(t.referralBonusBalance || 0) > 0 && (
+                              {(t.totalReferralRewardDays || 0) > 0 && (
                                 <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-xs font-black font-mono">
-                                  {t.referralBonusBalance} ج.م
+                                  +{t.totalReferralRewardDays} يوم
                                 </span>
                               )}
                             </button>
@@ -781,42 +781,57 @@ export const GarageDashboardView = memo((props: any) => {
                 )}
               </div>
 
-              {/* LEFT CARD: Daily cars info */}
-              {t.dailyCapacity !== undefined && t.dailyCapacity > 0 && (
-                <div className="flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">السيارات بالداخل</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl md:text-6xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
-                      {t.carsInside || 0}
-                    </span>
-                    <span className="text-lg md:text-2xl font-bold text-slate-400">
-                      {t.dailyCapacity !== undefined && t.dailyCapacity > 0 ? `/${t.dailyCapacity}` : ''}
-                    </span>
-                  </div>
-                </div>
-              )}
+              {/* LEFT CARD: Daily cars info (For Limited Subscriptions) */}
+              {(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
+                return (
+                  <>
+                    {!isUnlimitedCapacity(t) && (
+                      <div className="flex-1 transition-all duration-300 py-2.5 md:py-6 px-4 md:px-6 rounded-[1.75rem] border flex flex-col items-center justify-center text-center shadow-sm relative overflow-hidden bg-[#faf9f6] dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">العدد اليومي</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl md:text-6xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
+                            {displayTodayCount}
+                          </span>
+                          <span className="text-lg md:text-2xl font-bold text-slate-400 font-mono">
+                            /{getEffectiveDailyCapacity(t)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
           {ie === "main" ? (
             <React.Fragment>
-              {t.dailyCapacity !== undefined && t.dailyCapacity > 0 && (t.todayCount || 0) >= t.dailyCapacity ? (
-                <div className="bg-[#faf9f6] dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 w-full shadow-sm">
-                  <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-black text-red-700 dark:text-red-400 text-center mb-2">
-                    وصلت للحد الأقصى اليومي
-                  </h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
-                    ({t.todayCount || 0} / {t.dailyCapacity} سيارة اليوم)
-                  </p>
-                  <p className="text-base font-bold text-slate-800 dark:text-slate-200 text-center mt-3">
-                    لازم تختار اشتراك أكبر علشان تقدر تكمل شغل براحتك
-                  </p>
-                </div>
-              ) : (
+              {(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
+                if (!isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t)) {
+                  return (
+                    <div className="bg-[#faf9f6] dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-[2rem] overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 w-full shadow-sm">
+                      <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                        <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-black text-red-700 dark:text-red-400 text-center mb-2">
+                        وصلت للحد الأقصى اليومي
+                      </h3>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
+                        ({displayTodayCount} / {getEffectiveDailyCapacity(t)} سيارة اليوم)
+                      </p>
+                      <p className="text-base font-bold text-slate-800 dark:text-slate-200 text-center mt-3">
+                        لازم تختار اشتراك أكبر علشان تقدر تكمل شغل براحتك
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })() || (
                 <RegistrationCard
                   newPlateNumber={x}
                   setNewPlateNumber={b}
