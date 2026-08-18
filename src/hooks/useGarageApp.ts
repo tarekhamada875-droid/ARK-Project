@@ -24,6 +24,7 @@ import {
 import { useLocalStorageState } from './useLocalStorage';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useServerTime } from './useServerTime';
+import { useSystemSurchargePercent } from './useSystemSurchargePercent';
 import { soundManager } from '../utils/sounds';
 import { useAppStore } from '../store/appStore';
 
@@ -84,6 +85,7 @@ export function useGarageApp() {
   }, []);
 
   // Persisted state fields
+  const surchargePercent = useSystemSurchargePercent();
   const [view, setView] = useLocalStorageState<'login' | 'garage' | 'admin_login' | 'admin_dashboard' | 'admin_garage_details' | 'admin_delegate_details' | 'delegate_login' | 'delegate_dashboard' | 'packages' | 'staff_stats' | 'general_manager_dashboard'>('app_view', 'login');
   const [garage, setGarage] = useLocalStorageState<Garage | null>('app_garage', null);
   const [delegate, setDelegate] = useLocalStorageState<any | null>('app_delegate', null);
@@ -1076,7 +1078,7 @@ export function useGarageApp() {
           revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
         }
 
-        revenueIncrement = applyMonthlySubscribersSurcharge(revenueIncrement, g.hasMonthlySubscribers || false);
+        revenueIncrement = applyMonthlySubscribersSurcharge(revenueIncrement, g.hasMonthlySubscribers || false, surchargePercent);
 
         const rechargePayload: any = {
           garageId: garageId,
@@ -1104,7 +1106,7 @@ export function useGarageApp() {
     if (lockResult === null) {
       showToast('جاري إرسال الطلب... يرجى الانتظار', 'info');
     }
-  }, [isOnline, allGarages, delegate, showToast]);
+  }, [isOnline, allGarages, delegate, surchargePercent, showToast]);
 
   const handleCheckIn = useCallback(async (type: 'hourly' | 'overnight', bypassWarning = false) => {
     if (!isOnline) {
@@ -1205,6 +1207,7 @@ export function useGarageApp() {
             plateNumberRaw: raw,
             type: type,
             garageId: garage.id,
+            staffId: currentStaff ? currentStaff.id : null,
             staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
             isSubscriber: isSubscriber
           })
@@ -1222,6 +1225,7 @@ export function useGarageApp() {
           type: type,
           garageId: garage.id,
           status: 'inside',
+          staffId: currentStaff ? currentStaff.id : null,
           staffName: currentStaff ? currentStaff.name : 'مدير الجراج',
           isSubscriber: isSubscriber
         };
@@ -1358,6 +1362,22 @@ export function useGarageApp() {
     }
     if (!garage || !selectedVehicle) return;
 
+    // Owner-only deletion check
+    const isOwner = currentStaff 
+      ? (typeof selectedVehicle.staffId === 'string' && selectedVehicle.staffId === currentStaff.id)
+      : (selectedVehicle.staffId == null);
+    if (!isOwner) {
+      showToast('يمكن فقط لمسجّل هذه السيارة حذفها', 'error');
+      return;
+    }
+
+    // Daily limit guard (Max 3 deletions/day)
+    const todayYMD = new Date().toISOString().split('T')[0];
+    if (garage.lastDeletionDate === todayYMD && (garage.dailyDeletionCount ?? 0) >= 3) {
+      showToast('وصلت للحد الأقصى للحذف اليوم (3 مرات)', 'error');
+      return;
+    }
+
     if (isLoading || deletingVehicleRef.current === selectedVehicle.id) {
       return;
     }
@@ -1375,16 +1395,20 @@ export function useGarageApp() {
         garage.id,
         selectedVehicle.id,
         0,
-        garage.lastRefundDate || '',
+        todayYMD,
         currentStaff ? currentStaff.name : 'مدير الجراج',
         currentStaff ? currentStaff.id : undefined
       );
       if (success) {
         showToast('اللوحة اتمسحت بنجاح');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Delete Vehicle Error:', err);
-      showToast('فشل في حذف السيارة برصيد، جرب تانى', 'error');
+      if (err?.message === 'reached_daily_deletion_limit' || err?.message?.includes('reached_daily_deletion_limit')) {
+        showToast('وصلت للحد الأقصى للحذف اليوم (3 مرات)', 'error');
+      } else {
+        showToast('فشل في حذف السيارة برصيد، جرب تانى', 'error');
+      }
     } finally {
       if (selectedVehicle) {
         setVehicles(prev => prev.filter(v => v.id !== selectedVehicle.id));

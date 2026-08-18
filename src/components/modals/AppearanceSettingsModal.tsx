@@ -11,7 +11,7 @@ interface AppearanceSettingsModalProps {
   garage?: Garage | null;
   currentStaff?: Staff | null;
   onClose: () => void;
-  showToast: (msg: string, type: 'success' | 'error') => void;
+  showToast?: (msg: string, type: 'success' | 'error') => void;
   onToggleMenu?: () => void;
   adminColor?: string;
   onUpdateAdminColor?: (color: string) => void;
@@ -56,11 +56,11 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
         await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
       }
       soundManager.play('setting');
-      showToast('تم تحديث لون الإضاءة بنجاح', 'success');
+      showToast?.('تم تحديث لون الإضاءة بنجاح', 'success');
       setPendingColor(null);
     } catch (err) {
       console.error('Failed to update shimmer color:', err);
-      showToast('حدث خطأ أثناء تحديث اللون', 'error');
+      showToast?.('حدث خطأ أثناء تحديث اللون', 'error');
     } finally {
       setIsSaving(false);
     }

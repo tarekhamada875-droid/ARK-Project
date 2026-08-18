@@ -4,6 +4,7 @@ import { firestoreServiceV2 as firestoreService } from '../../services/domain/fi
 import { auth } from '../../firebase';
 import { Subscriber, Garage } from '../../types';
 import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersSurcharge } from '../../utils';
+import { useSystemSurchargePercent } from '../../hooks/useSystemSurchargePercent';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 
@@ -15,6 +16,7 @@ interface SubscribersViewProps {
 }
 
 export const SubscribersView = memo(({ garage, onClose, showToast }: SubscribersViewProps) => {
+  const surchargePercent = useSystemSurchargePercent();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -238,7 +240,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
       return;
     }
 
-    const effectiveCostUnits = applyMonthlySubscribersSurcharge(costUnits, !!garage.hasMonthlySubscribers);
+    const effectiveCostUnits = applyMonthlySubscribersSurcharge(costUnits, !!garage.hasMonthlySubscribers, surchargePercent);
 
     setIsSubmitting(true);
     try {
@@ -283,7 +285,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
     }
 
     const baseUnits = 5;
-    const effectiveUnits = applyMonthlySubscribersSurcharge(baseUnits, !!garage.hasMonthlySubscribers);
+    const effectiveUnits = applyMonthlySubscribersSurcharge(baseUnits, !!garage.hasMonthlySubscribers, surchargePercent);
 
     if (!editingSubscriber) {
       if (isSubscriptionExpired) {

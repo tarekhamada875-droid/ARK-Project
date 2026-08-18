@@ -25,9 +25,14 @@ describe('calculateFinalPrice', () => {
     expect(result.hasDiscount).toBe(false);
   });
 
-  test('applies 25% surcharge for monthly subscribers', () => {
+  test('applies 25% surcharge for monthly subscribers by default', () => {
     const result = calculateFinalPrice({ price: 1000 }, true);
     expect(result.finalPrice).toBe(1250);
+  });
+
+  test('applies custom configured surcharge percent for monthly subscribers', () => {
+    const result = calculateFinalPrice({ price: 1000 }, true, 30);
+    expect(result.finalPrice).toBe(1300);
   });
 
   test('applies percentage discount correctly', () => {
@@ -53,8 +58,12 @@ describe('applyMonthlySubscribersSurcharge', () => {
     expect(applyMonthlySubscribersSurcharge(750, false)).toBe(750);
   });
 
-  test('applies 25% with subscribers', () => {
+  test('applies 25% with subscribers by default', () => {
     expect(applyMonthlySubscribersSurcharge(750, true)).toBe(938); // 750 * 1.25 = 937.5 -> 938
+  });
+
+  test('applies custom configured surcharge percent with subscribers', () => {
+    expect(applyMonthlySubscribersSurcharge(750, true, 20)).toBe(900); // 750 * 1.20 = 900
   });
 });
 

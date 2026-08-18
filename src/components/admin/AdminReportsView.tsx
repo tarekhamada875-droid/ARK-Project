@@ -238,7 +238,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  جراجات متبقي في اشتراكها 7 أيام أو أقل وتتطلب المتابعة أو التجديد
+                  {t('جراجات متبقي في اشتراكها 7 أيام أو أقل وتتطلب المتابعة أو التجديد')}
                 </p>
               </div>
             </div>
@@ -276,19 +276,19 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
                         ? 'bg-amber-500 text-white' 
                         : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
                     }`}>
-                      {isExpired ? 'منتهي' : `متبقي ${g.remainingDays} يوم`}
+                      {isExpired ? t('منتهي') : `${t('متبقي')} ${g.remainingDays} ${t('يوم')}`}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[10px]">
                     <div className="text-slate-500 dark:text-slate-400">
-                      <span>الباقة: </span>
+                      <span>{t('الباقة')}: </span>
                       <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {g.activePackageName || 'باقة قياسية'}
+                        {g.activePackageName || t('باقة قياسية')}
                       </span>
                       {g.isTrial && (
                         <span className="mr-1 text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
-                          تجريبي
+                          {t('تجريبي')}
                         </span>
                       )}
                     </div>
@@ -446,10 +446,10 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-amber-500" />
-            <span>سجل العمليات والنشاطات الأخير (مفصل)</span>
+            <span>{t('سجل العمليات والنشاطات الأخير (مفصل)')}</span>
           </h2>
           <span className="text-xs font-bold text-slate-400 font-mono">
-            {activityLogs.length} سجل
+            {activityLogs.length} {t('سجل')}
           </span>
         </div>
 
@@ -465,7 +465,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
                     {log.plateNumber || log.actionType}
                   </div>
                   <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                    {log.garageName} • {log.staffName || 'السيستم'}
+                    {log.garageName} • {log.staffName || t('السيستم')}
                   </div>
                 </div>
               </div>
@@ -473,11 +473,11 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
               <div className="text-left font-mono">
                 {log.amount !== undefined && (
                   <div className="text-xs font-black text-emerald-500">
-                    +{log.amount} ج.م
+                    +{log.amount} {adminLang === 'en' ? 'EGP' : 'ج.م'}
                   </div>
                 )}
                 <div className="text-[9px] font-bold text-slate-400 mt-0.5">
-                  {safeDate(log.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                  {safeDate(log.timestamp).toLocaleTimeString(adminLang === 'en' ? 'en-US' : 'ar-EG', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
@@ -485,7 +485,7 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
 
           {activityLogs.length === 0 && !isLoadingLogs && (
             <div className="p-8 text-center text-xs font-bold text-slate-400">
-              لا توجد سجلات نشاط متاحة حالياً
+              {t('لا توجد سجلات نشاط متاحة حالياً')}
             </div>
           )}
         </div>
@@ -495,9 +495,9 @@ export const AdminReportsView = memo(({ allGarages, delegates }: AdminReportsVie
             <button
               onClick={loadMoreActivityLogs}
               disabled={isLoadingLogs}
-              className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-black text-xs transition-all shadow-sm active:scale-95"
+              className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-black text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
             >
-              {isLoadingLogs ? 'جاري التحميل...' : 'تحميل المزيد من السجلات...'}
+              {isLoadingLogs ? t('جاري التحميل...') : t('تحميل المزيد من السجلات...')}
             </button>
           </div>
         )}

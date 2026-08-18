@@ -256,7 +256,6 @@ export default function App() {
             packages={sortedPackages}
             onLogout={handleInitiateLogout}
             rechargeRequests={rechargeRequests}
-            showToast={showToast}
             currentSupervisor={currentSupervisor}
             supervisors={supervisors}
             generalManagers={generalManagers}
@@ -320,7 +319,6 @@ export default function App() {
             setSelectedGarageForDetails={setSelectedGarageForDetails}
             setShowDeleteConfirm={setShowDeleteConfirm}
             updateGarageRate={updateGarageRate}
-            showToast={showToast}
             staffList={staffList}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
@@ -489,6 +487,7 @@ export default function App() {
           <CheckOutModal 
             selectedVehicle={selectedVehicle}
             garage={garage}
+            currentStaff={currentStaff}
             isLoading={isLoading}
             loadingType={loadingType}
             now={now}

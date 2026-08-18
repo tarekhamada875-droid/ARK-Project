@@ -79,7 +79,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidId(id) {
-      return id is string && id.size() <= 128;
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function isSignedIn() {
@@ -140,6 +140,18 @@ service cloud.firestore {
     function isStaffSession(staffId) {
       return isSignedIn() && exists(/databases/$(database)/documents/staff_sessions/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/staff_sessions/$(request.auth.uid)).data.staffId == staffId;
+    }
+
+    function isOwnerDeleter(garageId, vehicleData) {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/garage_sessions/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/garage_sessions/$(request.auth.uid)).data.garageId == garageId &&
+         vehicleData.staffId == null) ||
+        (exists(/databases/$(database)/documents/staff_sessions/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/staff_sessions/$(request.auth.uid)).data.garageId == garageId &&
+         vehicleData.staffId is string &&
+         get(/databases/$(database)/documents/staff_sessions/$(request.auth.uid)).data.staffId == vehicleData.staffId)
+      );
     }
 
     function incoming() {
@@ -207,6 +219,8 @@ service cloud.firestore {
              (!('todayCount' in data) || data.todayCount is number) &&
              (!('dailyRefundCount' in data) || data.dailyRefundCount is number) &&
              (!('lastRefundDate' in data) || data.lastRefundDate is string) &&
+             (!('dailyDeletionCount' in data) || data.dailyDeletionCount is number) &&
+             (!('lastDeletionDate' in data) || data.lastDeletionDate is string) &&
              (!('lastGiftMonth' in data) || data.lastGiftMonth is string) &&
              (!('currentSessionId' in data) || data.currentSessionId == null || (data.currentSessionId is string && data.currentSessionId.size() <= 128)) &&
              (!('shimmerColor' in data) || data.shimmerColor is string) &&
@@ -232,6 +246,7 @@ service cloud.firestore {
              (!('totalCost' in data) || (data.totalCost is number && data.totalCost >= 0)) &&
              (!('exitTime' in data) || data.exitTime is timestamp) &&
              (!('isSubscriber' in data) || data.isSubscriber is bool) &&
+             (!('staffId' in data) || data.staffId == null || (data.staffId is string && isValidId(data.staffId))) &&
              (!('staffName' in data) || (data.staffName is string && data.staffName.size() <= 100));
     }
 
@@ -558,15 +573,18 @@ service cloud.firestore {
                            ? get(/databases/$(database)/documents/garages/$(garageId)/vehicles/$(vehicleId)).data.status == 'outside'
                            : true
                          ) &&
-                         incoming().keys().hasAll(['plateNumber', 'entryTime', 'type', 'garageId', 'status', 'plateNumberRaw']) &&
-                         isValidVehicle(incoming());
+                          incoming().keys().hasAll(['plateNumber', 'entryTime', 'type', 'garageId', 'status', 'plateNumberRaw']) &&
+                          isValidVehicle(incoming());
         allow update: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) && isValidVehicle(incoming()) &&
                       (
                         existing().status == 'outside' ? incoming().status == 'inside' :
                         existing().status == 'inside' ? incoming().status == 'outside' :
                         true
                       );
-        allow delete: if isSignedIn() && isValidId(vehicleId) && (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate());
+        allow delete: if isSignedIn() && isValidId(vehicleId) && (
+          isAdmin() || isSupervisor() || isDelegate() ||
+          (isOwnerDeleter(garageId, resource.data) && resource.data.status == 'inside')
+        );
       }
 
       match /daily_stats/{dateId} {
@@ -576,7 +594,7 @@ service cloud.firestore {
                          request.resource.data.keys().hasOnly(['dateId', 'count', 'revenue', 'createdAt']);
         allow update: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
                          (
-                           (incoming().diff(existing()).affectedKeys().hasOnly(['count']) && (incoming().count == existing().count + 1)) ||
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['count']) && (incoming().count == existing().count + 1 || incoming().count == existing().count - 1)) ||
                            (incoming().diff(existing()).affectedKeys().hasOnly(['revenue']) && (incoming().revenue >= existing().revenue))
                          );
         allow delete: if false;
@@ -606,10 +624,14 @@ service cloud.firestore {
                        request.resource.data.dateId == dateId;
 
       allow update: if (isGarageSession(garageId) || isAdmin() || isSupervisor() || isDelegate()) &&
-                       request.resource.data.count == resource.data.count + 1 &&
                        (
-                         resource.data.limit == 0 ||
-                         request.resource.data.count <= resource.data.limit
+                         request.resource.data.count == resource.data.count + 1 ||
+                         (request.resource.data.count == resource.data.count - 1 && resource.data.count > 0)
+                       ) &&
+                       (
+                         (request.resource.data.count == resource.data.count + 1 ?
+                           (resource.data.limit == 0 || request.resource.data.count <= resource.data.limit) :
+                           true)
                        );
 
       allow delete: if false;

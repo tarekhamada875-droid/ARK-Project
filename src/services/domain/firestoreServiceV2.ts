@@ -682,8 +682,11 @@ export const firestoreServiceV2 = {
         transaction.set(vehicleRef, {
           ...vehicleData,
           id: plateRaw,
+          plate: vehicleData.plateNumber,
           entryTime: serverTimestamp(),
-          status: 'inside'
+          status: 'inside',
+          staffId: vehicleData.staffId ?? null,
+          staffName: vehicleData.staffName || 'مدير الجراج',
         });
         
         const isNewDay = garageData.lastTransactionDate !== today;
@@ -797,26 +800,41 @@ export const firestoreServiceV2 = {
     }
   },
 
-  deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, todayYMD: string, staffName?: string, staffId?: string) => {
+  deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, _passedTodayYMD?: string, staffName?: string, staffId?: string) => {
     try {
       return await withRetry(() => runTransaction(db, async (transaction) => {
+        const todayYMD = new Date().toISOString().split('T')[0]; // compute fresh; never use the passed stale date
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
         const garageRef = doc(db, 'garages', garageId);
+        const countRef = doc(db, `garages/${garageId}/daily_counts/${todayYMD}`);
+        const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats/${todayYMD}`);
         
-        const [vehicleDoc, garageDoc] = await Promise.all([
+        // Read all documents FIRST before executing any writes
+        const [vehicleDoc, garageDoc, countDoc, dailyStatsDoc] = await Promise.all([
           transaction.get(vehicleRef),
-          transaction.get(garageRef)
+          transaction.get(garageRef),
+          transaction.get(countRef),
+          transaction.get(dailyStatsRef)
         ]);
         
         if (!vehicleDoc.exists() || !garageDoc.exists()) return false; 
         
+        const garageData = garageDoc.data() || {};
+        const vehicleData = vehicleDoc.data() || {};
+
+        const todayDeletions = garageData.lastDeletionDate === todayYMD ? (garageData.dailyDeletionCount ?? 0) : 0;
+        if (todayDeletions >= 3) {
+          throw new Error('reached_daily_deletion_limit');
+        }
+
         transaction.delete(vehicleRef);
 
-        const isSameDay = garageDoc.data()?.lastRefundDate === todayYMD;
-        const vehicleData = vehicleDoc.data();
+        const isSameRefundDay = garageData.lastRefundDate === todayYMD;
         const updates: any = {
           isLocked: false,
-          dailyRefundCount: isSameDay ? increment(1) : 1,
+          dailyDeletionCount: todayDeletions + 1,
+          lastDeletionDate: todayYMD,
+          dailyRefundCount: isSameRefundDay ? ((garageData.dailyRefundCount ?? 0) + 1) : 1,
           lastRefundDate: todayYMD
         };
 
@@ -824,21 +842,38 @@ export const firestoreServiceV2 = {
           updates.balance = increment(refundAmount);
         }
 
-        if (vehicleData?.status === 'inside') {
+        if (vehicleData.status === 'inside') {
           updates.carsInside = increment(-1);
+          updates.todayCount = increment(-1);
         }
 
         transaction.update(garageRef, updates);
+
+        // Rollback daily counters if the deleted vehicle was still inside
+        if (vehicleData.status === 'inside') {
+          if (countDoc.exists()) {
+            const prevCount = countDoc.data()?.count ?? 0;
+            if (prevCount > 0) {
+              transaction.update(countRef, { count: prevCount - 1 });
+            }
+          }
+          if (dailyStatsDoc.exists()) {
+            const prevCount = dailyStatsDoc.data()?.count ?? 0;
+            if (prevCount > 0) {
+              transaction.update(dailyStatsRef, { count: prevCount - 1 });
+            }
+          }
+        }
 
         // Write activity log INSIDE the transaction
         const logRef = doc(collection(db, 'activity_logs'));
         transaction.set(logRef, {
           garageId: garageId,
-          garageName: garageDoc.data()?.name || '',
-          staffId: staffId || null,
-          staffName: staffName || 'مدير الجراج',
+          garageName: garageData.name || '',
+          staffId: staffId || vehicleData.staffId || null,
+          staffName: staffName || vehicleData.staffName || 'مدير الجراج',
           actionType: 'delete_refund',
-          plateNumber: `مسح لوحة: ${vehicleData?.plateNumber || vehicleId}`,
+          plateNumber: `مسح لوحة: ${vehicleData.plateNumber || vehicleId}`,
           timestamp: serverTimestamp(),
           amount: refundAmount
         });
@@ -1578,6 +1613,30 @@ export const firestoreServiceV2 = {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Announcement));
       callback(list);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'announcements'));
+  },
+
+  subscribeToSystemConfig: (callback: (config: SystemConfig | null) => void) => {
+    return onSnapshot(doc(db, 'system_config', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        callback({ id: docSnap.id, ...docSnap.data() } as SystemConfig);
+      } else {
+        const defaults: SystemConfig = { 
+          defaultTrialDays: 15, 
+          warningDaysThreshold: 3, 
+          supportPhone: '01000000000',
+          walletNumber: '01000000000',
+          monthlySubscribersSurchargePercent: 25,
+          isMaintenanceMode: false,
+          maintenanceMessage: ''
+        };
+        setDoc(doc(db, 'system_config', 'global'), defaults, { merge: true })
+          .then(() => callback(defaults))
+          .catch(() => callback(null));
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'system_config/global');
+      callback(null);
+    });
   },
 
   getSystemConfig: async (): Promise<SystemConfig | null> => {

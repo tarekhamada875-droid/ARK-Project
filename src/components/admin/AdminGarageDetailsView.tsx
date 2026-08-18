@@ -24,10 +24,11 @@ import {
 } from 'lucide-react';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { serverTimestamp, Timestamp } from 'firebase/firestore';
-import { normalizeDigits, safeDate, getRemainingDays } from '../../utils';
+import { normalizeDigits, safeDate, getRemainingDays, applyMonthlySubscribersSurcharge } from '../../utils';
 import { Garage, Staff, Package } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
+import { useSystemConfig } from '../../hooks/useSystemConfig';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 
 interface AdminGarageDetailsViewProps {
@@ -36,7 +37,6 @@ interface AdminGarageDetailsViewProps {
   setSelectedGarageForDetails: (garage: Garage | null) => void;
   setShowDeleteConfirm: (show: boolean) => void;
   updateGarageRate: (garage: Garage, field: keyof Garage, value: number) => Promise<void>;
-  showToast: (message: string, type?: 'success' | 'error') => void;
   staffList: Staff[];
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -51,7 +51,6 @@ export const AdminGarageDetailsView = memo(({
   setSelectedGarageForDetails,
   setShowDeleteConfirm,
   updateGarageRate: _updateGarageRate,
-  showToast,
   staffList,
   isLoading,
   setIsLoading,
@@ -79,6 +78,8 @@ export const AdminGarageDetailsView = memo(({
   const [hourlyRateInput, setHourlyRateInput] = useState<string>(String(selectedGarageForDetails.hourlyRate || 0));
   const [overnightRateInput, setOvernightRateInput] = useState<string>(String(selectedGarageForDetails.overnightRate || 0));
   const [isSavingRates, setIsSavingRates] = useState(false);
+  const config = useSystemConfig();
+  const surchargePercent = Number(config?.monthlySubscribersSurchargePercent) || 25;
 
   React.useEffect(() => {
     setHourlyRateInput(String(selectedGarageForDetails.hourlyRate || 0));
@@ -98,7 +99,6 @@ export const AdminGarageDetailsView = memo(({
     const overnight = Number(normalizeDigits(overnightRateInput));
 
     if (isNaN(hourly) || isNaN(overnight)) {
-      showToast(t('الرجاء إدخال أرقام صحيحة'), 'error');
       return;
     }
 
@@ -108,9 +108,8 @@ export const AdminGarageDetailsView = memo(({
         hourlyRate: hourly,
         overnightRate: overnight,
       });
-      showToast(t('تم تحديث التعريفة بنجاح'));
     } catch (e) {
-      showToast(t('فشل تحديث التعريفة'), 'error');
+      console.error(e);
     } finally {
       setIsSavingRates(false);
     }
@@ -169,17 +168,16 @@ export const AdminGarageDetailsView = memo(({
         garageId: selectedGarageForDetails.id,
         garageName: selectedGarageForDetails.name,
         staffId: 'admin',
-        staffName: adminLang === 'en' ? 'System Administrator (Admin)' : 'مدير النظام (Admin)',
+        staffName: t('مدير النظام (Admin)'),
         actionType: 'recharge',
         plateNumber: adminLang === 'en' ? `Recharge Subscription: ${pkg.name} (${pkg.vehiclesCount} Days) - ${pkg.price} EGP` : `تجديد اشتراك: ${pkg.name} (${pkg.vehiclesCount} يوم) - ${pkg.price} ج`,
         timestamp: serverTimestamp() as any,
         amount: pkg.price,
         packageId: pkg.id
       });
-      showToast(adminLang === 'en' ? `Subscription extended by ${pkg.vehiclesCount} days` : `تم تمديد الاشتراك بـ ${pkg.vehiclesCount} يوم`);
       setPendingPackage(null);
     } catch (e) { 
-      showToast(t('فشل'), 'error'); 
+      console.error(e);
     } finally { 
       setIsLoading(false); 
     }
@@ -198,9 +196,8 @@ export const AdminGarageDetailsView = memo(({
         todayRevenue: 0,
         todayCount: 0
       });
-      showToast(adminLang === 'en' ? 'Today counters reset successfully' : 'تم تصفير عداد وإيراد اليوم بنجاح');
     } catch (e) {
-      showToast(t('فشل'), 'error');
+      console.error(e);
     } finally {
       setIsLoading(false);
     }
@@ -382,23 +379,20 @@ export const AdminGarageDetailsView = memo(({
                                 <button
                                     onClick={async () => {
                                         if (garagePinInput.length < 4) {
-                                            showToast(adminLang === 'en' ? 'Access PIN must be at least 4 digits' : 'رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
                                             return;
                                         }
                                         setIsUpdatingGaragePin(true);
                                         try {
                                             const pinCheck = await firestoreService.isPinTaken(garagePinInput, selectedGarageForDetails.id);
                                             if (pinCheck.taken) {
-                                                showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
                                                 setIsUpdatingGaragePin(false);
                                                 return;
                                             }
                                             await firestoreService.updateGarage(selectedGarageForDetails.id, { pin: garagePinInput });
                                             selectedGarageForDetails.pin = garagePinInput;
                                             setIsEditingGaragePin(false);
-                                            showToast(t('تم تحديث الرمز بنجاح'));
                                         } catch (err) {
-                                            showToast(t('فشل تحديث الرمز'), 'error');
+                                            console.error(err);
                                         } finally {
                                             setIsUpdatingGaragePin(false);
                                         }
@@ -548,7 +542,7 @@ export const AdminGarageDetailsView = memo(({
                 {t('خدمة المشتركين الشهريين / الإيواء')}
               </h4>
               <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 leading-relaxed">
-                {t('عند تفعيل هذا الخيار يتم زيادة 25% تلقائياً على قيمة أية باقة أو اشتراك بالجراج.')}
+                {t('عند تفعيل هذا الخيار يتم زيادة')} {surchargePercent}% {t('تلقائياً على قيمة أية باقة أو اشتراك بالجراج.')}
               </p>
             </div>
             <button 
@@ -558,9 +552,8 @@ export const AdminGarageDetailsView = memo(({
                 try {
                   await firestoreService.updateGarage(selectedGarageForDetails.id, { hasMonthlySubscribers: newState });
                   setSelectedGarageForDetails({ ...selectedGarageForDetails, hasMonthlySubscribers: newState });
-                  showToast(newState ? t('تم تفعيل خدمة المشتركين الشهريين (+25% زيادة على الباقة)') : t('تم إيقاف خدمة المشتركين الشهريين'));
                 } catch (e) {
-                  showToast(t('حدث خطأ أثناء حفظ الإعداد'), 'error');
+                  console.error(e);
                 }
               }}
               className={`w-16 h-8 rounded-full p-1 transition-all duration-300 relative shrink-0 mr-4 ${
@@ -613,9 +606,8 @@ export const AdminGarageDetailsView = memo(({
                       referredByGarageId: refId || null,
                       referredByGarageName: refGarage ? refGarage.name : null
                     });
-                    showToast('تم تحديث الجراج المُرشِّح بنجاح');
                   } catch (err) {
-                    showToast('فشل تحديث البيانات', 'error');
+                    console.error(err);
                   }
                 }}
                 className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500"
@@ -661,11 +653,11 @@ export const AdminGarageDetailsView = memo(({
                         <div className="flex items-center gap-2 self-end sm:self-auto">
                           {isClaimed ? (
                             <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400 flex items-center gap-1">
-                              <span>✓</span> تم منح 15 يوم مكافأة
+                              <span>✓</span> {t('تم منح 15 يوم مكافأة')}
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400">
-                              في انتظار أول شحنة للجراج
+                              {t('في انتظار أول شحنة للجراج')}
                             </span>
                           )}
                         </div>
@@ -714,23 +706,20 @@ export const AdminGarageDetailsView = memo(({
                                                 <button
                                                     onClick={async () => {
                                                         if (editingStaffPinValue.length < 4) {
-                                                            showToast(adminLang === 'en' ? 'Access PIN must be at least 4 digits' : 'رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
                                                             return;
                                                         }
                                                         setIsUpdatingStaffPin(true);
                                                         try {
                                                             const pinCheck = await firestoreService.isPinTaken(editingStaffPinValue, s.id);
                                                             if (pinCheck.taken) {
-                                                                showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
                                                                 setIsUpdatingStaffPin(false);
                                                                 return;
                                                             }
                                                             await firestoreService.updateStaff(s.id, { pin: editingStaffPinValue });
                                                             s.pin = editingStaffPinValue;
                                                             setEditingStaffPinId(null);
-                                                            showToast(t('تم تحديث الرمز بنجاح'));
                                                         } catch (err) {
-                                                            showToast(t('فشل تحديث الرمز'), 'error');
+                                                            console.error(err);
                                                         } finally {
                                                             setIsUpdatingStaffPin(false);
                                                         }
@@ -843,10 +832,9 @@ export const AdminGarageDetailsView = memo(({
                           try { 
                             const updateFields: any = { balance: 0, isLocked: true, balanceExpiry: Timestamp.fromDate(new Date()) };
                             await firestoreService.updateGarage(selectedGarageForDetails.id, updateFields); 
-                            showToast(t('تم التصفير')); 
                             setShowClearBalanceConfirm(false); 
                           } 
-                          catch (error) { showToast(t('فشل'), 'error'); } finally { setIsLoading(false); }
+                          catch (error) { console.error(error); } finally { setIsLoading(false); }
                         }}
                         className="flex-1 py-3 bg-red-500 text-white rounded-xl font-black text-xs hover:bg-red-600 transition-all outline-none cursor-pointer"
                       >
@@ -884,12 +872,8 @@ export const AdminGarageDetailsView = memo(({
                                         : pkg.price;
                                     
                                     const basePrice = hasDiscount ? discountedPrice : pkg.price;
-                                    const effectivePrice = selectedGarageForDetails.hasMonthlySubscribers
-                                        ? Math.round(basePrice * 1.25)
-                                        : basePrice;
-                                    const originalDisplayPrice = selectedGarageForDetails.hasMonthlySubscribers
-                                        ? Math.round(pkg.price * 1.25)
-                                        : pkg.price;
+                                    const effectivePrice = applyMonthlySubscribersSurcharge(basePrice, !!selectedGarageForDetails.hasMonthlySubscribers, surchargePercent);
+                                    const originalDisplayPrice = applyMonthlySubscribersSurcharge(pkg.price, !!selectedGarageForDetails.hasMonthlySubscribers, surchargePercent);
 
                                     return (
                                         <button
@@ -905,7 +889,7 @@ export const AdminGarageDetailsView = memo(({
                                         >
                                             {selectedGarageForDetails.hasMonthlySubscribers && (
                                               <span className="absolute top-2 right-2 bg-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10">
-                                                +25% شهريين
+                                                +{surchargePercent}% {t('شهريين')}
                                               </span>
                                             )}
 
@@ -972,7 +956,6 @@ export const AdminGarageDetailsView = memo(({
                             try {
                                 const pinCheck = await firestoreService.isPinTaken(staffForm.pin);
                                 if (pinCheck.taken) {
-                                    showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
                                     setIsLoading(false);
                                     return;
                                 }
@@ -983,9 +966,8 @@ export const AdminGarageDetailsView = memo(({
                                     role: 'staff' 
                                 });
                                 setShowAddStaffModal(false);
-                                showToast(t('تمت إضافة الموظف بنجاح'));
                             } catch (e) { 
-                                showToast(t('فشل في الإضافة'), 'error'); 
+                                console.error(e);
                             } finally { 
                                 setIsLoading(false); 
                             }
@@ -1067,7 +1049,7 @@ export const AdminGarageDetailsView = memo(({
               <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-4 mb-6 text-center">
                 <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
                   <Users className="w-3.5 h-3.5 shrink-0" />
-                  {t('تتضمن زيادة 25% لحساب المشتركين الشهريين')}
+                  {t('تتضمن زيادة')} {surchargePercent}% {t('لحساب المشتركين الشهريين')}
                 </p>
               </div>
             )}
@@ -1112,9 +1094,8 @@ export const AdminGarageDetailsView = memo(({
                                 try {
                                     await firestoreService.removeStaff(staffToDelete.id);
                                     setStaffToDelete(null);
-                                    showToast(t('تم حذف الموظف'));
                                 } catch (e) { 
-                                    showToast(t('فشل في الحذف'), 'error'); 
+                                    console.error(e);
                                 } finally { 
                                     setIsLoading(false); 
                                 }

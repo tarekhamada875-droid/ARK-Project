@@ -55,6 +55,8 @@ export interface Garage {
   totalRechargedCars?: number;
   dailyRefundCount?: number;
   lastRefundDate?: string; // YYYY-MM-DD
+  dailyDeletionCount?: number;
+  lastDeletionDate?: string; // YYYY-MM-DD
   todayRevenue?: number;
   todayCount?: number;
   lastTransactionDate?: string; // YYYY-MM-DD
@@ -175,6 +177,7 @@ export interface Vehicle {
   garageId: string;
   status: 'inside' | 'outside';
   totalCost?: number;
+  staffId?: string | null;
   staffName?: string;
   isSubscriber?: boolean;
 }

@@ -25,6 +25,7 @@ import { Garage, Delegate, Package, RechargeRequest } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
 import { generateSafePin, safeDate, getRemainingDays, calculateFinalPrice } from '../../utils';
+import { useSystemSurchargePercent } from '../../hooks/useSystemSurchargePercent';
 
 interface DelegateDashboardViewProps {
   delegate: Delegate;
@@ -58,6 +59,7 @@ export const DelegateDashboardView = memo(({
   showToast,
   subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
 }: DelegateDashboardViewProps) => {
+  const surchargePercent = useSystemSurchargePercent();
   const [activeTab, setActiveTab] = useState<'garages' | 'performance'>('garages');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGarage, setSelectedGarage] = useState<Garage | null>(null);
@@ -741,7 +743,7 @@ export const DelegateDashboardView = memo(({
               <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
                 <div className="space-y-0.5 text-right">
                   <label className="text-xs font-black text-slate-900 dark:text-white block">مشتركين شهريين / إيواء</label>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة 25% تلقائياً على الاشتراك/الباقة</span>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة {surchargePercent}% تلقائياً على الاشتراك/الباقة</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input type="checkbox" name="hasMonthlySubscribers" className="sr-only peer" />
@@ -915,7 +917,7 @@ export const DelegateDashboardView = memo(({
                     const list = packages;
                     
                     return list.map((pkg) => {
-                      const { finalPrice: effectivePrice, displayBasePrice: displayOriginal, hasDiscount } = calculateFinalPrice(pkg, selectedGarage.hasMonthlySubscribers || false);
+                      const { finalPrice: effectivePrice, displayBasePrice: displayOriginal, hasDiscount } = calculateFinalPrice(pkg, selectedGarage.hasMonthlySubscribers || false, surchargePercent);
 
                       const info = getCleanPackageInfo(pkg);
 
@@ -937,7 +939,7 @@ export const DelegateDashboardView = memo(({
 
                           {selectedGarage.hasMonthlySubscribers && (
                             <span className="absolute top-2 left-2 bg-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10">
-                              +25%
+                              +{surchargePercent}%
                             </span>
                           )}
 
@@ -998,7 +1000,7 @@ export const DelegateDashboardView = memo(({
                 </div>
 
                 {(() => {
-                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false);
+                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, surchargePercent);
 
                   return (
                     <>
@@ -1029,7 +1031,7 @@ export const DelegateDashboardView = memo(({
                         <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
                           <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
                             <Users className="w-3.5 h-3.5 shrink-0" />
-                            يتضمن زيادة 25% لحساب المشتركين الشهريين
+                            يتضمن زيادة {surchargePercent}% لحساب المشتركين الشهريين
                           </p>
                         </div>
                       )}

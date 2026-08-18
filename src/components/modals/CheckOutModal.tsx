@@ -3,12 +3,13 @@ import { AlertTriangle, LogOut } from 'lucide-react';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { Spinner } from '../ui/Spinner';
 import { safeDate, calculateCost, formatEntryTimeParts } from '../../utils';
-import { Vehicle, Garage } from '../../types';
+import { Vehicle, Garage, Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CheckOutModalProps {
   selectedVehicle: Vehicle;
   garage: Garage;
+  currentStaff?: Staff | null;
   isLoading: boolean;
   loadingType: string | null;
   now: Date;
@@ -20,6 +21,7 @@ interface CheckOutModalProps {
 export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
   selectedVehicle,
   garage,
+  currentStaff,
   isLoading,
   loadingType,
   now,
@@ -30,6 +32,9 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
   const entryDate = selectedVehicle.entryTime ? safeDate(selectedVehicle.entryTime) : now;
   const diffMs = Math.max(0, now.getTime() - entryDate.getTime());
   const isInitialMinute = !selectedVehicle.isSubscriber && diffMs <= 300000; // 5 minutes grace period for entry errors (matches refund logic)
+  const isOwner = currentStaff 
+    ? (typeof selectedVehicle.staffId === 'string' && selectedVehicle.staffId === currentStaff.id) 
+    : (selectedVehicle.staffId == null);
 
   const [confirmingSide, setConfirmingSide] = React.useState<'left' | 'right' | null>(null);
   const [showLargeButton, setShowLargeButton] = React.useState(false);
@@ -437,7 +442,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
 
               </div>
 
-              {isInitialMinute && (
+              {isInitialMinute && isOwner && (
                 <button 
                   onClick={onDelete}
                   disabled={isLoading}

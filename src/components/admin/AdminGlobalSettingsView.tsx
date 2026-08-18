@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Settings, 
   Save, 
   ShieldAlert, 
   Loader2,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { SystemConfig } from '../../types';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
@@ -12,12 +13,10 @@ import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 
 interface AdminGlobalSettingsViewProps {
-  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  // Cleaned up - no showToast to avoid duplicate notifications
 }
 
-export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = ({
-  showToast
-}) => {
+export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = () => {
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
 
@@ -31,6 +30,7 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
@@ -60,6 +60,7 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setStatusMessage(null);
     try {
       await firestoreService.updateSystemConfig({
         defaultTrialDays: Number(config.defaultTrialDays) || 15,
@@ -68,10 +69,11 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
         isMaintenanceMode: !!config.isMaintenanceMode,
         maintenanceMessage: (config.maintenanceMessage || '').trim()
       });
-      showToast(t('تم حفظ وتحديث الإعدادات العامة للنظام بنجاح'));
+      setStatusMessage({ type: 'success', text: t('تم حفظ وتحديث الإعدادات العامة للنظام بنجاح') });
+      setTimeout(() => setStatusMessage(null), 4000);
     } catch (err) {
       console.error(err);
-      showToast(t('فشل حفظ الإعدادات العامة'), 'error');
+      setStatusMessage({ type: 'error', text: t('فشل حفظ الإعدادات العامة') });
     } finally {
       setIsSaving(false);
     }
@@ -88,21 +90,6 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-200">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md flex items-center justify-between gap-4 border border-slate-700">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm shrink-0">
-            <Settings className="w-8 h-8 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black">{t('الإعدادات العامة للنظام')}</h2>
-            <p className="text-xs sm:text-sm text-slate-300 font-bold mt-1">
-              {t('التحكم في الثوابت الديناميكية، مدد التجربة، وتنبيهات الاشتراك')}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <form onSubmit={handleSave} className="space-y-6">
         {/* Section 1: Subscriptions & Trials */}
         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
@@ -218,6 +205,22 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
             </div>
           )}
         </div>
+
+        {/* Status Feedback Banner */}
+        {statusMessage && (
+          <div className={`p-4 rounded-2xl border-2 flex items-center gap-3 transition-all animate-in fade-in slide-in-from-top-2 duration-200 ${
+            statusMessage.type === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+              : 'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-800 text-red-800 dark:text-red-200'
+          }`}>
+            {statusMessage.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+            )}
+            <span className="text-xs font-black">{statusMessage.text}</span>
+          </div>
+        )}
 
         {/* Submit Button */}
         <button

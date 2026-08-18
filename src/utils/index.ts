@@ -367,18 +367,20 @@ export {
 export { validateVehicleEntry, validateGarageCreation, validateRechargeRequest } from '../domain/garage/validation';
 
 /**
- * Applies the 25% surcharge for garages with monthly subscribers.
+ * Applies the configured monthly-subscribers surcharge (default 25%).
+ * Percent comes from system_config/global (monthlySubscribersSurchargePercent).
  */
-export const applyMonthlySubscribersSurcharge = (price: number, hasMonthlySubscribers: boolean): number => {
-  return hasMonthlySubscribers ? Math.round(price * 1.25) : price;
+export const applyMonthlySubscribersSurcharge = (price: number, hasMonthlySubscribers: boolean, surchargePercent: number = 25): number => {
+  const pct = Number(surchargePercent) || 25;
+  return hasMonthlySubscribers ? Math.round(price * (1 + pct / 100)) : price;
 };
 
 /**
  * Calculates the final display price for a package:
  * 1. Apply discount (percentage or fixed)
- * 2. Apply monthly subscribers surcharge (25%)
+ * 2. Apply monthly subscribers surcharge (configured percentage, default 25%)
  */
-export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean): {
+export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, surchargePercent: number = 25): {
   basePrice: number;
   hasDiscount: boolean;
   discountedPrice: number;
@@ -403,8 +405,8 @@ export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean): {
         ? Math.round(basePrice * (1 - pkg.discountValue / 100))
         : Math.max(0, basePrice - pkg.discountValue))
     : basePrice;
-  const finalPrice = applyMonthlySubscribersSurcharge(discountedPrice, hasMonthlySubscribers);
-  const displayBasePrice = applyMonthlySubscribersSurcharge(basePrice, hasMonthlySubscribers);
+  const finalPrice = applyMonthlySubscribersSurcharge(discountedPrice, hasMonthlySubscribers, surchargePercent);
+  const displayBasePrice = applyMonthlySubscribersSurcharge(basePrice, hasMonthlySubscribers, surchargePercent);
   const totalDiscount = displayBasePrice - finalPrice;
   return { basePrice, hasDiscount, discountedPrice, finalPrice, totalDiscount, displayBasePrice };
 };

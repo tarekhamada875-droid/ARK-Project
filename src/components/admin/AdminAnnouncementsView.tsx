@@ -18,12 +18,10 @@ import { useAdminTranslation } from '../../utils/adminTranslations';
 
 interface AdminAnnouncementsViewProps {
   allGarages: Garage[];
-  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
-  allGarages,
-  showToast
+  allGarages
 }) => {
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
@@ -31,6 +29,7 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formFeedback, setFormFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -59,13 +58,14 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormFeedback(null);
     if (!title.trim() || !content.trim()) {
-      showToast(t('يرجى ملء عنوان ونص الإعلان'), 'error');
+      setFormFeedback({ type: 'error', text: t('يرجى ملء عنوان ونص الإعلان') });
       return;
     }
 
     if (target === 'specific' && !targetGarageId) {
-      showToast(t('يرجى اختيار الجراج المستهدف'), 'error');
+      setFormFeedback({ type: 'error', text: t('يرجى اختيار الجراج المستهدف') });
       return;
     }
 
@@ -89,10 +89,11 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
       setTarget('all');
       setTargetGarageId('');
       setPriority('normal');
-      showToast(t('تم نشر الإعلان بنجاح'));
+      setFormFeedback({ type: 'success', text: t('تم نشر الإعلان بنجاح') });
+      setTimeout(() => setFormFeedback(null), 4000);
     } catch (err) {
       console.error(err);
-      showToast(t('فشل نشر الإعلان'), 'error');
+      setFormFeedback({ type: 'error', text: t('فشل نشر الإعلان') });
     } finally {
       setIsSubmitting(false);
     }
@@ -101,18 +102,16 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
   const handleDeleteAnnouncement = async (id: string) => {
     try {
       await firestoreService.deleteAnnouncement(id);
-      showToast(t('تم حذف الإعلان بنجاح'));
     } catch (err) {
-      showToast(t('فشل حذف الإعلان'), 'error');
+      console.error('Failed to delete announcement:', err);
     }
   };
 
   const handleToggleActive = async (ann: Announcement) => {
     try {
       await firestoreService.toggleAnnouncementActive(ann.id, !ann.isActive);
-      showToast(ann.isActive ? t('تم إخفاء الإعلان') : t('تم تفعيل الإعلان'));
     } catch (err) {
-      showToast(t('فشل تعديل حالة الإعلان'), 'error');
+      console.error('Failed to toggle announcement active state:', err);
     }
   };
 
@@ -223,6 +222,16 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {formFeedback && (
+                <div className={`p-3 rounded-xl border flex items-center gap-2 text-xs font-bold ${
+                  formFeedback.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                    : 'bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-800 text-red-800 dark:text-red-200'
+                }`}>
+                  <span>{formFeedback.text}</span>
                 </div>
               )}
 
@@ -354,7 +363,7 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
                         <span className="flex items-center gap-1 font-mono">
                           <Clock className="w-3.5 h-3.5" />
                           <span>
-                            {createdAtDate.toLocaleDateString('ar-EG', {
+                            {createdAtDate.toLocaleDateString(adminLang === 'en' ? 'en-US' : 'ar-EG', {
                               year: 'numeric',
                               month: 'short',
                               day: 'numeric'

@@ -41,14 +41,12 @@ import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
-import { AdminGarageForm } from './AdminGarageForm';
 import { AdminGarageList } from './AdminGarageList';
-import { AdminRequestsTab } from './AdminRequestsTab';
 import { AdminReportsView } from './AdminReportsView';
 import { AdminAnnouncementsView } from './AdminAnnouncementsView';
 import { AdminGlobalSettingsView } from './AdminGlobalSettingsView';
 
-export { AdminGarageForm, AdminGarageList, AdminRequestsTab };
+export { AdminGarageList };
 
 interface AdminDashboardProps {
   allGarages: Garage[];
@@ -62,7 +60,6 @@ interface AdminDashboardProps {
   packages: Package[];
   onLogout: () => void;
   rechargeRequests: RechargeRequest[];
-  showToast: (message: string, type?: 'success' | 'error') => void;
   // Supervisor addition
   currentSupervisor?: Supervisor | null;
   supervisors?: Supervisor[];
@@ -85,7 +82,6 @@ export const AdminDashboard = memo(({
   packages,
   onLogout,
   rechargeRequests,
-  showToast,
   currentSupervisor = null,
   supervisors = [],
   generalManagers = [],
@@ -158,6 +154,16 @@ export const AdminDashboard = memo(({
   const [isAdminPinVerified, setIsAdminPinVerified] = React.useState(false);
   const [currentPinAttempt, setCurrentPinAttempt] = React.useState('');
   const [newAdminPinValue, setNewAdminPinValue] = React.useState('');
+  const [surchargePercent, setSurchargePercent] = React.useState<number>(25);
+
+  React.useEffect(() => {
+    const unsub = firestoreService.subscribeToSystemConfig((config) => {
+      if (config?.monthlySubscribersSurchargePercent !== undefined) {
+        setSurchargePercent(Number(config.monthlySubscribersSurchargePercent) || 25);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   React.useEffect(() => {
     if (activeTab !== 'admin-pin') {
@@ -249,22 +255,9 @@ export const AdminDashboard = memo(({
           const result = await firestoreServiceV2.approveRechargeRequest(request);
           if (result.success) {
             soundManager.play('checkIn');
-            showToast(`تم شحن رصيد ${request.garageName} بنجاح`);
-          } else {
-            showToast(result.error || 'فشل تفعيل الشحن', 'error');
           }
         } catch (error) {
           console.error('Failed to approve request:', error);
-          let msg = 'فشل تفعيل الشحن';
-          if (error instanceof Error) {
-            try {
-              const obj = JSON.parse(error.message);
-              msg += `: ${obj.error || error.message}`;
-            } catch {
-              msg += `: ${error.message}`;
-            }
-          }
-          showToast(msg, 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -275,7 +268,7 @@ export const AdminDashboard = memo(({
   const handleRejectRequest = async (requestId: string) => {
     setConfirmDialog({
       isOpen: true,
-      title: 'رفض طلب الشحن',
+      title: t('رفض طلب الشحن'),
       message: 'هل أنت متأكد من رفض هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.',
       confirmText: 'نعم، ارفض الطلب',
       cancelText: 'إلغاء',
@@ -283,10 +276,8 @@ export const AdminDashboard = memo(({
       onConfirm: async () => {
         try {
           await firestoreService.rejectRechargeRequest(requestId);
-          showToast('تم رفض الطلب بنجاح');
         } catch (error) {
           console.error('Failed to reject request:', error);
-          showToast('فشل رفض الطلب', 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -306,10 +297,8 @@ export const AdminDashboard = memo(({
         try {
           await firestoreService.updateGarage(garage.id, { status: 'approved' });
           soundManager.play('checkIn');
-          showToast(`تم قبول وتفعيل جراج "${garage.name}" بنجاح`);
         } catch (error) {
           console.error('Failed to approve garage:', error);
-          showToast('فشل قبول وتفعيل الجراج', 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -328,10 +317,8 @@ export const AdminDashboard = memo(({
       onConfirm: async () => {
         try {
           await firestoreService.deleteGarage(garage.id);
-          showToast(`تم رفض وحذف الطلب بنجاح`);
         } catch (error) {
           console.error('Failed to reject garage:', error);
-          showToast('فشل رفض الطلب', 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -363,17 +350,14 @@ export const AdminDashboard = memo(({
   const handleCreateDelegate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!delegateForm.name || !delegateForm.phone || !delegateForm.pin) {
-      showToast('يرجى إكمال جميع الحقول المطلوبة', 'error');
       return;
     }
     
     if (delegateForm.phone.length < 10) {
-      showToast('رقم الموبايل يجب أن يكون 10 أرقام على الأقل', 'error');
       return;
     }
 
     if (delegateForm.pin.length < 4) {
-      showToast('رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
       return;
     }
 
@@ -381,7 +365,6 @@ export const AdminDashboard = memo(({
     try {
       const pinCheck = await firestoreService.isPinTaken(delegateForm.pin);
       if (pinCheck.taken) {
-        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
         setIsSubmittingDelegate(false);
         return;
       }
@@ -396,10 +379,8 @@ export const AdminDashboard = memo(({
         pin: '', 
         canCreateGarage: false 
       });
-      showToast('تم إضافة المندوب بنجاح');
     } catch (error) {
       console.error('Failed to add delegate:', error);
-      showToast('حدث خطأ أثناء إضافة المندوب', 'error');
     } finally {
       setIsSubmittingDelegate(false);
     }
@@ -414,17 +395,14 @@ export const AdminDashboard = memo(({
     const cleanPin = (adminSupervisorForm?.pin || '').replace(/\D/g, '');
 
     if (!cleanName || !cleanPhone || !cleanPin) {
-      showToast('يرجى إكمال جميع الحقول المطلوبة بشكل صحيح', 'error');
       return;
     }
     
     if (cleanPhone.length < 10) {
-      showToast('رقم الموبايل يجب أن يكون 10 أرقام على الأقل', 'error');
       return;
     }
 
     if (cleanPin.length < 4) {
-      showToast('رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
       return;
     }
 
@@ -432,7 +410,6 @@ export const AdminDashboard = memo(({
     try {
       const pinCheck = await firestoreService.isPinTaken(cleanPin);
       if (pinCheck.taken) {
-        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
         setIsSubmittingSupervisor(false);
         return;
       }
@@ -451,11 +428,8 @@ export const AdminDashboard = memo(({
           pin: '' 
         });
       }
-      showToast('تم إضافة المشرف بنجاح');
     } catch (error: any) {
       console.error('Failed to add supervisor:', error);
-      const errMsg = error?.message || String(error);
-      showToast('حدث خطأ أثناء إضافة المشرف: ' + errMsg, 'error');
     } finally {
       setIsSubmittingSupervisor(false);
     }
@@ -469,22 +443,18 @@ export const AdminDashboard = memo(({
     const cleanGarages = adminGeneralManagerForm?.selectedGarages || [];
 
     if (!cleanName || !cleanPhone || !cleanPin) {
-      showToast('يرجى إكمال جميع الحقول المطلوبة بشكل صحيح', 'error');
       return;
     }
     
     if (cleanPhone.length < 10) {
-      showToast('رقم الموبايل يجب أن يكون 10 أرقام على الأقل', 'error');
       return;
     }
 
     if (cleanPin.length < 4) {
-      showToast('رمز الدخول يجب أن يكون 4 أرقام على الأقل', 'error');
       return;
     }
 
     if (cleanGarages.length === 0) {
-      showToast('يرجى اختيار جراج واحد على الأقل للمدير العام', 'error');
       return;
     }
 
@@ -492,7 +462,6 @@ export const AdminDashboard = memo(({
     try {
       const pinCheck = await firestoreService.isPinTaken(cleanPin);
       if (pinCheck.taken) {
-        showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
         setIsSubmittingGeneralManager(false);
         return;
       }
@@ -511,11 +480,8 @@ export const AdminDashboard = memo(({
         pin: '',
         selectedGarages: []
       });
-      showToast('تم إضافة المدير العام بنجاح');
     } catch (error: any) {
       console.error('Failed to add general manager:', error);
-      const errMsg = error?.message || String(error);
-      showToast('حدث خطأ أثناء إضافة المدير العام: ' + errMsg, 'error');
     } finally {
       setIsSubmittingGeneralManager(false);
     }
@@ -1433,10 +1399,8 @@ export const AdminDashboard = memo(({
                                 onConfirm: async () => {
                                   try {
                                     await firestoreService.removeSupervisor(s.id);
-                                    showToast(t('تم حذف المشرف بنجاح'));
                                   } catch (error) {
                                     console.error(error);
-                                    showToast(t('فشل حذف المشرف'), 'error');
                                   } finally {
                                     setConfirmDialog(p => ({ ...p, isOpen: false }));
                                   }
@@ -1467,23 +1431,20 @@ export const AdminDashboard = memo(({
                                 type="button"
                                 onClick={async () => {
                                   if (editingSupervisorPinValue.length < 4) {
-                                    showToast(t('رمز الدخول يجب أن يكون 4 أرقام على الأقل'), 'error');
                                     return;
                                   }
                                   setIsUpdatingSupervisorPin(true);
                                   try {
                                     const pinCheck = await firestoreService.isPinTaken(editingSupervisorPinValue, s.id);
                                     if (pinCheck.taken) {
-                                      showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
                                       setIsUpdatingSupervisorPin(false);
                                       return;
                                     }
                                     await firestoreService.updateSupervisor(s.id, { pin: editingSupervisorPinValue });
                                     s.pin = editingSupervisorPinValue;
                                     setEditingSupervisorPinId(null);
-                                    showToast(t('تم تحديث الرمز بنجاح'));
                                   } catch (err) {
-                                    showToast(t('فشل تحديث الرمز'), 'error');
+                                    console.error(err);
                                   } finally {
                                     setIsUpdatingSupervisorPin(false);
                                   }
@@ -1687,10 +1648,8 @@ export const AdminDashboard = memo(({
                                 onConfirm: async () => {
                                   try {
                                     await firestoreService.removeGeneralManager(gm.id);
-                                    showToast(t('تم حذف المدير العام بنجاح'));
                                   } catch (error) {
                                     console.error(error);
-                                    showToast(t('فشل حذف المدير العام'), 'error');
                                   } finally {
                                     setConfirmDialog(p => ({ ...p, isOpen: false }));
                                   }
@@ -1721,23 +1680,20 @@ export const AdminDashboard = memo(({
                                 type="button"
                                 onClick={async () => {
                                   if (editingGeneralManagerPinValue.length < 4) {
-                                    showToast(t('رمز الدخول يجب أن يكون 4 أرقام على الأقل'), 'error');
                                     return;
                                   }
                                   setIsUpdatingGeneralManagerPin(true);
                                   try {
                                     const pinCheck = await firestoreService.isPinTaken(editingGeneralManagerPinValue, gm.id);
                                     if (pinCheck.taken) {
-                                      showToast(`هذا الرمز السري (PIN) مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`, 'error');
                                       setIsUpdatingGeneralManagerPin(false);
                                       return;
                                     }
                                     await firestoreService.updateGeneralManager(gm.id, { pin: editingGeneralManagerPinValue });
                                     gm.pin = editingGeneralManagerPinValue;
                                     setEditingGeneralManagerPinId(null);
-                                    showToast(t('تم تحديث الرمز بنجاح'));
                                   } catch (err) {
-                                    showToast(t('فشل تحديث الرمز'), 'error');
+                                    console.error(err);
                                   } finally {
                                     setIsUpdatingGeneralManagerPin(false);
                                   }
@@ -2019,7 +1975,6 @@ export const AdminDashboard = memo(({
                       const discountVal = discountValueInput?.value ? Number(discountValueInput.value) : 0;
                       
                       if (!name || price <= 0) {
-                        showToast(t('يرجى إدخال اسم الاشتراك والسعر بشكل صحيح'), 'error');
                         return;
                       }
 
@@ -2104,9 +2059,8 @@ export const AdminDashboard = memo(({
                         }
                         await firestoreService.addPackage(pkgData);
                         form.reset();
-                        showToast(t('تم إضافة خطة الاشتراك بنجاح'));
                       } catch (err) {
-                        showToast(t('حدث خطأ أثناء إضافة خطة الاشتراك'), 'error');
+                        console.error(err);
                       }
                     }}
                     className="space-y-5"
@@ -2295,9 +2249,8 @@ export const AdminDashboard = memo(({
                                           onConfirm: async () => {
                                             try {
                                               await firestoreService.deletePackage(pkg.id);
-                                              showToast(t('تم حذف خطة الاشتراك بنجاح'));
                                             } catch (err) {
-                                              showToast(t('فشل حذف خطة الاشتراك'), 'error');
+                                              console.error(err);
                                             } finally {
                                               setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                                             }
@@ -2401,16 +2354,14 @@ export const AdminDashboard = memo(({
                     onSubmit={async (e) => {
                       e.preventDefault();
                       if (!walletValue.trim()) {
-                        showToast(t('رقم المحفظة لا يمكن أن يكون فارغاً'), 'error');
                         return;
                       }
                       setIsSavingWallet(true);
                       try {
                         await onUpdateWalletNumber(walletValue);
-                        showToast(t('تم تحديث رقم المحفظة الإلكترونية بنجاح'));
                         setActiveTab('menu');
                       } catch (err) {
-                        showToast(t('حدث خطأ أثناء تحديث رقم المحفظة'), 'error');
+                        console.error(err);
                       } finally {
                         setIsSavingWallet(false);
                       }
@@ -2469,9 +2420,9 @@ export const AdminDashboard = memo(({
             );
           })()
         ) : activeTab === 'announcements' ? (
-          <AdminAnnouncementsView allGarages={allGarages} showToast={showToast} />
+          <AdminAnnouncementsView allGarages={allGarages} />
         ) : activeTab === 'global_settings' ? (
-          <AdminGlobalSettingsView showToast={showToast} />
+          <AdminGlobalSettingsView />
         ) : activeTab === 'admin-pin' ? (
           <div className="max-w-2xl mx-auto font-sans">
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-8 sm:p-12 transition-colors relative overflow-hidden">
@@ -2499,9 +2450,6 @@ export const AdminDashboard = memo(({
                       e.preventDefault();
                       if (currentPinAttempt === currentAdminPin) {
                         setIsAdminPinVerified(true);
-                        showToast(t('تم التحقق بنجاح'));
-                      } else {
-                        showToast(t('رمز الدخول الحالي غير صحيح'), 'error');
                       }
                     }}
                     className="space-y-6 relative z-10"
@@ -2563,17 +2511,15 @@ export const AdminDashboard = memo(({
                     onSubmit={async (e) => {
                       e.preventDefault();
                       if (newAdminPinValue.length < 4) {
-                        showToast(t('رمز الدخول يجب أن يكون 4 أرقام على الأقل'), 'error');
                         return;
                       }
                       setIsSavingAdminPin(true);
                       try {
                         await firestoreService.updateAdminPin(newAdminPinValue);
-                        showToast(t('تم تحديث رمز دخول الآدمن بنجاح'));
                         setIsAdminPinVerified(false);
                         setActiveTab('menu');
                       } catch (err) {
-                        showToast(t('فشل تحديث رمز الدخول'), 'error');
+                        console.error(err);
                       } finally {
                         setIsSavingAdminPin(false);
                       }
@@ -2672,9 +2618,8 @@ export const AdminDashboard = memo(({
                       vehiclesCount: dailyCapacity 
                     });
                     form.reset();
-                    showToast(t('تم إضافة خطة الاشتراك بنجاح'));
                   } catch (err) {
-                    showToast(t('حدث خطأ أثناء إضافة خطة الاشتراك'), 'error');
+                    console.error(err);
                   }
                 }}
                 className="mb-10 space-y-4"
@@ -2742,9 +2687,8 @@ export const AdminDashboard = memo(({
                             onConfirm: async () => {
                               try {
                                 await firestoreService.deletePackage(pkg.id);
-                                showToast(t('تم حذف الباقة بنجاح'));
                               } catch (err) {
-                                showToast(t('فشل حذف الباقة'), 'error');
+                                console.error(err);
                               } finally {
                                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                               }
@@ -2885,7 +2829,7 @@ export const AdminDashboard = memo(({
                   <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors">
                     <div className="text-right">
                       <span className="text-xs font-black text-slate-900 dark:text-white block">{t('يتضمن مشتركين شهريين / إيواء')}</span>
-                      <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{t('إضافة 25% زيادة تلقائياً على سعر أية باقة/اشتراك')}</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{t('إضافة')} {surchargePercent}% {t('زيادة تلقائياً على سعر أية باقة/اشتراك')}</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
                       <input 
@@ -3099,7 +3043,6 @@ export const AdminDashboard = memo(({
       {showAppearanceSettings && (
         <AppearanceSettingsModal 
           onClose={() => setShowAppearanceSettings(false)}
-          showToast={(msg, type) => showToast(msg, type)}
           adminColor={adminColor}
           onUpdateAdminColor={(color) => setAdminColor(color)}
         />
