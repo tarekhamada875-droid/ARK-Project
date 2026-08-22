@@ -1,6 +1,6 @@
 import { useState, useMemo, memo, useEffect, useCallback } from 'react';
 import { 
-  ArrowRight, 
+  ChevronRight, 
   RefreshCw, 
   TrendingUp, 
   CheckCircle2,
@@ -131,10 +131,11 @@ export const GarageReportsView = memo(({
       <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors">
         <button 
           onClick={onClose}
-          className="w-10 h-10 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 rounded-xl flex items-center justify-center hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors shadow-sm outline-none shrink-0"
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none shrink-0"
           aria-label="الرجوع"
+          title="رجوع"
         >
-          <ArrowRight className="w-5 h-5" />
+          <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
         </button>
         <div>
           <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none">تقارير وأحصائيات الجراج</h2>

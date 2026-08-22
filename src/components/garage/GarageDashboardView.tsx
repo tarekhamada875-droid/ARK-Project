@@ -18,7 +18,7 @@ import {
   AlertTriangle,
   Gift,
   Clock,
-  Search,
+  Crown,
   Megaphone,
   Sparkles,
 } from "lucide-react";
@@ -26,10 +26,11 @@ import { Announcement } from "../../types";
 import { FlipNumber } from "../ui/FlipNumber";
 import { AnimatedCounter } from "../AnimatedCounter";
 import { useTheme } from "../../utils/ThemeContext";
-import { resolveShimmerColor, isLightColor, getRemainingDays, safeDate, getEffectiveDailyCapacity, isUnlimitedCapacity } from "../../utils";
+import { resolveShimmerColor, isLightColor, getRemainingDays, safeDate, getEffectiveDailyCapacity, isUnlimitedCapacity, isSubscriptionExpired } from "../../utils";
 import { soundManager } from "../../utils/sounds";
 import { auth } from "../../firebase";
 import { firestoreServiceV2 as firestoreService } from "../../services/domain/firestoreServiceV2";
+import { getCairoDateKey } from '../../domain/garage/businessDay';
 import { RegistrationCard } from "./RegistrationCard";
 import { VehicleItem } from "./VehicleItem";
 import { SubscribersView } from "./SubscribersView";
@@ -179,7 +180,7 @@ export const GarageDashboardView = memo((props: any) => {
     }
     Ke.current = L;
   }, [L]);
-  const Ns = L <= 0,
+  const Ns = isSubscriptionExpired(t),
     ne = t.isLocked || !1;
   (useEffect(() => {
     if (!De) return;
@@ -399,27 +400,15 @@ export const GarageDashboardView = memo((props: any) => {
                           {
                             <div className="flex items-center gap-2">
                               {
-                                <div
-                                  className={"w-10 h-10 rounded-xl flex items-center justify-center font-extrabold shrink-0 ".concat(
-                                    ur(we) ? "text-slate-900" : "text-white",
-                                  )}
-                                  style={{
-                                    backgroundColor: we,
-                                  }}
-                                >
-                                  {<Search className="w-5 h-5" />}
+                                <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center font-extrabold shrink-0 shadow-sm">
+                                  <Crown className="w-5 h-5 text-amber-400 dark:text-slate-950" />
                                 </div>
                               }
                               {
                                 <div className="flex flex-col min-w-0">
                                   {
-                                    <span className="text-xs font-black text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
+                                    <span className="text-mobile-wrap text-xs font-black text-slate-900 dark:text-slate-100 max-w-[120px] leading-snug">
                                       {e ? e.name : "مدير الجراج"}
-                                    </span>
-                                  }
-                                  {
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
-                                      {e ? "موظف وردية" : "إدارة الجراج"}
                                     </span>
                                   }
                                 </div>
@@ -451,8 +440,8 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-400/10 text-blue-500 flex items-center justify-center">
-                                      {<Users className="w-4 h-4" />}
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                                      {<Users className="w-4 h-4 text-amber-400 dark:text-slate-950" />}
                                     </div>
                                   }
                                   {
@@ -477,9 +466,9 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-400/10 text-purple-500 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
                                       {
-                                        <PieChart className="w-4 h-4 text-purple-500" />
+                                        <PieChart className="w-4 h-4 text-amber-400 dark:text-slate-950" />
                                       }
                                     </div>
                                   }
@@ -500,9 +489,9 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-400/10 text-amber-500 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
                                       {
-                                        <Zap className="w-4 h-4 fill-current text-amber-500" />
+                                        <Zap className="w-4 h-4 fill-current text-amber-400 dark:text-slate-950" />
                                       }
                                     </div>
                                   }
@@ -523,9 +512,9 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-400/10 text-emerald-500 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
                                       {
-                                        <Gift className="w-4 h-4 text-emerald-500" />
+                                        <Gift className="w-4 h-4 text-amber-400 dark:text-slate-950" />
                                       }
                                     </div>
                                   }
@@ -551,9 +540,9 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-400/10 text-rose-500 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
                                       {
-                                        <Clock className="w-4 h-4 text-rose-500" />
+                                        <Clock className="w-4 h-4 text-amber-400 dark:text-slate-950" />
                                       }
                                     </div>
                                   }
@@ -582,9 +571,9 @@ export const GarageDashboardView = memo((props: any) => {
                               {
                                 <div className="flex items-center gap-2.5">
                                   {
-                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
                                       {
-                                        <Sliders className="w-4 h-4 text-indigo-500" />
+                                        <Sliders className="w-4 h-4 text-amber-400 dark:text-slate-950" />
                                       }
                                     </div>
                                   }
@@ -678,38 +667,14 @@ export const GarageDashboardView = memo((props: any) => {
             </div>
           )}
 
-          {/* Feature 2: Expiry Warning Banner */}
-          {!s && We && (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-200">
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h4 className="font-black text-sm">
-                    {t?.isTrial ? 'تنبيه: الفترة التجريبية تقترب من الانتهاء' : 'تنبيه: اشتراك الجراج شارف على الانتهاء'}
-                  </h4>
-                  <p className="text-xs text-red-100 font-bold">
-                    {Ds} - يرجى تجديد الاشتراك لتجنب إيقاف الخدمة
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => Q(true)}
-                className="w-full sm:w-auto px-4 py-2 bg-white text-red-700 hover:bg-red-50 rounded-xl font-black text-xs transition-all shadow-sm shrink-0 cursor-pointer active:scale-95 text-center"
-              >
-                تجديد الاشتراك الآن
-              </button>
-            </div>
-          )}
+          {/* Removed Expiry Warning Banner as requested */}
 
           {(() => {
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getCairoDateKey();
             const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
             const isDailyLimitReached = !isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t);
 
-            if ((s && ie === "main") || isDailyLimitReached) {
+            if ((s && ie === "main") || isDailyLimitReached || Ns) {
               return null;
             }
 
@@ -811,23 +776,25 @@ export const GarageDashboardView = memo((props: any) => {
           {ie === "main" ? (
             <React.Fragment>
               {(() => {
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getCairoDateKey();
                 const displayTodayCount = t.lastTransactionDate === todayStr ? (t.todayCount || 0) : 0;
-                if (!isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t)) {
+                const isDailyLimitReached = !isUnlimitedCapacity(t) && displayTodayCount >= getEffectiveDailyCapacity(t);
+
+                if (isDailyLimitReached || Ns) {
                   return (
                     <div className="bg-[#faf9f6] dark:bg-slate-900 rounded-[2rem] border border-red-200/80 dark:border-red-900/60 relative shrink-0 p-4 md:p-8 max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto w-full transition-all duration-150 shadow-sm overflow-hidden">
                       {/* Outer Alternating Laser Shimmer: sweeps upwards during second half of cycle */}
-                      <BorderShimmer isActive={true} rx={32} ry={32} color="#ef4444" dur="3.5s" mode="alternate-second" />
+                      <BorderShimmer isActive={true} rx={32} ry={32} color="#ef4444" dur="7.0s" mode="alternate-second" />
 
                       <div className="relative h-48 sm:h-56 md:h-72 lg:h-80 rounded-2xl overflow-hidden bg-gradient-to-b from-red-500/10 via-red-500/5 to-transparent dark:from-red-950/40 dark:via-red-950/20 dark:to-transparent border-2 border-red-500/30 dark:border-red-500/40 flex flex-col items-center justify-center p-4 sm:p-6 text-center shadow-[inset_0_0_25px_rgba(239,68,68,0.12)]">
                         {/* Inner Alternating Laser Shimmer: sweeps downwards during first half of cycle */}
-                        <BorderShimmer isActive={true} rx={16} ry={16} color="#ef4444" dur="3.5s" mode="alternate-first" />
+                        <BorderShimmer isActive={true} rx={16} ry={16} color="#ef4444" dur="7.0s" mode="alternate-first" />
 
                         {/* Subtle Laser Radar Ambient Glow */}
                         <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
                           <div 
                             className="absolute -inset-[100%] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-500/15 via-transparent to-transparent animate-pulse" 
-                            style={{ animationDuration: '3s' }}
+                            style={{ animationDuration: '6s' }}
                           />
                         </div>
 
@@ -837,15 +804,21 @@ export const GarageDashboardView = memo((props: any) => {
                         </div>
                         
                         <h3 className="relative z-20 text-base sm:text-xl md:text-2xl font-black text-red-600 dark:text-red-400 leading-tight drop-shadow-sm mb-1.5 sm:mb-2">
-                          وصلت للحد الأقصى اليومي
+                          {Ns ? "انتهى الاشتراك" : "وصلت للحد الأقصى اليومي"}
                         </h3>
                         
-                        <p className="relative z-20 text-sm sm:text-base md:text-lg font-bold text-slate-800 dark:text-slate-200 font-mono tracking-wide mb-2">
-                          ({displayTodayCount} / {getEffectiveDailyCapacity(t)} سيارة اليوم)
-                        </p>
+                        {isDailyLimitReached && !Ns ? (
+                          <p className="relative z-20 text-sm sm:text-base md:text-lg font-bold text-slate-800 dark:text-slate-200 font-mono tracking-wide mb-2">
+                            ({displayTodayCount} / {getEffectiveDailyCapacity(t)} سيارة اليوم)
+                          </p>
+                        ) : (
+                          <p className="relative z-20 text-sm sm:text-base md:text-lg font-bold text-slate-800 dark:text-slate-200 tracking-wide mb-2">
+                            عذراً، لقد انتهى اشتراك الجراج الخاص بك
+                          </p>
+                        )}
                         
                         <p className="relative z-20 text-xs sm:text-sm md:text-base font-medium text-slate-500 dark:text-slate-400 max-w-xs sm:max-w-md">
-                          يرجى اختيار اشتراك أكبر لمتابعة تسجيل السيارات
+                          {Ns ? "يرجى التواصل مع الإدارة لتجديد الاشتراك ومتابعة العمل" : "يرجى اختيار اشتراك أكبر لمتابعة تسجيل السيارات"}
                         </p>
                       </div>
                     </div>
@@ -868,7 +841,6 @@ export const GarageDashboardView = memo((props: any) => {
                   closeKeyboard={m}
                   inputRef={D}
                   shimmerActive={!0}
-                  isBalanceOut={Ns}
                 />
               )}
               {!s && (
@@ -1176,12 +1148,12 @@ export const GarageDashboardView = memo((props: any) => {
                   }
                   {
                     <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">
-                      تم شحن الرصيد بنجاح!
+                      تم تجديد الاشتراك بنجاح!
                     </h3>
                   }
                   {
                     <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-6">
-                      رصيد جديد مضاف إلى الحساب الخاص بالجراج
+                      اشتراك جديد مضاف إلى الحساب الخاص بالجراج
                     </p>
                   }
                   {

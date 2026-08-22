@@ -18,6 +18,6 @@ describe('Admin Translations Hook Helper', () => {
 
   it('falls back to the provided string if English dictionary key is missing', () => {
     const t = useAdminTranslation('en');
-    expect(t('كلمة جديدة بدون ترجمة')).toBe('كلمة جديدة بدون ترجمة');
+    expect(t('نص غير معروف')).toBe('نص غير معروف');
   });
 });

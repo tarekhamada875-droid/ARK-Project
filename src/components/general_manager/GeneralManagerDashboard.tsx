@@ -2,15 +2,15 @@ import React, { useState, useEffect, useMemo, memo } from 'react';
 import { 
   LogOut, 
   Moon, 
-  Sun,
-  MapPin,
-  Calendar,
-  AlertCircle,
-  ArrowRight,
-  ArrowLeft,
-  RefreshCw,
-  Loader2,
-  Check
+  Sun, 
+  MapPin, 
+  Calendar, 
+  AlertCircle, 
+  ChevronRight, 
+  ArrowLeft, 
+  RefreshCw, 
+  Loader2, 
+  Check 
 } from 'lucide-react';
 import { Garage, GeneralManager } from '../../types';
 import { getRemainingDays } from '../../utils';
@@ -78,12 +78,17 @@ export const GeneralManagerDashboard: React.FC<GeneralManagerDashboardProps> = m
           {selectedGarage ? (
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => setSelectedGarageId(null)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-all font-bold text-xs sm:text-sm shadow-sm outline-none cursor-pointer"
+                className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+                aria-label="الرجوع لقائمة الجراجات"
+                title="رجوع"
               >
-                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-                <span>العودة لقائمة الجراجات</span>
+                <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
               </button>
+              <span className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-200">
+                {selectedGarage.name}
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-3">

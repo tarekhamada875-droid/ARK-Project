@@ -11,7 +11,6 @@ import {
   Car, 
   Plus, 
   Search, 
-  Phone, 
   Users, 
   Trash2, 
   Settings as SettingsIcon,
@@ -23,6 +22,7 @@ import {
   Check,
   Zap,
   ChevronRight,
+  ChevronLeft,
   Loader2,
   Building2,
   Wallet,
@@ -30,6 +30,7 @@ import {
   Sliders,
   Tag,
   AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
@@ -42,9 +43,10 @@ import { useAdminTranslation } from '../../utils/adminTranslations';
 import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
 import { AdminGarageList } from './AdminGarageList';
-import { AdminReportsView } from './AdminReportsView';
 import { AdminAnnouncementsView } from './AdminAnnouncementsView';
 import { AdminGlobalSettingsView } from './AdminGlobalSettingsView';
+import { AdminOverviewView } from './AdminOverviewView';
+import { AdminPeopleView } from './AdminPeopleView';
 
 export { AdminGarageList };
 
@@ -56,7 +58,7 @@ interface AdminDashboardProps {
   setSelectedGarageForDetails: (garage: Garage | null) => void;
   setSelectedDelegateForDetails: (delegate: Delegate | null) => void;
   delegates: Delegate[];
-  addDelegate: (data: Omit<Delegate, 'id'>) => Promise<any>;
+  addDelegate?: (data: Omit<Delegate, 'id'>) => Promise<any>;
   packages: Package[];
   onLogout: () => void;
   rechargeRequests: RechargeRequest[];
@@ -78,7 +80,7 @@ export const AdminDashboard = memo(({
   setSelectedGarageForDetails,
   setSelectedDelegateForDetails,
   delegates,
-  addDelegate,
+  addDelegate: _addDelegate,
   packages,
   onLogout,
   rechargeRequests,
@@ -94,31 +96,62 @@ export const AdminDashboard = memo(({
   // Localized states to encapsulate admin view and prevent global App re-renders
   const [adminSearch, setAdminSearch] = React.useState<string>('');
   const [packageDurationFilter, setPackageDurationFilter] = React.useState<15 | 30>(30);
-  const [activeTab, setActiveTab] = useLocalStorageState<'menu' | 'garages' | 'packages' | 'delegates' | 'requests' | 'reports' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin' | 'announcements' | 'global_settings'>('app_admin_tab', 'menu');
+  const [activeTab, setActiveTab] = useLocalStorageState<'overview' | 'menu' | 'garages' | 'packages' | 'people' | 'delegates' | 'requests' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin' | 'announcements' | 'global_settings' | 'catalog_settings'>('app_admin_tab', 'overview');
+
+  const ADMIN_GARAGES_PER_PAGE = 50;
+  const [adminGarageRows, setAdminGarageRows] = React.useState<Garage[]>([]);
+  const [adminGarageHasMore, setAdminGarageHasMore] = React.useState(true);
+  const [isAdminGaragePageLoading, setIsAdminGaragePageLoading] = React.useState(false);
+  const [adminGaragePageError, setAdminGaragePageError] = React.useState(false);
+  const adminGarageLastDocRef = React.useRef<any>(null);
+  const adminGarageHasMoreRef = React.useRef(true);
+  const isAdminGaragePageLoadingRef = React.useRef(false);
+  const adminGarageTabOpenedRef = React.useRef(false);
+
+  const loadAdminGaragePage = React.useCallback(async (reset = false) => {
+    if (isAdminGaragePageLoadingRef.current || (!reset && !adminGarageHasMoreRef.current)) return;
+
+    isAdminGaragePageLoadingRef.current = true;
+    setIsAdminGaragePageLoading(true);
+    setAdminGaragePageError(false);
+
+    try {
+      const page = await firestoreService.getAdminGaragesPage(
+        ADMIN_GARAGES_PER_PAGE,
+        reset ? null : adminGarageLastDocRef.current
+      );
+
+      setAdminGarageRows(previousRows => {
+        const rows = reset ? page.garages : [...previousRows, ...page.garages];
+        return Array.from(new Map(rows.map(garage => [garage.id, garage])).values());
+      });
+      adminGarageLastDocRef.current = page.lastDoc;
+      adminGarageHasMoreRef.current = page.hasMore;
+      setAdminGarageHasMore(page.hasMore);
+    } catch (error) {
+      console.error('Failed to load admin garage page:', error);
+      setAdminGaragePageError(true);
+    } finally {
+      isAdminGaragePageLoadingRef.current = false;
+      setIsAdminGaragePageLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (activeTab !== 'garages') {
+      adminGarageTabOpenedRef.current = false;
+      return;
+    }
+
+    if (!adminGarageTabOpenedRef.current) {
+      adminGarageTabOpenedRef.current = true;
+      void loadAdminGaragePage(true);
+    }
+  }, [activeTab, loadAdminGaragePage]);
+
   const [showPlansModal, setShowPlansModal] = useLocalStorageState<boolean>('app_admin_plans_modal', false);
   const [showOverview, setShowOverview] = useLocalStorageState<boolean>('app_admin_overview', false);
   const [pinInput, setPinInput] = React.useState<string>('');
-  const [delegateForm, setDelegateForm] = React.useState<{ name: string; phone: string; pin: string; canCreateGarage: boolean }>({ 
-    name: '', 
-    phone: '', 
-    pin: '', 
-    canCreateGarage: false 
-  });
-  const [adminSupervisorForm, setAdminSupervisorForm] = React.useState<{ name: string; phone: string; pin: string }>({
-    name: '',
-    phone: '',
-    pin: ''
-  });
-  const [adminGeneralManagerForm, setAdminGeneralManagerForm] = React.useState<{ name: string; phone: string; pin: string; selectedGarages: string[] }>({
-    name: '',
-    phone: '',
-    pin: '',
-    selectedGarages: []
-  });
-  const [isSubmittingGeneralManager, setIsSubmittingGeneralManager] = React.useState(false);
-  const [editingGeneralManagerPinId, setEditingGeneralManagerPinId] = React.useState<string | null>(null);
-  const [editingGeneralManagerPinValue, setEditingGeneralManagerPinValue] = React.useState<string>('');
-  const [isUpdatingGeneralManagerPin, setIsUpdatingGeneralManagerPin] = React.useState<boolean>(false);
   const [garageForm, setGarageForm] = React.useState<{
     name: string;
     hourlyRate: string;
@@ -141,11 +174,6 @@ export const AdminDashboard = memo(({
     ownerPin: ''
   });
 
-  const [editingSupervisorPinId, setEditingSupervisorPinId] = React.useState<string | null>(null);
-  const [editingSupervisorPinValue, setEditingSupervisorPinValue] = React.useState<string>('');
-  const [isUpdatingSupervisorPin, setIsUpdatingSupervisorPin] = React.useState<boolean>(false);
-
-  const [isSubmittingDelegate, setIsSubmittingDelegate] = React.useState(false);
   const [showMenu, setShowMenu] = React.useState(false);
   const [showAppearanceSettings, setShowAppearanceSettings] = React.useState(false);
   const [adminColor, setAdminColor] = useLocalStorageState<string>('app_admin_color', '#10b981');
@@ -154,16 +182,6 @@ export const AdminDashboard = memo(({
   const [isAdminPinVerified, setIsAdminPinVerified] = React.useState(false);
   const [currentPinAttempt, setCurrentPinAttempt] = React.useState('');
   const [newAdminPinValue, setNewAdminPinValue] = React.useState('');
-  const [surchargePercent, setSurchargePercent] = React.useState<number>(25);
-
-  React.useEffect(() => {
-    const unsub = firestoreService.subscribeToSystemConfig((config) => {
-      if (config?.monthlySubscribersSurchargePercent !== undefined) {
-        setSurchargePercent(Number(config.monthlySubscribersSurchargePercent) || 25);
-      }
-    });
-    return () => unsub();
-  }, []);
 
   React.useEffect(() => {
     if (activeTab !== 'admin-pin') {
@@ -246,7 +264,7 @@ export const AdminDashboard = memo(({
     setConfirmDialog({
       isOpen: true,
       title: 'تفعيل الشحن',
-      message: `هل أنت متأكد من تفعيل شحن رصيد جراج "${request.garageName}"؟`,
+      message: `هل أنت متأكد من تفعيل تجديد اشتراك جراج "${request.garageName}"؟`,
       confirmText: 'تفعيل الآن',
       cancelText: 'تراجع',
       type: 'success',
@@ -347,156 +365,6 @@ export const AdminDashboard = memo(({
     };
   }, [showPlansModal, showOverview]);
 
-  const handleCreateDelegate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!delegateForm.name || !delegateForm.phone || !delegateForm.pin) {
-      return;
-    }
-    
-    if (delegateForm.phone.length < 10) {
-      return;
-    }
-
-    if (delegateForm.pin.length < 4) {
-      return;
-    }
-
-    setIsSubmittingDelegate(true);
-    try {
-      const pinCheck = await firestoreService.isPinTaken(delegateForm.pin);
-      if (pinCheck.taken) {
-        setIsSubmittingDelegate(false);
-        return;
-      }
-      await addDelegate({
-        ...delegateForm,
-        role: 'delegate',
-        createdAt: new Date(),
-      });
-      setDelegateForm({ 
-        name: '', 
-        phone: '', 
-        pin: '', 
-        canCreateGarage: false 
-      });
-    } catch (error) {
-      console.error('Failed to add delegate:', error);
-    } finally {
-      setIsSubmittingDelegate(false);
-    }
-  };
-
-  const [isSubmittingSupervisor, setIsSubmittingSupervisor] = React.useState(false);
-
-  const handleCreateSupervisor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = (adminSupervisorForm?.name || '').trim();
-    const cleanPhone = (adminSupervisorForm?.phone || '').replace(/\D/g, '');
-    const cleanPin = (adminSupervisorForm?.pin || '').replace(/\D/g, '');
-
-    if (!cleanName || !cleanPhone || !cleanPin) {
-      return;
-    }
-    
-    if (cleanPhone.length < 10) {
-      return;
-    }
-
-    if (cleanPin.length < 4) {
-      return;
-    }
-
-    setIsSubmittingSupervisor(true);
-    try {
-      const pinCheck = await firestoreService.isPinTaken(cleanPin);
-      if (pinCheck.taken) {
-        setIsSubmittingSupervisor(false);
-        return;
-      }
-      await firestoreService.addSupervisor({
-        name: cleanName,
-        phone: cleanPhone,
-        pin: cleanPin,
-        role: 'supervisor',
-        createdAt: new Date(),
-      } as Omit<Supervisor, 'id'>);
-      
-      if (setAdminSupervisorForm) {
-        setAdminSupervisorForm({ 
-          name: '', 
-          phone: '', 
-          pin: '' 
-        });
-      }
-    } catch (error: any) {
-      console.error('Failed to add supervisor:', error);
-    } finally {
-      setIsSubmittingSupervisor(false);
-    }
-  };
-
-  const handleCreateGeneralManager = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = (adminGeneralManagerForm?.name || '').trim();
-    const cleanPhone = (adminGeneralManagerForm?.phone || '').replace(/\D/g, '');
-    const cleanPin = (adminGeneralManagerForm?.pin || '').replace(/\D/g, '');
-    const cleanGarages = adminGeneralManagerForm?.selectedGarages || [];
-
-    if (!cleanName || !cleanPhone || !cleanPin) {
-      return;
-    }
-    
-    if (cleanPhone.length < 10) {
-      return;
-    }
-
-    if (cleanPin.length < 4) {
-      return;
-    }
-
-    if (cleanGarages.length === 0) {
-      return;
-    }
-
-    setIsSubmittingGeneralManager(true);
-    try {
-      const pinCheck = await firestoreService.isPinTaken(cleanPin);
-      if (pinCheck.taken) {
-        setIsSubmittingGeneralManager(false);
-        return;
-      }
-      await firestoreService.addGeneralManager({
-        name: cleanName,
-        phone: cleanPhone,
-        pin: cleanPin,
-        garageIds: cleanGarages,
-        role: 'general_manager',
-        createdAt: new Date(),
-      } as Omit<GeneralManager, 'id'>);
-      
-      setAdminGeneralManagerForm({ 
-        name: '', 
-        phone: '', 
-        pin: '',
-        selectedGarages: []
-      });
-    } catch (error: any) {
-      console.error('Failed to add general manager:', error);
-    } finally {
-      setIsSubmittingGeneralManager(false);
-    }
-  };
-
-  const toggleGarageSelection = (garageId: string) => {
-    setAdminGeneralManagerForm(prev => {
-      const alreadySelected = prev.selectedGarages.includes(garageId);
-      const updated = alreadySelected
-        ? prev.selectedGarages.filter(id => id !== garageId)
-        : [...prev.selectedGarages, garageId];
-      return { ...prev, selectedGarages: updated };
-    });
-  };
-
   const handleAddGarage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     await createNewGarage(e);
@@ -513,35 +381,18 @@ export const AdminDashboard = memo(({
     return allGarages.filter(g => g.status === 'pending');
   }, [allGarages]);
 
-  const filteredGarages = React.useMemo(() => {
+  const displayedGarages = React.useMemo(() => {
     const q = normalizeArabicSearch(adminSearch);
-    if (!q) return approvedGarages;
-    return approvedGarages.filter(g => {
-      const normalizedName = normalizeArabicSearch(g.name);
-      const phoneMatch = (g.phone || '').includes(adminSearch);
+
+    return adminGarageRows.filter(garage => {
+      if (garage.status === 'pending') return false;
+      if (!q) return true;
+
+      const normalizedName = normalizeArabicSearch(garage.name);
+      const phoneMatch = (garage.phone || '').includes(adminSearch);
       return normalizedName.includes(q) || phoneMatch;
     });
-  }, [approvedGarages, adminSearch]);
-
-  const [garagePage, setGaragePage] = React.useState<number>(0);
-  const GARAGES_PER_PAGE = 50;
-  const [delegateDisplayLimit, setDelegateDisplayLimit] = React.useState<number>(50);
-
-  React.useEffect(() => {
-    setGaragePage(0);
-  }, [adminSearch]);
-
-  const displayedGarages = React.useMemo(() => {
-    return filteredGarages.slice(0, (garagePage + 1) * GARAGES_PER_PAGE);
-  }, [filteredGarages, garagePage]);
-
-  const displayedDelegates = React.useMemo(() => {
-    return delegates.slice(0, delegateDisplayLimit);
-  }, [delegates, delegateDisplayLimit]);
-
-  const totalAdminRevenue = React.useMemo(() => {
-    return approvedGarages.reduce((sum, g) => sum + (g.totalAdminRevenue || 0), 0);
-  }, [approvedGarages]);
+  }, [adminGarageRows, adminSearch]);
 
   return (
     <div className={`admin-custom-theme h-[100dvh] w-full bg-[#faf9f6] dark:bg-slate-950 font-sans relative text-slate-900 dark:text-slate-100 transition-colors overflow-hidden flex flex-col`} dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
@@ -643,29 +494,17 @@ export const AdminDashboard = memo(({
                   e.stopPropagation();
                   setActiveTab('menu');
                 }}
-                className="flex items-center justify-center w-10 h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:text-emerald-400 rounded-xl border border-emerald-200 dark:border-emerald-800/80 outline-none cursor-pointer transition-colors shadow-sm shadow-emerald-500/5"
+                className="flex items-center justify-center w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl hover:bg-slate-800 dark:hover:bg-amber-500 outline-none cursor-pointer transition-colors shadow-sm shrink-0"
                 title={t('رجوع')}
               >
-                <ChevronRight className={`w-5.5 h-5.5 text-emerald-600 dark:text-emerald-400 stroke-[3.5] ${adminLang === 'en' ? 'rotate-180' : ''}`} />
+                <ChevronRight className={`w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5] ${adminLang === 'en' ? 'rotate-180' : ''}`} />
               </button>
             )}
             <div className="hidden sm:flex w-10 h-10 bg-slate-900 dark:bg-slate-800 rounded-xl items-center justify-center text-white">
               <Shield className="w-6 h-6 stroke-[3]" />
             </div>
             <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight leading-tight">
-              {activeTab === 'menu' ? t('لوحة تحكم النظام') : (
-                activeTab === 'garages' ? t('الجراجات') :
-                activeTab === 'packages' ? t('إدارة خطط الاشتراكات الدوريّة') :
-                activeTab === 'delegates' ? t('المندوبين') :
-                activeTab === 'requests' ? t('الطلبات والمراجعات') :
-                activeTab === 'reports' ? t('التقارير الذكية') :
-                activeTab === 'supervisors' ? t('المشرفين') :
-                activeTab === 'general_managers' ? t('المديرين العموم') :
-                activeTab === 'wallet' ? t('رقم المحفظة') :
-                activeTab === 'admin-pin' ? t('تعديل رمز دخول الآدمن') :
-                activeTab === 'announcements' ? t('الإعلانات') :
-                activeTab === 'global_settings' ? t('الإعدادات العامة') : t('لوحة تحكم النظام')
-              )}
+              {t('لوحة تحكم النظام')}
             </h1>
           </div>
           <div className="flex items-center gap-4 relative" ref={menuRef}>
@@ -691,19 +530,16 @@ export const AdminDashboard = memo(({
                   className={`fixed top-4 bottom-3 ${adminLang === 'en' ? 'right-3' : 'left-3'} w-[290px] xs:w-[330px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/80 z-50 flex flex-col overflow-hidden pointer-events-auto`}
                   dir={adminLang === 'en' ? 'ltr' : 'rtl'}
                 >
-                  {/* Drawer Header - Clean Profile Box */}
-                  <div className="p-5 pb-4 border-b border-slate-100 dark:border-slate-800/60 font-sans">
+                  {/* Drawer Header - Clean Profile Box matching Garage Sidebar */}
+                  <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-800/60 font-sans">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center text-white font-extrabold AN_ELEMENT_ID_HERE">
-                          <Shield className="w-6 h-6" />
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-400 dark:bg-amber-400 flex items-center justify-center text-slate-950 font-extrabold shadow-sm shrink-0">
+                          <Shield className="w-6 h-6 stroke-[2.5]" />
                         </div>
                         <div className={`flex flex-col ${adminLang === 'en' ? 'text-left' : 'text-right'}`}>
-                          <span className="text-sm font-black text-slate-900 dark:text-slate-100 truncate max-w-[150px]">
+                          <span className="text-mobile-wrap text-sm font-black text-slate-900 dark:text-slate-100 max-w-[150px] leading-snug">
                             {currentSupervisor ? currentSupervisor.name : t('مالك النظام')}
-                          </span>
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                            {currentSupervisor ? t('مشرف نظام') : t('مسؤول النظام')}
                           </span>
                         </div>
                       </div>
@@ -711,94 +547,87 @@ export const AdminDashboard = memo(({
                       <button 
                         type="button"
                         onClick={() => setShowMenu(false)}
-                        className="w-10 h-10 bg-red-500 dark:bg-red-600 text-white rounded-xl flex items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition-colors outline-none"
+                        className="w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl flex items-center justify-center transition-colors outline-none cursor-pointer shrink-0"
                       >
-                        <X className="w-6 h-6" />
+                        <X className="w-6 h-6 stroke-[2.5]" />
                       </button>
                     </div>
                   </div>
 
                   {/* Drawer Content Area */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar-slate font-sans">
-
+                  <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 custom-scrollbar-slate font-sans">
 
                     {/* Display Language Selection */}
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
-                      <div className="flex flex-col gap-4">
-                        <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none">
-                          {currentSupervisor ? t('لغة العرض:') : t('لغة العرض (الآدمن فقط):')}
-                        </span>
-                        <div className="flex gap-4">
-                          {/* Arabic Button */}
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setAdminLang('ar');
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
-                              adminLang === 'ar'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <span>{t('العربية')}</span>
-                          </button>
+                    <div className="space-y-2">
+                      <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none block">
+                        {currentSupervisor ? t('لغة العرض:') : t('لغة العرض (الآدمن فقط):')}
+                      </span>
+                      <div className="flex gap-2">
+                        {/* Arabic Button */}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setAdminLang('ar');
+                            setShowMenu(false);
+                          }}
+                          className={`flex-1 flex items-center justify-center py-2.5 px-3 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
+                            adminLang === 'ar'
+                              ? 'bg-amber-400 border-amber-400 text-slate-950 shadow-sm'
+                              : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-150 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span>{t('العربية')}</span>
+                        </button>
 
-                          {/* English Button */}
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setAdminLang('en');
-                              setShowMenu(false);
-                            }}
-                            className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
-                              adminLang === 'en'
-                                ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            <span>{t('English')}</span>
-                          </button>
-                        </div>
+                        {/* English Button */}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setAdminLang('en');
+                            setShowMenu(false);
+                          }}
+                          className={`flex-1 flex items-center justify-center py-2.5 px-3 rounded-xl border-2 transition-all outline-none font-bold text-sm cursor-pointer ${
+                            adminLang === 'en'
+                              ? 'bg-amber-400 border-amber-400 text-slate-950 shadow-sm'
+                              : 'bg-[#faf9f6] dark:bg-slate-900 border-slate-150 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span>{t('English')}</span>
+                        </button>
                       </div>
                     </div>
 
                     {/* Appearance Settings Button */}
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40 space-y-2">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setShowMenu(false);
-                          setShowAppearanceSettings(true);
-                        }}
-                        className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-850 dark:text-slate-200 rounded-xl border-2 border-slate-100 dark:border-slate-800 transition-all outline-none cursor-pointer"
-                      >
-                        <div className="flex items-center gap-4.5">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-400/10 text-indigo-500 flex items-center justify-center">
-                            <Sliders className="w-4 h-4 text-indigo-500" />
-                          </div>
-                          <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{t('إعدادات المظهر')}</span>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowAppearanceSettings(true);
+                      }}
+                      className="w-full flex items-center justify-between p-2.5 bg-[#faf9f6] dark:bg-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border-2 border-slate-150 dark:border-slate-800 transition-all outline-none cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                          <Sliders className="w-4 h-4 text-amber-400 dark:text-slate-950" />
                         </div>
-                      </button>
-                    </div>
+                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{t('إعدادات المظهر')}</span>
+                      </div>
+                    </button>
+                  </div>
 
-
-
-                    {/* Logout Button */}
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/40">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setShowMenu(false);
-                          onLogout();
-                        }}
-                        className="w-full flex items-center justify-center gap-4 py-3.5 px-4 rounded-xl border-2 border-red-200/50 dark:border-red-900/30 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-500 dark:text-red-400 font-bold text-sm transition-all outline-none cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4 stroke-[2.5]" />
-                        <span>{t('تسجيل الخروج')}</span>
-                      </button>
-                    </div>
+                  {/* Logout Button in Bottom Bar */}
+                  <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/40 dark:bg-slate-900/40">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        onLogout();
+                      }}
+                      className="w-full flex items-center justify-center gap-2.5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all font-black text-sm outline-none cursor-pointer"
+                    >
+                      <LogOut className="w-5 h-5 rotate-180" />
+                      <span>{t('تسجيل الخروج')}</span>
+                    </button>
                   </div>
                 </div>
               </>
@@ -812,211 +641,221 @@ export const AdminDashboard = memo(({
           ref={mainScrollRef} 
           className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full ${showPlansModal || showOverview ? 'overflow-hidden' : 'overflow-y-auto'}`}
         >
-          {activeTab === 'menu' ? (
-            <div className="flex flex-col gap-10 md:gap-14 pt-4 md:pt-6 pb-8">
-              {/* Premium Quranic Verse Manuscript Section */}
-              <div className="w-full text-center px-6 py-10 md:py-14 bg-[#fdfbf7] dark:bg-[#0c0d0e] border-2 border-double border-amber-600/30 dark:border-amber-400/15 rounded-xl relative overflow-hidden transition-all shadow-sm">
-                {/* Spiritual Glowing/Pattern Accents */}
-                <div className="absolute inset-0 bg-radial-gradient from-amber-500/5 dark:from-emerald-500/5 via-transparent to-transparent opacity-80 pointer-events-none" />
-                
-                {/* Traditional Side Ornaments for Visual Framing */}
-                <div className="absolute top-4 bottom-3 right-3 left-3 border border-dashed border-amber-500/10 dark:border-amber-400/5 rounded-2xl pointer-events-none" />
-                
-                {/* Top Islamic Geometric Ornament accent */}
-                <div className="flex items-center justify-center gap-4 text-amber-600/50 dark:text-amber-400/40 mb-4 select-none">
-                  <span className="text-xs">─── ❖ ───</span>
-                  <span className="text-lg md:text-xl">۩</span>
-                  <span className="text-xs">─── ❖ ───</span>
-                </div>
+          {/* Top Navigation Bar with Horizontal Scrolling */}
+          <div className="mb-8 border-b border-slate-200 dark:border-slate-800 pb-5">
+            <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto scrollbar-hide no-scrollbar hide-scroll-bar touch-pan-x snap-x snap-mandatory">
+              {/* Tab 1: Overview */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('overview')}
+                className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                  activeTab === 'overview' || activeTab === 'menu'
+                    ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span>{t('نظرة عامة')}</span>
+              </button>
 
-                {/* Holy Text Container with Amiri Font */}
-                <div className="max-w-4xl mx-auto px-2 relative z-10 text-center">
-                  <p className="font-serif text-[18px] sm:text-[22px] md:text-[28px] lg:text-[34px] text-emerald-950 dark:text-[#faf9f6] font-extrabold leading-[2.2] sm:leading-[2.5] text-balance transition-colors select-none" dir="rtl">
-                    ﴿ إِنَّا فَتَحْنَا لَكَ فَتْحًا مُبِينًا <span className="text-amber-600 dark:text-amber-500/90 font-serif font-black mx-1 inline-block drop-shadow-sm">﴿١﴾</span> لِيَغْفِرَ لَكَ اللَّهُ مَا تَقَدَّمَ مِنْ ذَنْبِكَ وَمَا تَأَخَّرَ وَيُتِمَّ نِعْمَتَهُ عَلَيْكَ وَيَهْدِيَكَ صِرَاطًا مُسْتَقِيمًا <span className="text-amber-600 dark:text-amber-500/90 font-serif font-black mx-1 inline-block drop-shadow-sm">﴿٢﴾</span> وَيَنْصُرَكَ اللَّهُ نَصْرًا عَزِيزًا <span className="text-amber-600 dark:text-amber-500/90 font-serif font-black mx-1 inline-block drop-shadow-sm">﴿٣﴾ ﴾</span>
-                  </p>
-                </div>
+              {/* Tab 2: Garages */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('garages')}
+                className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                  activeTab === 'garages'
+                    ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Car className="w-4 h-4" />
+                <span>{t('الجراجات')}</span>
+              </button>
 
-                {/* Bottom Islamic Geometric Ornament accent */}
-                <div className="flex items-center justify-center gap-4 text-amber-600/50 dark:text-amber-400/40 mt-5 select-none">
-                  <span className="text-xs">─── ❖ ───</span>
-                  <span className="text-sm">❖</span>
-                  <span className="text-xs">─── ❖ ───</span>
-                </div>
-              </div>
-
-              {/* Grid of Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-            {/* Card 1: Garages */}
-            <div 
-              onClick={() => setActiveTab('garages')}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-            >
-              <div className="flex items-center justify-between relative z-10">
-                <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الجراجات')}</h3>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                  {approvedGarages.length} {t('جراج مسجل')}
+              {/* Tab 3: People (Delegates, Supervisors, GMs) */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('people')}
+                className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                  activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers'
+                    ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>{t('الأشخاص')}</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                  activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers'
+                    ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}>
+                  {delegates.length + supervisors.length + generalManagers.length}
                 </span>
-              </div>
+              </button>
+
+              {/* Tab 4: Requests (Moved inside the main slider) */}
+              {!currentSupervisor && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('requests')}
+                  className={`flex shrink-0 snap-start items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                    activeTab === 'requests'
+                      ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{t('الطلبات والمراجعات')}</span>
+                  {(rechargeRequests.length > 0 || pendingGarages.length > 0) && (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 animate-pulse ${
+                      activeTab === 'requests'
+                        ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
+                        : 'bg-rose-500 text-white'
+                    }`}>
+                      {rechargeRequests.length + pendingGarages.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* Tab 5: Subscription Pricing */}
+              {!currentSupervisor && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('packages')}
+                  className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                    activeTab === 'packages'
+                      ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{t('أسعار الاشتراكات')}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                    activeTab === 'packages'
+                      ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                  }`}>
+                    {packages.length}
+                  </span>
+                </button>
+              )}
+
+              {/* Tab 6: Settings */}
+              {!currentSupervisor && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('catalog_settings')}
+                  className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                    activeTab === 'catalog_settings' || activeTab === 'wallet' || activeTab === 'admin-pin' || activeTab === 'announcements' || activeTab === 'global_settings'
+                      ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <SettingsIcon className="w-4 h-4" />
+                  <span>{t('الإعدادات')}</span>
+                </button>
+              )}
             </div>
-
-            {/* Card 2: Packages (إدارة الباقات) - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('packages')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('إدارة خطط الاشتراكات الدوريّة')}</h3>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {packages.length} {t('خطة اشتراك')}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Card 3: Delegates */}
-            <div 
-              onClick={() => setActiveTab('delegates')}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-            >
-              <div className="flex items-center justify-between relative z-10">
-                <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المندوبين')}</h3>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                  {delegates.length} {t('مندوب معتمد')}
-                </span>
-              </div>
-            </div>
-
-            {/* Card 4: Recharge Requests & Garage Approvals - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('requests')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الطلبات والمراجعات')}</h3>
-                  <div className="flex flex-wrap gap-1.5 justify-end shrink-0">
-                    {rechargeRequests.length > 0 && (
-                      <span className="text-[10px] font-black text-white px-2.5 py-1 bg-red-600 rounded-lg shrink-0">
-                        {rechargeRequests.length} {t('معلق شحن')}
-                      </span>
-                    )}
-                    {pendingGarages.length > 0 && (
-                      <span className="text-[10px] font-black text-white px-2.5 py-1 bg-slate-600 rounded-lg shrink-0">
-                        {pendingGarages.length} {t('انتظار موافقة')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Card 5: Reports (التقارير الذكية) - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('reports')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('التقارير الذكية')}</h3>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/65 dark:bg-slate-800/65 border border-slate-200/30 dark:border-slate-700/30 rounded-lg shrink-0">
-                    {t('رؤية حية')}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Card 5.5: Announcements (الإعلانات) */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('announcements')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الإعلانات')}</h3>
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                    <ClipboardList className="w-4.5 h-4.5" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Card 6: Supervisors (المشرفين) - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('supervisors')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المشرفين')}</h3>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {supervisors.length} {t('مشرف')}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Card 6.5: General Managers (المديرين العموم) - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('general_managers')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('المديرين العموم')}</h3>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg shrink-0">
-                    {generalManagers.length} {t('مدير عام')}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Card 7: Wallet Setting - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('wallet')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('رقم المحفظة')}</h3>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 border border-slate-200/40 dark:border-slate-700/40 rounded-lg max-w-[130px] truncate shrink-0" dir="ltr">
-                    {currentWalletNumber}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Card 8: Admin Passcode Setting - Only for Super Admin */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('admin-pin')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('رمز دخول الآدمن')}</h3>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                    <Key className="w-4.5 h-4.5" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Card 9: Global Settings (الإعدادات العامة) */}
-            {!currentSupervisor && (
-              <div 
-                onClick={() => setActiveTab('global_settings')}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:border-slate-400 dark:hover:border-slate-700/80 p-6 rounded-2xl cursor-pointer flex flex-col justify-center h-[100px] group relative overflow-hidden transition-colors"
-              >
-                <div className="flex items-center justify-between relative z-10">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base leading-none">{t('الإعدادات العامة')}</h3>
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center">
-                    <SettingsIcon className="w-4.5 h-4.5" />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
+
+          {activeTab === 'overview' || activeTab === 'menu' ? (
+            <AdminOverviewView
+              allGarages={approvedGarages}
+              delegates={delegates}
+              onSelectGarage={(g) => {
+                if (currentSupervisor) return;
+                setSelectedGarageForDetails(g);
+                setView('admin_garage_details');
+              }}
+              onOpenAddGarage={() => {
+                setPinInput('');
+                setShowOverview(true);
+              }}
+            />
+          ) : activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers' ? (
+            <AdminPeopleView
+              delegates={delegates}
+              supervisors={supervisors}
+              generalManagers={generalManagers}
+              currentSupervisor={currentSupervisor}
+              onSelectDelegate={(d) => {
+                setSelectedDelegateForDetails(d);
+                setView('admin_delegate_details');
+              }}
+            />
+          ) : activeTab === 'catalog_settings' ? (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5">
+                {/* Wallet Number */}
+                <div 
+                  onClick={() => setActiveTab('wallet')}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 p-6 rounded-2xl cursor-pointer flex flex-col justify-between h-36 transition-all group shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">{t('رقم المحفظة الإلكترونية')}</h3>
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shadow-sm shrink-0">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-bold font-mono">
+                    <span>{currentWalletNumber}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-400 group-hover:text-emerald-500 ${adminLang === 'en' ? '' : 'rotate-180'}`} />
+                  </div>
+                </div>
+
+                {/* Admin PIN */}
+                <div 
+                  onClick={() => setActiveTab('admin-pin')}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 p-6 rounded-2xl cursor-pointer flex flex-col justify-between h-36 transition-all group shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">{t('رمز دخول الآدمن')}</h3>
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shadow-sm shrink-0">
+                      <Key className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                    <span>{t('تحديث رمز الحماية السري')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-400 group-hover:text-emerald-500 ${adminLang === 'en' ? '' : 'rotate-180'}`} />
+                  </div>
+                </div>
+
+                {/* Announcements */}
+                <div 
+                  onClick={() => setActiveTab('announcements')}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 p-6 rounded-2xl cursor-pointer flex flex-col justify-between h-36 transition-all group shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">{t('إعلانات المنصة')}</h3>
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shadow-sm shrink-0">
+                      <ClipboardList className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                    <span>{t('نشر وتعديل الإعلانات العامة')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-400 group-hover:text-blue-500 ${adminLang === 'en' ? '' : 'rotate-180'}`} />
+                  </div>
+                </div>
+
+                {/* Global Settings */}
+                <div 
+                  onClick={() => setActiveTab('global_settings')}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 p-6 rounded-2xl cursor-pointer flex flex-col justify-between h-36 transition-all group shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-slate-900 dark:text-white text-base">{t('الإعدادات العامة')}</h3>
+                    <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shadow-sm shrink-0">
+                      <SettingsIcon className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                    <span>{t('إعدادات النظام والعمولات')}</span>
+                    <ChevronRight className={`w-4 h-4 text-slate-400 group-hover:text-purple-500 ${adminLang === 'en' ? '' : 'rotate-180'}`} />
+                  </div>
+                </div>
+              </div>
+            </div>
         ) : activeTab === 'garages' ? (
           <div className="grid grid-cols-1 gap-6">
             {/* Add Garage Button */}
@@ -1037,7 +876,7 @@ export const AdminDashboard = memo(({
                   <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 ${adminLang === 'en' ? 'sm:flex-row-reverse' : ''}`}>
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-semibold text-slate-900 dark:text-white">{t('قائمة الجراجات')}</span>
-                      <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">({approvedGarages.length})</span>
+                      <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">({displayedGarages.length})</span>
                     </div>
                     <div className="relative w-full sm:w-64">
                       <Search className={`absolute ${adminLang === 'en' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-3.5 h-3.5`} />
@@ -1051,696 +890,80 @@ export const AdminDashboard = memo(({
                       />
                     </div>
                   </div>
-
-                  {!currentSupervisor && (
-                    <div className="grid grid-cols-1">
-                      <div className="bg-emerald-50/50 dark:bg-emerald-400/5 p-2.5 rounded-xl border border-emerald-100/50 dark:border-emerald-400/10 flex flex-col items-center justify-center text-center">
-                        <div className="text-sm font-black text-emerald-500 font-mono">
-                          {Number(totalAdminRevenue).toFixed(0)}
-                        </div>
-                        <p className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400/60 uppercase tracking-tight">{t('إجمالي الدخل')}</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-                <div className="p-6 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[300px]">
-                  {displayedGarages.map((g) => {
-                    return (
-                      <div 
-                        key={g.id} 
-                        onClick={() => {
-                          if (currentSupervisor) return;
-                          setSelectedGarageForDetails(g);
-                          setView('admin_garage_details');
-                        }}
-                        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col justify-between h-36 overflow-hidden transition-colors ${
-                          currentSupervisor 
-                            ? 'cursor-default select-none' 
-                            : 'hover:border-slate-400 dark:hover:border-slate-700 cursor-pointer group'
-                        }`}
-                      >
-                        {/* Elegant Flat Slate Header */}
-                        <div className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-4 py-3 text-center border-b border-slate-200 dark:border-slate-800 shrink-0 flex items-center justify-center">
-                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-center text-xs sm:text-sm truncate leading-none w-full">
-                            {g.name}
-                          </h3>
-                        </div>
-
-                        {/* Card Body */}
-                        <div className="flex-1 flex flex-col items-center justify-center p-4 relative bg-slate-50/20 dark:bg-slate-900/10">
-                          <Car className={`w-8 h-8 text-slate-300 dark:text-slate-600 transition-colors ${
-                            currentSupervisor ? '' : 'group-hover:text-slate-600 dark:group-hover:text-slate-400'
-                          }`} />
-                          
-                          {g.isLocked && (
-                            <div className="absolute bottom-2 inset-x-2 text-center">
-                              <span className="inline-block text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-500/10 dark:bg-red-500/25 text-red-500 dark:text-red-400 border border-red-500/20 uppercase tracking-widest leading-none">
+                <div className="p-3 sm:p-4 flex flex-col gap-2 min-h-[160px]">
+                  {displayedGarages.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 dark:text-slate-500 font-bold text-xs">
+                      {t('لا توجد جراجات مطابقة للبحث')}
+                    </div>
+                  ) : (
+                    displayedGarages.map((g) => {
+                      return (
+                        <div 
+                          key={g.id} 
+                          onClick={() => {
+                            if (currentSupervisor) return;
+                            setSelectedGarageForDetails(g);
+                            setView('admin_garage_details');
+                          }}
+                          className={`w-full bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-all ${
+                            currentSupervisor 
+                              ? 'cursor-default select-none' 
+                              : 'cursor-pointer active:scale-[0.99] group'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span className="text-mobile-wrap font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm leading-snug">
+                              {g.name}
+                            </span>
+                            {g.isLocked && (
+                              <span className="shrink-0 text-[10px] font-black px-2 py-0.5 rounded-md bg-red-500/10 dark:bg-red-500/25 text-red-500 dark:text-red-400 border border-red-500/20 leading-none">
                                 {t('مغلق')}
                               </span>
+                            )}
+                          </div>
+                          {!currentSupervisor && (
+                            <div className="shrink-0 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors">
+                              {adminLang === 'en' ? (
+                                <ChevronRight className="w-4 h-4" />
+                              ) : (
+                                <ChevronLeft className="w-4 h-4" />
+                              )}
                             </div>
                           )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
-                {filteredGarages.length > (garagePage + 1) * GARAGES_PER_PAGE && (
-                  <div className="p-4 flex justify-center border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                {adminGaragePageError && (
+                  <div className="p-4 flex flex-col items-center gap-2 border-t border-slate-100 dark:border-slate-800 text-center">
+                    <span className="text-xs font-bold text-red-500 dark:text-red-400">
+                      {t('تعذر تحميل قائمة الجراجات.')}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setGaragePage(p => p + 1)}
-                      className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition-colors shadow-sm active:scale-95"
+                      onClick={() => void loadAdminGaragePage(adminGarageRows.length === 0)}
+                      disabled={isAdminGaragePageLoading}
+                      className="px-5 py-2 text-xs font-black text-white bg-slate-900 dark:bg-emerald-600 rounded-xl disabled:opacity-60"
                     >
-                      {t('تحميل المزيد')} ({filteredGarages.length - (garagePage + 1) * GARAGES_PER_PAGE} {t('جراج متبقي')})
+                      {t('إعادة المحاولة')}
                     </button>
                   </div>
                 )}
-              </div>
-            </section>
-          </div>
-        ) : activeTab === 'delegates' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1">
-              <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
-                  <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shrink-0">
-                    <Plus className="w-5 h-5 text-white" />
-                  </div>
-                  {t('إضافة مندوب جديد')}
-                </h2>
-                <form onSubmit={handleCreateDelegate} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المندوب')}</label>
-                    <input 
-                      value={delegateForm.name}
-                      onChange={(e) => setDelegateForm({...delegateForm, name: e.target.value})}
-                      placeholder={t('الاسم الثلاثي...')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-400 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رقم الموبايل')}</label>
-                    <input 
-                      value={delegateForm.phone}
-                      onChange={(e) => setDelegateForm({...delegateForm, phone: e.target.value})}
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-400 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رمز الدخول (6 أرقام)')}</label>
-                    <div className="relative">
-                      <input 
-                        type="tel"
-                        inputMode="numeric"
-                        value={delegateForm.pin}
-                        onChange={(e) => setDelegateForm({...delegateForm, pin: e.target.value.replace(/\D/g, '')})}
-                        placeholder="••••••" 
-                        maxLength={6}
-                        required 
-                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-400 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold text-center tracking-[0.5em] transition-all px-14" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setDelegateForm({...delegateForm, pin: generateSafePin(delegates.map(d => d.pin))})}
-                        className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
-                        title={t('توليد رقم سري عشوائي')}
-                      >
-                        <RefreshCw className="w-5 h-5 mx-auto" strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="pt-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2 mb-3 block">{t('صلاحيات المندوب')}</label>
-                    <div className="grid grid-cols-1 gap-4">
-                      <button
-                        type="button"
-                        onClick={() => setDelegateForm({...delegateForm, canCreateGarage: !delegateForm.canCreateGarage})}
-                        className={`p-4 rounded-2xl border-2 flex items-center justify-between group transition-all outline-none ${
-                          delegateForm.canCreateGarage 
-                            ? 'bg-emerald-50 dark:bg-emerald-400/5 border-emerald-500 dark:border-emerald-400 text-emerald-700 dark:text-emerald-400' 
-                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
-                            delegateForm.canCreateGarage ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600'
-                          }`}>
-                            <Plus className="w-5 h-5" />
-                          </div>
-                          <span className="font-bold text-sm">{t('السماح بإنشاء جراجات جديدة')}</span>
-                        </div>
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
-                          delegateForm.canCreateGarage ? 'bg-emerald-500 text-white' : 'bg-slate-100/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-600'
-                        }`}>
-                          <Shield className="w-4 h-4" />
-                        </div>
-                      </button>
-                    </div>
+                {!adminGaragePageError && adminGarageHasMore && (
+                  <div className="p-4 flex justify-center border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                    <button
+                      type="button"
+                      onClick={() => void loadAdminGaragePage()}
+                      disabled={isAdminGaragePageLoading}
+                      className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-black text-xs transition-colors shadow-sm active:scale-95"
+                    >
+                      {isAdminGaragePageLoading ? t('جارٍ التحميل...') : t('تحميل المزيد')}
+                    </button>
                   </div>
-                  <button 
-                    type="submit" 
-                    disabled={isSubmittingDelegate}
-                    className="w-full bg-emerald-600 dark:bg-emerald-500 text-white py-5 rounded-2xl font-bold text-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
-                  >
-                    {isSubmittingDelegate ? <Spinner /> : (
-                      <>
-                        <Plus className="w-6 h-6" />
-                        <span>{t('منح صلاحية مندوب')}</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-            </section>
-
-            <section className="lg:col-span-2">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
-                <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
-                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors">
-                      <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    {t('قائمة المندوبين المعتمدين')}
-                    <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({delegates.length})</span>
-                  </h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-                    {displayedDelegates.map((d) => (
-                      <div 
-                        key={d.id} 
-                        onClick={() => {
-                          setSelectedDelegateForDetails(d);
-                          setView('admin_delegate_details');
-                        }}
-                        className="p-4 bg-white dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-700 rounded-xl hover:border-emerald-500 dark:hover:border-emerald-500 cursor-pointer group flex flex-col justify-between h-32 transition-all"
-                      >
-                        <div className="flex items-center gap-4">
-                           <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center font-black group-hover:bg-emerald-500 group-hover:text-white transition-all text-xs">
-                            {d.name.charAt(0)}
-                          </div>
-                          <h4 className="font-semibold text-slate-900 dark:text-white text-xs truncate leading-tight group-hover:text-emerald-500 transition-colors uppercase flex-1">{d.name}</h4>
-                        </div>
-                        
-                        <div className="flex justify-between items-end">
-                          <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[9px]">
-                            <Phone className="w-2 h-2" />
-                            <span className="tracking-tighter">{d.phone}</span>
-                          </div>
-                          {d.canCreateGarage && (
-                            <div className="text-[7px] font-bold px-1 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 uppercase tracking-widest shrink-0">PLUS</div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {delegates.length === 0 && (
-                      <div className="col-span-full py-12 text-center text-slate-300 dark:text-slate-700 font-bold">
-                        <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        {t('لا يوجد مندوبين مسجلين حالياً')}
-                      </div>
-                    )}
-                  </div>
-                  {delegates.length > delegateDisplayLimit && (
-                    <div className="mt-6 flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setDelegateDisplayLimit(prev => prev + 12)}
-                        className="px-6 py-2.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition-colors shadow-sm active:scale-95"
-                      >
-                        {t('عرض المزيد من المندوبين')} ({delegates.length - delegateDisplayLimit} {t('متبقي')})
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : activeTab === 'supervisors' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1">
-              <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
-                  <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
-                    <Plus className="w-5 h-5 text-white dark:text-white" />
-                  </div>
-                  {t('إضافة مشرف جديد')}
-                </h2>
-                <form onSubmit={handleCreateSupervisor} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المشرف')}</label>
-                    <input 
-                      value={adminSupervisorForm?.name || ''}
-                      onChange={(e) => setAdminSupervisorForm && setAdminSupervisorForm({...adminSupervisorForm, name: e.target.value})}
-                      placeholder={t('الاسم الثلاثي...')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رقم الموبايل')}</label>
-                    <input 
-                      value={adminSupervisorForm?.phone || ''}
-                      onChange={(e) => setAdminSupervisorForm && setAdminSupervisorForm({...adminSupervisorForm, phone: e.target.value})}
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رمز الدخول المشرف (PIN من 4-6 أرقام)')}</label>
-                    <div className="relative">
-                      <input 
-                        type="tel"
-                        inputMode="numeric"
-                        value={adminSupervisorForm?.pin || ''}
-                        onChange={(e) => setAdminSupervisorForm && setAdminSupervisorForm({...adminSupervisorForm, pin: e.target.value.replace(/\D/g, '')})}
-                        placeholder="••••" 
-                        maxLength={6}
-                        required 
-                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold text-center tracking-[0.5em] transition-all px-14" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (setAdminSupervisorForm) {
-                            setAdminSupervisorForm({...adminSupervisorForm, pin: Math.floor(1000 + Math.random() * 9000).toString()});
-                          }
-                        }}
-                        className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-400/20 transition-colors"
-                        title={t('توليد رقم سري عشوائي')}
-                      >
-                        <RefreshCw className="w-5 h-5 mx-auto" strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    disabled={isSubmittingSupervisor}
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
-                  >
-                    {isSubmittingSupervisor ? <Spinner /> : (
-                      <>
-                        <Plus className="w-6 h-6" />
-                        <span>{t('منح صلاحية مشرف')}</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-            </section>
-
-            <section className="lg:col-span-2">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
-                <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
-                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
-                      <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
-                    </div>
-                    {t('قائمة المشرفين المعتمدين بالمنصة')}
-                    <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({supervisors.length})</span>
-                  </h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {supervisors.map((s) => (
-                      <div 
-                        key={s.id} 
-                        className="p-5 bg-slate-50 dark:bg-slate-800/20 border-2 border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between h-36 transition-all hover:border-slate-300 dark:hover:border-slate-700 relative group"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black text-sm">
-                              {s.name.charAt(0)}
-                            </div>
-                            <div className="space-y-0.5">
-                              <h4 className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm truncate max-w-[140px] leading-snug">{s.name}</h4>
-                              <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[9px]">
-                                <Phone className="w-2.5 h-2.5" />
-                                <span>{s.phone}</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConfirmDialog({
-                                isOpen: true,
-                                title: t('حذف المشرف'),
-                                message: adminLang === 'en' ? `Are you sure you want to delete supervisor "${s.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف المشرف "${s.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
-                                confirmText: t('نعم، احذف'),
-                                cancelText: t('إلغاء'),
-                                type: 'danger',
-                                onConfirm: async () => {
-                                  try {
-                                    await firestoreService.removeSupervisor(s.id);
-                                  } catch (error) {
-                                    console.error(error);
-                                  } finally {
-                                    setConfirmDialog(p => ({ ...p, isOpen: false }));
-                                  }
-                                }
-                              });
-                            }}
-                            className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                            title={t('إلغاء صلاحيات المشرف')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        
-                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
-                          {editingSupervisorPinId === s.id ? (
-                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
-                              <input
-                                type="tel"
-                                inputMode="numeric"
-                                value={editingSupervisorPinValue}
-                                maxLength={6}
-                                onChange={(e) => setEditingSupervisorPinValue(e.target.value.replace(/\D/g, ''))}
-                                className="w-12 bg-transparent text-slate-800 dark:text-slate-200 text-[10px] font-black text-center focus:outline-none focus:ring-0 border-0 p-0 font-mono"
-                                placeholder="••••"
-                                autoFocus
-                              />
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (editingSupervisorPinValue.length < 4) {
-                                    return;
-                                  }
-                                  setIsUpdatingSupervisorPin(true);
-                                  try {
-                                    const pinCheck = await firestoreService.isPinTaken(editingSupervisorPinValue, s.id);
-                                    if (pinCheck.taken) {
-                                      setIsUpdatingSupervisorPin(false);
-                                      return;
-                                    }
-                                    await firestoreService.updateSupervisor(s.id, { pin: editingSupervisorPinValue });
-                                    s.pin = editingSupervisorPinValue;
-                                    setEditingSupervisorPinId(null);
-                                  } catch (err) {
-                                    console.error(err);
-                                  } finally {
-                                    setIsUpdatingSupervisorPin(false);
-                                  }
-                                }}
-                                disabled={isUpdatingSupervisorPin}
-                                className="w-4 h-4 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 transition-colors cursor-pointer"
-                              >
-                                {isUpdatingSupervisorPin ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingSupervisorPinId(null)}
-                                className="text-[9px] font-bold text-slate-400 px-0.5 hover:underline"
-                              >
-                                {t('إلغاء')}
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                              <Key className="w-3.5 h-3.5" />
-                              <span className="text-[11px] font-black font-mono tracking-widest">{s.pin}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingSupervisorPinId(s.id);
-                                  setEditingSupervisorPinValue(s.pin || '');
-                                }}
-                                className="text-[9px] text-emerald-500 font-bold hover:underline"
-                              >
-                                {t('تعديل')}
-                              </button>
-                            </div>
-                          )}
-                          <span className="text-[10px] font-black px-2.5 py-1 bg-slate-200 dark:bg-slate-800 rounded-md text-slate-600 dark:text-slate-400">
-                            {t('صلاحيات مشرف')}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    {supervisors.length === 0 && (
-                      <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
-                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        {t('لا يوجد مشرفين منشئين حالياً')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : activeTab === 'general_managers' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <section className="lg:col-span-1">
-              <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-8 transition-colors">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-4">
-                  <div className="w-8 h-8 bg-slate-900 dark:bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
-                    <Plus className="w-5 h-5 text-white dark:text-white" />
-                  </div>
-                  {t('إضافة مدير عام جديد')}
-                </h2>
-                <form onSubmit={handleCreateGeneralManager} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('اسم المدير العام')}</label>
-                    <input 
-                      value={adminGeneralManagerForm?.name || ''}
-                      onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, name: e.target.value})}
-                      placeholder={t('الاسم الثلاثي...')} 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رقم الموبايل')}</label>
-                    <input 
-                      value={adminGeneralManagerForm?.phone || ''}
-                      onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, phone: e.target.value})}
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold transition-all" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('رمز الدخول (PIN من 4-6 أرقام)')}</label>
-                    <div className="relative">
-                      <input 
-                        type="tel"
-                        inputMode="numeric"
-                        value={adminGeneralManagerForm?.pin || ''}
-                        onChange={(e) => setAdminGeneralManagerForm({...adminGeneralManagerForm, pin: e.target.value.replace(/\D/g, '')})}
-                        placeholder="••••" 
-                        maxLength={6}
-                        required 
-                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none font-bold text-center tracking-[0.5em] transition-all px-14" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAdminGeneralManagerForm({...adminGeneralManagerForm, pin: Math.floor(1000 + Math.random() * 9000).toString()});
-                        }}
-                        className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-emerald-100 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-400/20 transition-colors"
-                        title={t('توليد رقم سري عشوائي')}
-                      >
-                        <RefreshCw className="w-5 h-5 mx-auto" strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-2">{t('الجراجات المتاحة للمدير العام')}</label>
-                    <div className="max-h-48 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 bg-slate-50 dark:bg-slate-800/40 space-y-2.5">
-                      {approvedGarages.map(g => (
-                        <div 
-                          key={g.id}
-                          onClick={() => toggleGarageSelection(g.id)}
-                          className="flex items-center gap-4 cursor-pointer select-none"
-                        >
-                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                            adminGeneralManagerForm.selectedGarages.includes(g.id)
-                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                              : 'border-slate-300 dark:border-slate-600'
-                          }`}>
-                            {adminGeneralManagerForm.selectedGarages.includes(g.id) && <Check className="w-3.5 h-3.5 stroke-[3.5]" />}
-                          </div>
-                          <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">{g.name}</span>
-                        </div>
-                      ))}
-                      {approvedGarages.length === 0 && (
-                        <span className="text-slate-400 text-xs font-bold block text-center">{t('لا يوجد جراجات معتمدة حالياً')}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    disabled={isSubmittingGeneralManager}
-                    className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-5 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-4 mt-4 transition-all outline-none"
-                  >
-                    {isSubmittingGeneralManager ? <Spinner /> : (
-                      <>
-                        <Plus className="w-6 h-6" />
-                        <span>{t('إضافة مدير عام')}</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-            </section>
-
-            <section className="lg:col-span-2">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 overflow-hidden transition-colors">
-                <div className="p-8 border-b-2 border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 transition-colors">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-4">
-                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center border-2 border-slate-200 dark:border-slate-800 transition-colors shrink-0">
-                      <Shield className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
-                    </div>
-                    {t('قائمة المديرين العموم بالمنصة')}
-                    <span className="text-slate-300 dark:text-slate-600 text-sm font-bold mr-2">({generalManagers.length})</span>
-                  </h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {generalManagers.map((gm) => (
-                      <div 
-                        key={gm.id} 
-                        className="p-5 bg-slate-50 dark:bg-slate-800/20 border-2 border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between h-44 transition-all hover:border-slate-300 dark:hover:border-slate-700 relative group"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black text-sm">
-                              {gm.name.charAt(0)}
-                            </div>
-                            <div className="space-y-0.5">
-                              <h4 className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm truncate max-w-[140px] leading-snug">{gm.name}</h4>
-                              <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[9px]">
-                                <Phone className="w-2.5 h-2.5" />
-                                <span>{gm.phone}</span>
-                              </div>
-                              <div className="flex flex-wrap gap-1 mt-1.5 max-h-[44px] overflow-y-auto">
-                                {(gm.garageIds || []).map(gid => {
-                                  const grg = allGarages.find(g => g.id === gid);
-                                  return (
-                                    <span key={gid} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/45 text-emerald-600 dark:text-emerald-400 border border-emerald-100/40 dark:border-emerald-800/30">
-                                      {grg ? grg.name : gid}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConfirmDialog({
-                                isOpen: true,
-                                title: t('حذف المدير العام'),
-                                message: adminLang === 'en' ? `Are you sure you want to delete general manager "${gm.name}"? This action cannot be undone.` : `هل أنت متأكد من حذف المدير العام "${gm.name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
-                                confirmText: t('نعم، احذف'),
-                                cancelText: t('إلغاء'),
-                                type: 'danger',
-                                onConfirm: async () => {
-                                  try {
-                                    await firestoreService.removeGeneralManager(gm.id);
-                                  } catch (error) {
-                                    console.error(error);
-                                  } finally {
-                                    setConfirmDialog(p => ({ ...p, isOpen: false }));
-                                  }
-                                }
-                              });
-                            }}
-                            className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-                            title={t('إلغاء صلاحيات المدير العام')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        
-                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
-                          {editingGeneralManagerPinId === gm.id ? (
-                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
-                              <input
-                                type="tel"
-                                inputMode="numeric"
-                                value={editingGeneralManagerPinValue}
-                                maxLength={6}
-                                onChange={(e) => setEditingGeneralManagerPinValue(e.target.value.replace(/\D/g, ''))}
-                                className="w-12 bg-transparent text-slate-800 dark:text-slate-200 text-[10px] font-black text-center focus:outline-none focus:ring-0 border-0 p-0 font-mono"
-                                placeholder="••••"
-                                autoFocus
-                              />
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (editingGeneralManagerPinValue.length < 4) {
-                                    return;
-                                  }
-                                  setIsUpdatingGeneralManagerPin(true);
-                                  try {
-                                    const pinCheck = await firestoreService.isPinTaken(editingGeneralManagerPinValue, gm.id);
-                                    if (pinCheck.taken) {
-                                      setIsUpdatingGeneralManagerPin(false);
-                                      return;
-                                    }
-                                    await firestoreService.updateGeneralManager(gm.id, { pin: editingGeneralManagerPinValue });
-                                    gm.pin = editingGeneralManagerPinValue;
-                                    setEditingGeneralManagerPinId(null);
-                                  } catch (err) {
-                                    console.error(err);
-                                  } finally {
-                                    setIsUpdatingGeneralManagerPin(false);
-                                  }
-                                }}
-                                disabled={isUpdatingGeneralManagerPin}
-                                className="w-4 h-4 bg-emerald-600 text-white rounded flex items-center justify-center hover:bg-emerald-700 transition-colors cursor-pointer"
-                              >
-                                {isUpdatingGeneralManagerPin ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingGeneralManagerPinId(null)}
-                                className="text-[9px] font-bold text-slate-400 px-0.5 hover:underline"
-                              >
-                                {t('إلغاء')}
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                              <Key className="w-3.5 h-3.5" />
-                              <span className="text-[11px] font-black font-mono tracking-widest">{gm.pin}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingGeneralManagerPinId(gm.id);
-                                  setEditingGeneralManagerPinValue(gm.pin || '');
-                                }}
-                                className="text-[9px] text-emerald-500 font-bold hover:underline"
-                              >
-                                {t('تعديل')}
-                              </button>
-                            </div>
-                          )}
-                          <span className="text-[10px] font-black px-2.5 py-1 bg-purple-500/10 rounded-md text-purple-650 dark:text-purple-400">
-                            {t('مدير عام لجراج أو أكثر')}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    {generalManagers.length === 0 && (
-                      <div className="col-span-full py-16 text-center text-slate-300 dark:text-slate-700 font-bold">
-                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        {t('لا يوجد مديرين عموم منشئين حالياً')}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
             </section>
           </div>
@@ -1753,7 +976,7 @@ export const AdminDashboard = memo(({
                 onClick={() => setRequestSubTab('recharge')}
                 className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
                   requestSubTab === 'recharge'
-                    ? 'bg-emerald-600 text-white shadow-sm font-black'
+                    ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
               >
@@ -1768,7 +991,7 @@ export const AdminDashboard = memo(({
                 onClick={() => setRequestSubTab('creation')}
                 className={`flex-1 flex items-center justify-center gap-4 py-3 px-4 rounded-xl font-black text-xs sm:text-sm transition-all focus:outline-none ${
                   requestSubTab === 'creation'
-                    ? 'bg-emerald-600 text-white shadow-sm font-black'
+                    ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
               >
@@ -1808,7 +1031,7 @@ export const AdminDashboard = memo(({
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{t('نوع الاشتراك')}</p>
                             <div className="flex items-center gap-4">
                               <Zap className="w-3.5 h-3.5 text-emerald-500" />
-                              <span className="text-xs font-black text-slate-900 dark:text-white truncate">{request.packageName}</span>
+                              <span className="text-mobile-wrap text-xs font-black text-slate-900 dark:text-white leading-snug">{request.packageName}</span>
                             </div>
                           </div>
                           <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center">
@@ -2312,8 +1535,6 @@ export const AdminDashboard = memo(({
               </section>
             </div>
           </div>
-        ) : activeTab === 'reports' ? (
-          <AdminReportsView allGarages={approvedGarages} delegates={delegates} />
         ) : activeTab === 'wallet' ? (
           (() => {
             const renderFormattedWallet = (val: string) => {
@@ -2829,7 +2050,7 @@ export const AdminDashboard = memo(({
                   <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors">
                     <div className="text-right">
                       <span className="text-xs font-black text-slate-900 dark:text-white block">{t('يتضمن مشتركين شهريين / إيواء')}</span>
-                      <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{t('إضافة')} {surchargePercent}% {t('زيادة تلقائياً على سعر أية باقة/اشتراك')}</span>
+                      <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{t('إضافة 500 ج.م ثابتة تلقائياً على سعر أية باقة/اشتراك')}</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer shrink-0">
                       <input 

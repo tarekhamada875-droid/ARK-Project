@@ -1,4 +1,4 @@
-import { db, handleFirestoreError, OperationType } from '../../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { 
   collection, 
   query, 
@@ -18,7 +18,9 @@ import {
   serverTimestamp, 
   Timestamp, 
   increment, 
-  startAfter 
+  startAfter,
+  arrayRemove,
+  getCountFromServer
 } from 'firebase/firestore';
 import type { 
   Garage, 
@@ -40,6 +42,7 @@ import { getCleanPackageInfo } from '../../constants/packages';
 import { packageIdToDays, withRetry } from '../../utils';
 import { validateGarageCreation, validateRechargeRequest } from '../../domain/garage/validation';
 import { isSubscriptionExpired, calculateCapacityUsed } from '../../domain/garage/subscription';
+import { getCairoDateKey } from '../../domain/garage/businessDay';
 
 export type { 
   Garage, 
@@ -57,10 +60,17 @@ export type {
   SystemConfig 
 };
 
+export type GarageDeletionProgress = {
+  phase: 'preparing' | 'deleting' | 'finalizing' | 'complete';
+  total: number;
+  processed: number;
+  percentage: number;
+};
+
 export const firestoreServiceV2 = {
   // Garages (Subscriptions & Management)
   subscribeToGarages: (callback: (garages: Garage[]) => void) => {
-    const q = query(collection(db, 'garages'), limit(100));
+    const q = query(collection(db, 'garages'));
     let cachedData: Garage[] = [];
     return onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
@@ -80,6 +90,40 @@ export const firestoreServiceV2 = {
       });
       callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'garages'));
+  },
+
+  getAdminGaragesPage: async (pageSize = 50, lastDocRef: any = null) => {
+    try {
+      let q = query(
+        collection(db, 'garages'),
+        orderBy('name'),
+        limit(pageSize)
+      );
+
+      if (lastDocRef) {
+        q = query(
+          collection(db, 'garages'),
+          orderBy('name'),
+          startAfter(lastDocRef),
+          limit(pageSize)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+      const garages = snapshot.docs.map(garageDoc => ({
+        id: garageDoc.id,
+        ...garageDoc.data()
+      } as Garage));
+
+      return {
+        garages,
+        lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+        hasMore: snapshot.docs.length === pageSize
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'garages/admin-page');
+      throw error;
+    }
   },
 
   subscribeToGarage: (garageId: string, callback: (garage: Garage) => void) => {
@@ -143,8 +187,17 @@ export const firestoreServiceV2 = {
     
     try {
       const garageRef = doc(collection(db, 'garages'));
+      const currentUserId = auth.currentUser?.uid;
       await runTransaction(db, async (transaction) => {
+        const adminSessionRef = currentUserId ? doc(db, 'admin_sessions', currentUserId) : null;
+        const isCurrentUserAdmin = adminSessionRef ? (await transaction.get(adminSessionRef)).exists() : false;
+
         transaction.set(garageRef, garageData);
+        if (isCurrentUserAdmin && currentUserId) {
+          transaction.set(doc(db, 'admin_rate_limits', currentUserId, 'operations', 'garage_create'), {
+            lastOperationAt: serverTimestamp()
+          });
+        }
       });
       
       return { success: true, id: garageRef.id };
@@ -238,45 +291,84 @@ export const firestoreServiceV2 = {
     }
   },
 
-  deleteGarage: async (id: string) => {
+  deleteGarage: async (
+    id: string,
+    onProgress?: (progress: GarageDeletionProgress) => void
+  ) => {
     try {
       return await withRetry(async () => {
-        const fetchSnapSafe = async (q: any) => {
-          try {
-            return await getDocs(q);
-          } catch (e) {
-            console.warn('Subcollection fetch failed during garage deletion:', e);
-            return { forEach: () => {} } as any; 
+        const pageSize = 400;
+        const sources = [
+          { countQuery: query(collection(db, 'garage_sessions'), where('garageId', '==', id)), pageQuery: query(collection(db, 'garage_sessions'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'staff_sessions'), where('garageId', '==', id)), pageQuery: query(collection(db, 'staff_sessions'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, `garages/${id}/vehicles`)), pageQuery: query(collection(db, `garages/${id}/vehicles`), limit(pageSize)) },
+          { countQuery: query(collection(db, `garages/${id}/daily_stats`)), pageQuery: query(collection(db, `garages/${id}/daily_stats`), limit(pageSize)) },
+          { countQuery: query(collection(db, `garages/${id}/daily_counts`)), pageQuery: query(collection(db, `garages/${id}/daily_counts`), limit(pageSize)) },
+          { countQuery: query(collection(db, `garages/${id}/subscribers`)), pageQuery: query(collection(db, `garages/${id}/subscribers`), limit(pageSize)) },
+          { countQuery: query(collection(db, 'activity_logs'), where('garageId', '==', id)), pageQuery: query(collection(db, 'activity_logs'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'staff'), where('garageId', '==', id)), pageQuery: query(collection(db, 'staff'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'topup_requests'), where('garageId', '==', id)), pageQuery: query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'recharge_requests'), where('garageId', '==', id)), pageQuery: query(collection(db, 'recharge_requests'), where('garageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'announcements'), where('targetGarageId', '==', id)), pageQuery: query(collection(db, 'announcements'), where('targetGarageId', '==', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'general_managers'), where('garageIds', 'array-contains', id)), pageQuery: query(collection(db, 'general_managers'), where('garageIds', 'array-contains', id), limit(pageSize)) },
+          { countQuery: query(collection(db, 'garages'), where('referredByGarageId', '==', id)), pageQuery: query(collection(db, 'garages'), where('referredByGarageId', '==', id), limit(pageSize)) }
+        ];
+
+        const total = (await Promise.all(
+          sources.map(async ({ countQuery }) => (await getCountFromServer(countQuery)).data().count)
+        )).reduce((sum, count) => sum + count, 0);
+
+        let processed = 0;
+        const reportProgress = (phase: GarageDeletionProgress['phase']) => {
+          const percentage = phase === 'complete'
+            ? 100
+            : phase === 'preparing'
+              ? 1
+              : phase === 'finalizing' || total === 0
+                ? 99
+                : Math.min(98, 1 + Math.floor((processed / total) * 97));
+          onProgress?.({ total, processed, percentage, phase });
+        };
+
+        await updateDoc(doc(db, 'garages', id), { isDeleting: true, isLocked: true });
+        reportProgress('preparing');
+
+        const deleteAllMatching = async (sourceQuery: any) => {
+          while (true) {
+            const snapshot = await getDocs(sourceQuery);
+            if (snapshot.empty) return;
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((snapshotDoc: any) => batch.delete(snapshotDoc.ref));
+            await batch.commit();
+            processed += snapshot.size;
+            reportProgress('deleting');
           }
         };
 
-        const [vehiclesSnap, dailyStatsSnap, logsSnap, staffSnap, subscribersSnap, topupsSnap] = await Promise.all([
-          fetchSnapSafe(query(collection(db, `garages/${id}/vehicles`), limit(300))),
-          fetchSnapSafe(query(collection(db, `garages/${id}/daily_stats`), limit(30))),
-          fetchSnapSafe(query(collection(db, 'activity_logs'), where('garageId', '==', id), limit(40))),
-          fetchSnapSafe(query(collection(db, 'staff'), where('garageId', '==', id), limit(40))),
-          fetchSnapSafe(query(collection(db, `garages/${id}/subscribers`), limit(40))),
-          fetchSnapSafe(query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(40)))
-        ]);
+        const updateAllMatching = async (sourceQuery: any, changes: Record<string, unknown>) => {
+          while (true) {
+            const snapshot = await getDocs(sourceQuery);
+            if (snapshot.empty) return;
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((snapshotDoc: any) => batch.update(snapshotDoc.ref, changes));
+            await batch.commit();
+            processed += snapshot.size;
+            reportProgress('deleting');
+          }
+        };
 
-        const refsToDelete: any[] = [];
-        if (vehiclesSnap.docs) vehiclesSnap.forEach(doc => refsToDelete.push(doc.ref));
-        if (dailyStatsSnap.docs) dailyStatsSnap.forEach(doc => refsToDelete.push(doc.ref));
-        if (logsSnap.docs) logsSnap.forEach(doc => refsToDelete.push(doc.ref));
-        if (staffSnap.docs) staffSnap.forEach(doc => refsToDelete.push(doc.ref));
-        if (subscribersSnap.docs) subscribersSnap.forEach(doc => refsToDelete.push(doc.ref));
-        if (topupsSnap.docs) topupsSnap.forEach(doc => refsToDelete.push(doc.ref));
-        
-        refsToDelete.push(doc(db, 'garages', id));
-
-        const chunkSize = 400;
-        for (let i = 0; i < refsToDelete.length; i += chunkSize) {
-          const chunk = refsToDelete.slice(i, i + chunkSize);
-          const batch = writeBatch(db);
-          chunk.forEach(ref => batch.delete(ref));
-          await batch.commit();
+        for (let index = 0; index <= 10; index += 1) {
+          await deleteAllMatching(sources[index].pageQuery);
         }
+        await updateAllMatching(sources[11].pageQuery, { garageIds: arrayRemove(id) });
+        await updateAllMatching(sources[12].pageQuery, {
+          referredByGarageId: null,
+          referredByGarageName: null
+        });
 
+        reportProgress('finalizing');
+        await deleteDoc(doc(db, 'garages', id));
+        reportProgress('complete');
         return true;
       });
     } catch (error) {
@@ -636,11 +728,9 @@ export const firestoreServiceV2 = {
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, plateRaw);
 
         // === DAILY COUNTER LOGIC (Phase 1) ===
-        const todayCounter = new Date();
-        const dateId = `${todayCounter.getFullYear()}-${String(todayCounter.getMonth() + 1).padStart(2, '0')}-${String(todayCounter.getDate()).padStart(2, '0')}`;
+        const today = getCairoDateKey();
+        const dateId = today;
         const countRef = doc(db, `garages/${garageId}/daily_counts/${dateId}`);
-
-        const today = new Date().toISOString().split('T')[0];
         const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
 
         // Read all documents FIRST before executing any writes
@@ -736,7 +826,7 @@ export const firestoreServiceV2 = {
       await runTransaction(db, async (transaction) => {
         const garageRef = doc(db, 'garages', garageId);
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCairoDateKey();
         const dailyStatsRef = doc(db, `garages/${garageId}/daily_stats`, today);
         
         const [vehicleSnap, garageSnap, dailyStatsSnap] = await Promise.all([
@@ -803,7 +893,7 @@ export const firestoreServiceV2 = {
   deleteVehicleWithRefund: async (garageId: string, vehicleId: string, refundAmount: number, _passedTodayYMD?: string, staffName?: string, staffId?: string) => {
     try {
       return await withRetry(() => runTransaction(db, async (transaction) => {
-        const todayYMD = new Date().toISOString().split('T')[0]; // compute fresh; never use the passed stale date
+        const todayYMD = getCairoDateKey(); // compute fresh; never use the passed stale date
         const vehicleRef = doc(db, `garages/${garageId}/vehicles`, vehicleId);
         const garageRef = doc(db, 'garages', garageId);
         const countRef = doc(db, `garages/${garageId}/daily_counts/${todayYMD}`);
@@ -821,6 +911,13 @@ export const firestoreServiceV2 = {
         
         const garageData = garageDoc.data() || {};
         const vehicleData = vehicleDoc.data() || {};
+
+        // Daily capacity counts registrations made on the current Cairo business day.
+        // An older vehicle may still be inside, but it was never counted in today's capacity.
+        const enteredToday =
+          vehicleData.status === 'inside' &&
+          typeof vehicleData.entryTime?.toDate === 'function' &&
+          getCairoDateKey(vehicleData.entryTime.toDate()) === todayYMD;
 
         const todayDeletions = garageData.lastDeletionDate === todayYMD ? (garageData.dailyDeletionCount ?? 0) : 0;
         if (todayDeletions >= 3) {
@@ -843,14 +940,19 @@ export const firestoreServiceV2 = {
         }
 
         if (vehicleData.status === 'inside') {
+          // Every active vehicle occupies a physical place, regardless of its entry day.
           updates.carsInside = increment(-1);
+        }
+
+        if (enteredToday) {
+          // Only a vehicle registered today consumed today's daily capacity.
           updates.todayCount = increment(-1);
         }
 
         transaction.update(garageRef, updates);
 
-        // Rollback daily counters if the deleted vehicle was still inside
-        if (vehicleData.status === 'inside') {
+        // Roll back daily registration counters only for a vehicle entered today.
+        if (enteredToday) {
           if (countDoc.exists()) {
             const prevCount = countDoc.data()?.count ?? 0;
             if (prevCount > 0) {
@@ -1464,6 +1566,22 @@ export const firestoreServiceV2 = {
   },
 
   // System logs
+  getActivityLogsSince: async (sinceDate: Date, maxCount = 2000): Promise<ActivityLog[]> => {
+    try {
+      const q = query(
+        collection(db, 'activity_logs'),
+        where('timestamp', '>=', Timestamp.fromDate(sinceDate)),
+        orderBy('timestamp', 'desc'),
+        limit(maxCount)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'activity_logs');
+      throw error;
+    }
+  },
+
   getPaginatedActivityLogs: async (pageSize = 20, lastDocRef?: any) => {
     try {
       let q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(pageSize));
@@ -1625,6 +1743,7 @@ export const firestoreServiceV2 = {
           warningDaysThreshold: 3, 
           supportPhone: '01000000000',
           walletNumber: '01000000000',
+          monthlySubscribersFlatFee: 500,
           monthlySubscribersSurchargePercent: 25,
           isMaintenanceMode: false,
           maintenanceMessage: ''
@@ -1650,6 +1769,7 @@ export const firestoreServiceV2 = {
         warningDaysThreshold: 3,
         supportPhone: '01000000000',
         walletNumber: '01000000000',
+        monthlySubscribersFlatFee: 500,
         monthlySubscribersSurchargePercent: 25,
         isMaintenanceMode: false,
         maintenanceMessage: ''

@@ -199,12 +199,30 @@
     scrollbar-gutter: stable;
   }
 
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  .scrollbar-hide::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar,
+  .hide-scroll-bar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+  .scrollbar-hide,
+  .no-scrollbar,
+  .hide-scroll-bar {
+    -ms-overflow-style: none !important; /* IE and Edge */
+    scrollbar-width: none !important; /* Firefox */
+  }
+
+  /* Mobile text system: content can wrap; compact labels scale within readable limits. */
+  .text-mobile-wrap {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .text-mobile-fluid {
+    font-size: clamp(0.75rem, 2.8vw, 1.125rem);
+    line-height: 1.25;
   }
 }
 

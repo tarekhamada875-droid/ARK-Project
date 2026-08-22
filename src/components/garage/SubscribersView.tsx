@@ -1,12 +1,25 @@
 import React, { useState, useEffect, memo } from 'react';
-import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, ArrowRight } from 'lucide-react';
+import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, ChevronRight } from 'lucide-react';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { auth } from '../../firebase';
 import { Subscriber, Garage } from '../../types';
-import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersSurcharge } from '../../utils';
-import { useSystemSurchargePercent } from '../../hooks/useSystemSurchargePercent';
+import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersFlatFee } from '../../utils';
+import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
+import { getCairoDateKey } from '../../domain/garage/businessDay';
+
+const parseDateKey = (dateKey: string): Date => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 interface SubscribersViewProps {
   garage: Garage;
@@ -16,7 +29,7 @@ interface SubscribersViewProps {
 }
 
 export const SubscribersView = memo(({ garage, onClose, showToast }: SubscribersViewProps) => {
-  const surchargePercent = useSystemSurchargePercent();
+  const subscriberFlatFee = useSystemSubscribersFlatFee();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -42,29 +55,27 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
   const [plateNumber, setPlateNumber] = useState(() => localStorage.getItem('sub_plate') || '');
   const [ownerName, setOwnerName] = useState(() => localStorage.getItem('sub_name') || '');
   const [phone, setPhone] = useState(() => localStorage.getItem('sub_phone') || '');
-  const [startDate, setStartDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState(getCairoDateKey);
   const [endDate, setEndDate] = useState(() => {
-    const nextMonth = new Date();
+    const nextMonth = parseDateKey(getCairoDateKey());
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    return nextMonth.toISOString().split('T')[0];
+    return formatDateKey(nextMonth);
   });
   const [selectedDuration, setSelectedDuration] = useState<'1w' | '2w' | '1m' | 'custom'>('1m');
 
   useEffect(() => {
     if (selectedDuration === '1w') {
-      const d = new Date(startDate);
+      const d = parseDateKey(startDate);
       d.setDate(d.getDate() + 7);
-      setEndDate(d.toISOString().split('T')[0]);
+      setEndDate(formatDateKey(d));
     } else if (selectedDuration === '2w') {
-      const d = new Date(startDate);
+      const d = parseDateKey(startDate);
       d.setDate(d.getDate() + 14);
-      setEndDate(d.toISOString().split('T')[0]);
+      setEndDate(formatDateKey(d));
     } else if (selectedDuration === '1m') {
-      const d = new Date(startDate);
+      const d = parseDateKey(startDate);
       d.setMonth(d.getMonth() + 1);
-      setEndDate(d.toISOString().split('T')[0]);
+      setEndDate(formatDateKey(d));
     }
   }, [startDate, selectedDuration]);
 
@@ -160,9 +171,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
   }, [subscribers, searchQuery]);
 
   const getStatus = (endStr: string) => {
-    const end = new Date(endStr);
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const end = parseDateKey(endStr);
+    const today = parseDateKey(getCairoDateKey());
     
     const diffTime = end.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -182,11 +192,11 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
     setOwnerName('');
     setPhone('');
     clearDraft();
-    const today = new Date().toISOString().split('T')[0];
-    const nextMonth = new Date();
+    const today = getCairoDateKey();
+    const nextMonth = parseDateKey(today);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setStartDate(today);
-    setEndDate(nextMonth.toISOString().split('T')[0]);
+    setEndDate(formatDateKey(nextMonth));
     setSelectedDuration('1m');
     setIsPlateFocused(true);
     setShowAddModal(true);
@@ -203,8 +213,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
 
     // Calculate duration
     try {
-      const start = new Date(s.startDate);
-      const end = new Date(s.endDate);
+      const start = parseDateKey(s.startDate);
+      const end = parseDateKey(s.endDate);
       const diffTime = end.getTime() - start.getTime();
       const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
       if (diffDays === 7) {
@@ -240,13 +250,13 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
       return;
     }
 
-    const effectiveCostUnits = applyMonthlySubscribersSurcharge(costUnits, !!garage.hasMonthlySubscribers, surchargePercent);
+    const effectiveCostUnits = applyMonthlySubscribersFlatFee(costUnits, !!garage.hasMonthlySubscribers, subscriberFlatFee);
 
     setIsSubmitting(true);
     try {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const currentEndDate = new Date(activeSubscriberForRenew.endDate);
+      const todayKey = getCairoDateKey();
+      const today = parseDateKey(todayKey);
+      const currentEndDate = parseDateKey(activeSubscriberForRenew.endDate);
       const baseDate = currentEndDate >= today ? currentEndDate : today;
       
       const newEndDate = new Date(baseDate);
@@ -259,8 +269,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
       }
       
       const newDates = {
-        startDate: currentEndDate >= today ? activeSubscriberForRenew.startDate : today.toISOString().split('T')[0],
-        endDate: newEndDate.toISOString().split('T')[0]
+        startDate: currentEndDate >= today ? activeSubscriberForRenew.startDate : todayKey,
+        endDate: formatDateKey(newEndDate)
       };
 
       await firestoreService.renewSubscriber(garage.id, activeSubscriberForRenew.id, effectiveCostUnits, newDates);
@@ -285,7 +295,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
     }
 
     const baseUnits = 5;
-    const effectiveUnits = applyMonthlySubscribersSurcharge(baseUnits, !!garage.hasMonthlySubscribers, surchargePercent);
+    const effectiveUnits = applyMonthlySubscribersFlatFee(baseUnits, !!garage.hasMonthlySubscribers, subscriberFlatFee);
 
     if (!editingSubscriber) {
       if (isSubscriptionExpired) {
@@ -320,7 +330,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
           clearDraft();
         } catch (error: any) {
           if (error?.message?.includes('INSUFFICIENT_BALANCE')) {
-            showToast('عفواً، الرصيد لا يكفي لإتمام الاشتراك.', 'error');
+            showToast('عفواً، اشتراك الجراج لا يكفي لإتمام العملية.', 'error');
             return;
           }
           throw error;
@@ -375,10 +385,11 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
           <button 
             type="button"
             onClick={onClose}
-            className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-xl flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-colors shadow-sm outline-none shrink-0"
+            className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none shrink-0"
             aria-label="الرجوع"
+            title="رجوع"
           >
-            <ArrowRight className="w-5 h-5" />
+            <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
           </button>
           <div className="flex items-center gap-3">
             <div className="flex flex-col">
@@ -738,7 +749,6 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                 <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 tracking-tight">
                   تجديد الاشتراك الشهري
                 </h3>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-widest">اختر فترة التجديد المفضلة للمشترك</p>
               </div>
               <button
                 onClick={() => {
@@ -776,9 +786,9 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                   { type: 'month' as const, label: 'تجديد لمدة شهر واحد', costUnits: 5, days: null }].map((opt) => {
                   
                   // Calculate dynamic future expiration date preview
-                  const today = new Date();
-                  today.setHours(0,0,0,0);
-                  const currentEndDate = new Date(activeSubscriberForRenew.endDate);
+                  const todayKey = getCairoDateKey();
+                  const today = parseDateKey(todayKey);
+                  const currentEndDate = parseDateKey(activeSubscriberForRenew.endDate);
                   const baseDate = currentEndDate >= today ? currentEndDate : today;
                   const previewNewEndDate = new Date(baseDate);
                   if (opt.days) {
@@ -786,7 +796,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                   } else {
                     previewNewEndDate.setMonth(previewNewEndDate.getMonth() + 1);
                   }
-                  const previewDateStr = previewNewEndDate.toISOString().split('T')[0];
+                  const previewDateStr = formatDateKey(previewNewEndDate);
                   
                   return (
                     <button

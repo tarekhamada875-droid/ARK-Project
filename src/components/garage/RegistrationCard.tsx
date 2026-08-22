@@ -1,10 +1,11 @@
 import React, { memo } from 'react';
-import { Delete, Lock } from 'lucide-react';
-import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, formatPlateLetters, resolveShimmerColor } from '../../utils';
+import { Delete } from 'lucide-react';
+import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, resolveShimmerColor } from '../../utils';
 import { Garage, Vehicle } from '../../types';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 import { BorderShimmer } from './BorderShimmer';
 import { useTheme } from '../../utils/ThemeContext';
+import { FitText } from '../ui/FitText';
 
 interface RegistrationCardProps {
   newPlateNumber: string;
@@ -19,7 +20,6 @@ interface RegistrationCardProps {
   closeKeyboard: () => void;
   inputRef: React.RefObject<HTMLDivElement>;
   shimmerActive?: boolean;
-  isBalanceOut?: boolean;
 }
 
 export const RegistrationCard = memo(({
@@ -34,8 +34,7 @@ export const RegistrationCard = memo(({
   onCheckOut,
   closeKeyboard,
   inputRef,
-  shimmerActive = false,
-  isBalanceOut = false
+  shimmerActive = false
 }: RegistrationCardProps) => {
   const { theme } = useTheme();
   const activeShimmerColor = resolveShimmerColor(garage?.shimmerColor, theme);
@@ -149,28 +148,47 @@ export const RegistrationCard = memo(({
                 {/* Plate Content */}
                 <div className="flex-1 flex items-center justify-between bg-[#fcfcfc] dark:bg-slate-200 overflow-hidden">
                   {/* Numbers Section */}
-                  <div className={`flex-1 h-full flex justify-center items-center font-black text-slate-900 tracking-tighter truncate px-2 ${
-                    newPlateNumber 
-                      ? (getPlateParts(newPlateNumber).numbers.length >= 4
-                          ? 'text-3xl sm:text-6xl md:text-7xl lg:text-8xl'
-                          : 'text-4xl sm:text-7xl md:text-8xl lg:text-9xl') 
-                      : 'text-xl sm:text-3xl md:text-5xl text-slate-200 dark:text-slate-400'
-                  }`}>
-                    {getPlateParts(newPlateNumber).numbers}
+                  <div className="flex-1 h-full min-w-0 flex justify-center items-center px-2">
+                    <FitText
+                      minFontSize={12}
+                      className={`font-black text-slate-900 tracking-tighter text-center ${
+                        newPlateNumber 
+                          ? (getPlateParts(newPlateNumber).numbers.length >= 4
+                              ? 'text-3xl sm:text-6xl md:text-7xl lg:text-8xl'
+                              : 'text-4xl sm:text-7xl md:text-8xl lg:text-9xl') 
+                          : 'text-xl sm:text-3xl md:text-5xl text-slate-200 dark:text-slate-400'
+                      }`}
+                    >
+                      {getPlateParts(newPlateNumber).numbers}
+                    </FitText>
                   </div>
  
                   {/* Vertical Divider */}
                   <div className="w-[1.5px] md:w-[3px] h-[60%] bg-slate-200 dark:bg-slate-400" />
  
                   {/* Letters Section */}
-                  <div className={`flex-1 h-full flex justify-center items-center font-black text-slate-800 truncate px-2 transition-all duration-150 ${
-                    newPlateNumber 
-                      ? (getPlateParts(newPlateNumber).letters.length >= 4
-                          ? 'text-2xl sm:text-4xl md:text-5xl lg:text-6xl tracking-normal'
-                          : 'text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-[0.1em]') 
-                      : 'text-xl sm:text-3xl md:text-5xl text-slate-200 dark:text-slate-400'
-                  }`} dir="rtl">
-                    {formatPlateLetters(getPlateParts(newPlateNumber).letters)}
+                  <div className="flex-1 h-full min-w-0 flex justify-center items-center px-2" dir="rtl">
+                    <FitText
+                      minFontSize={12}
+                      className={`font-black text-slate-800 text-center transition-all duration-150 ${
+                        newPlateNumber 
+                          ? (getPlateParts(newPlateNumber).letters.length >= 4
+                              ? 'text-2xl sm:text-4xl md:text-5xl lg:text-6xl tracking-normal'
+                              : 'text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-[0.1em]') 
+                          : 'text-xl sm:text-3xl md:text-5xl text-slate-200 dark:text-slate-400'
+                      }`}
+                    >
+                      {getPlateParts(newPlateNumber).letters ? (
+                        getPlateParts(newPlateNumber).letters.split('').map((char, idx) => (
+                          <span 
+                            key={idx} 
+                            className={`inline-block select-none ${getPlateParts(newPlateNumber).letters.length >= 4 ? 'mx-[0.125em]' : 'mx-[0.25em]'}`}
+                          >
+                            {char}
+                          </span>
+                        ))
+                      ) : ''}
+                    </FitText>
                   </div>
                 </div>
  
@@ -207,33 +225,7 @@ export const RegistrationCard = memo(({
                 );
               }
 
-              // 2. If subscription/balance is expired and car is not inside, show locked check-in notice
-              if (isBalanceOut) {
-                return (
-                  <div className="mt-3 p-4 md:p-6 bg-red-500/10 dark:bg-red-500/10 border-2 border-red-500/30 rounded-2xl md:rounded-[2rem] text-center flex flex-col items-center justify-center gap-2 transition-all">
-                    <div className="w-10 h-10 md:w-12 md:h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500">
-                      <Lock className="w-5 h-5 md:w-6 md:h-6" />
-                    </div>
-                    <div className="text-base md:text-xl font-black text-red-600 dark:text-red-400">
-                      برجاء تفعيل الاشتراك
-                    </div>
-                    <p className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-400">
-                      انتهى اشتراك الجراج، يرجى طلب تجديد الاشتراك من صفحة باقات الاشتراكات مع المندوب الخاص بك.
-                    </p>
-
-                    {isInputFocused && (
-                      <div className="mt-4 md:mt-8 w-full">
-                        <LicensePlateKeyboard 
-                          onKeyPress={handleVirtualKeyPress}
-                          currentValue={newPlateNumber}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              // 3. Normal check-in controls
+              // 2. Normal check-in controls
               if (isInputFocused || (newPlateNumber && isValid)) {
                 return (
                   <div className="overflow-hidden">

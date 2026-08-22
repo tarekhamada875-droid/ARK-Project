@@ -1,7 +1,9 @@
 import React, { useState, memo } from 'react';
 import { Package } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
-import { ArrowRight, Clock, Car, Sparkles, Filter } from 'lucide-react';
+import { ChevronRight, Clock, Car, Sparkles, Filter } from 'lucide-react';
+import { calculateFinalPrice } from '../../utils';
+import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -22,6 +24,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
   hasMonthlySubscribers = false
 }) => {
   const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
+  const subscriberFlatFee = useSystemSubscribersFlatFee();
 
   const formatNumber = (num: number | string) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -45,11 +48,14 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
   const rawList = packages || [];
 
   const displayPackages = rawList
-    .map(p => ({
-      ...p,
-      price: hasMonthlySubscribers ? Math.round(p.price * 1.25) : p.price
-    }))
-    .sort((a, b) => a.price - b.price);
+    .map(p => {
+      const { finalPrice } = calculateFinalPrice(p, hasMonthlySubscribers, subscriberFlatFee);
+      return {
+        ...p,
+        _sortPrice: finalPrice
+      };
+    })
+    .sort((a, b) => (a as any)._sortPrice - (b as any)._sortPrice);
 
   const filteredPackages = displayPackages.filter(pkg => {
     const info = getCleanPackageInfo(pkg);
@@ -65,10 +71,10 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
       <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
         <button 
           onClick={onClose}
-          className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-xl flex items-center justify-center hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
-          title="الرجوع"
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          title="رجوع"
         >
-          <ArrowRight className="w-6 h-6 stroke-[2.5]" />
+          <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
         </button>
         <div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1">
@@ -151,11 +157,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
           <div className="space-y-3">
             {filteredPackages.map((pkg) => {
               const info = getCleanPackageInfo(pkg);
-              const effectivePrice = pkg.discountValue && pkg.discountValue > 0
-                ? (pkg.discountType === 'percentage'
-                    ? Math.round(pkg.price * (1 - pkg.discountValue / 100))
-                    : Math.max(0, pkg.price - pkg.discountValue))
-                : pkg.price;
+              const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(pkg, hasMonthlySubscribers, subscriberFlatFee);
 
               const packageName = info.displayName;
 
@@ -195,7 +197,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
 
                   {/* Left Side: Direct Total Price */}
                   <div className="flex flex-col items-end text-left shrink-0">
-                    {(pkg.discountValue && pkg.discountValue > 0) ? (
+                    {hasDiscount ? (
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <div className="relative overflow-hidden rounded px-2 py-0.5 flex items-center justify-center shrink-0">
                           {/* Spinning Golden Snake Background */}
@@ -216,7 +218,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
                           </span>
                         </div>
                         <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
-                          {formatNumber(pkg.price)}
+                          {formatNumber(displayBasePrice)}
                         </span>
                       </div>
                     ) : null}

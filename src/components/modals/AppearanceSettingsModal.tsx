@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, Sun, Moon, Palette, Check, Sparkles } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Palette, Check, Sparkles } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { soundManager } from '../../utils/sounds';
@@ -73,10 +73,11 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
         <button 
           type="button"
           onClick={onClose}
-          className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 rounded-xl flex items-center justify-center hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
           aria-label="الرجوع"
+          title="رجوع"
         >
-          <ArrowRight className="w-5 h-5" />
+          <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
         </button>
         <div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 transition-colors">إعدادات المظهر</h3>

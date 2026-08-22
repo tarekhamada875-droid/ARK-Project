@@ -7,9 +7,8 @@ import { useEffect, lazy, Suspense } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
-  Shield,
 } from 'lucide-react';
-import { safeDate, resolveShimmerColor } from './utils';
+import { resolveShimmerColor } from './utils';
 import { useTheme } from './utils/ThemeContext';
 import { useLocalStorageState } from './hooks/useLocalStorage';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
@@ -19,14 +18,15 @@ import { OfflineView } from './components/layout/OfflineView';
 import { LoginView } from './components/auth/LoginView';
 import { AdminLoginView } from './components/auth/AdminLoginView';
 import { DelegateLoginView } from './components/auth/DelegateLoginView';
-import { CheckInModal } from './components/modals/CheckInModal';
-import { CheckOutModal } from './components/modals/CheckOutModal';
-import { PackagesModal } from './components/modals/PackagesModal';
-import { DeleteGarageConfirmModal } from './components/modals/DeleteGarageConfirmModal';
-import { DeleteVehicleConfirmModal } from './components/modals/DeleteVehicleConfirmModal';
-import { RecentExitWarningModal } from './components/modals/RecentExitWarningModal';
-import { LogoutConfirmModal } from './components/modals/LogoutConfirmModal';
-import { SubscriberWarningModal } from './components/modals/SubscriberWarningModal';
+// Loaded only when the related route or confirmation is opened.
+const CheckInModal = lazy(() => import('./components/modals/CheckInModal').then(m => ({ default: m.CheckInModal })));
+const CheckOutModal = lazy(() => import('./components/modals/CheckOutModal').then(m => ({ default: m.CheckOutModal })));
+const PackagesModal = lazy(() => import('./components/modals/PackagesModal').then(m => ({ default: m.PackagesModal })));
+const DeleteGarageConfirmModal = lazy(() => import('./components/modals/DeleteGarageConfirmModal').then(m => ({ default: m.DeleteGarageConfirmModal })));
+const DeleteVehicleConfirmModal = lazy(() => import('./components/modals/DeleteVehicleConfirmModal').then(m => ({ default: m.DeleteVehicleConfirmModal })));
+const RecentExitWarningModal = lazy(() => import('./components/modals/RecentExitWarningModal').then(m => ({ default: m.RecentExitWarningModal })));
+const LogoutConfirmModal = lazy(() => import('./components/modals/LogoutConfirmModal').then(m => ({ default: m.LogoutConfirmModal })));
+const SubscriberWarningModal = lazy(() => import('./components/modals/SubscriberWarningModal').then(m => ({ default: m.SubscriberWarningModal })));
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
 import { firestoreServiceV2 as firestoreService } from './services/domain/firestoreServiceV2';
@@ -46,7 +46,6 @@ export default function App() {
     view,
     setView,
     garage,
-    setGarage,
     delegate,
     delegates,
     vehicles,
@@ -77,6 +76,7 @@ export default function App() {
     setSelectedDelegateForDetails,
     showDeleteConfirm,
     setShowDeleteConfirm,
+    garageDeletionProgress,
     showLogoutConfirm,
     setShowLogoutConfirm,
     showPackages,
@@ -184,37 +184,8 @@ export default function App() {
   });
 
   const renderView = () => {
-    // Balance/Lock Block
-    if (garage && view !== 'admin_dashboard') {
-      const expiry = garage.balanceExpiry ? safeDate(garage.balanceExpiry) : null;
-      if (expiry && expiry.getTime() > 0 && expiry.getTime() < Date.now()) {
-        return (
-          <div className="h-full w-full bg-slate-900 flex flex-col items-center justify-center p-6 text-center font-sans overflow-y-auto" dir="rtl">
-            <div className="bg-white p-10 rounded-2xl max-w-md w-full">
-              <div className="w-32 h-32 bg-slate-50 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-8">
-                <Shield className="w-16 h-16 stroke-[3]" />
-              </div>
-              <h2 className="text-3xl font-black text-slate-900 mb-4">نفذ الرصيد</h2>
-              <p className="text-slate-500 font-bold text-lg mb-8 leading-relaxed">
-                عذراً، لقد نفذ رصيد الجراج الخاص بك. يرجى التواصل مع الإدارة لشحن الرصيد ومتابعة العمل.
-              </p>
-              <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl font-bold text-sm mb-8">
-                تاريخ الانتهاء: {expiry.toLocaleDateString('ar-EG')}
-              </div>
-              <button 
-                onClick={() => {
-                  setGarage(null);
-                  setView('login');
-                }}
-                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg"
-              >
-                تسجيل الخروج
-              </button>
-            </div>
-          </div>
-        );
-      }
-    }
+    // Balance/Lock Block - REMOVED: We no longer block the entire app when expired.
+    // The restriction is now handled directly inside GarageDashboardView.tsx to only prevent checking in new vehicles.
 
     if (view === 'login') {
       return (
@@ -472,84 +443,87 @@ export default function App() {
           </div>
         )}
 
-        {showCheckInModal && garage && (
-          <CheckInModal 
-            newPlateNumber={newPlateNumber}
-            garage={garage}
-            isLoading={isLoading}
-            loadingType={loadingType}
-            onCheckIn={handleCheckIn}
-            onCancel={() => setShowCheckInModal(false)}
-          />
-        )}
+        <Suspense fallback={null}>
+          {showCheckInModal && garage && (
+            <CheckInModal 
+              newPlateNumber={newPlateNumber}
+              garage={garage}
+              isLoading={isLoading}
+              loadingType={loadingType}
+              onCheckIn={handleCheckIn}
+              onCancel={() => setShowCheckInModal(false)}
+            />
+          )}
 
-        {showCheckOutModal && selectedVehicle && garage && (
-          <CheckOutModal 
-            selectedVehicle={selectedVehicle}
-            garage={garage}
-            currentStaff={currentStaff}
-            isLoading={isLoading}
-            loadingType={loadingType}
-            now={now}
-            onConfirm={confirmCheckOut}
-            onDelete={handleDeleteVehicle}
-            onCancel={() => { setShowCheckOutModal(false); setSelectedVehicle(null); }}
-          />
-        )}
+          {showCheckOutModal && selectedVehicle && garage && (
+            <CheckOutModal 
+              selectedVehicle={selectedVehicle}
+              garage={garage}
+              currentStaff={currentStaff}
+              isLoading={isLoading}
+              loadingType={loadingType}
+              now={now}
+              onConfirm={confirmCheckOut}
+              onDelete={handleDeleteVehicle}
+              onCancel={() => { setShowCheckOutModal(false); setSelectedVehicle(null); }}
+            />
+          )}
 
-        {showDeleteConfirm && view === 'admin_garage_details' && selectedGarageForDetails && (
-          <DeleteGarageConfirmModal 
-            garage={selectedGarageForDetails}
-            isLoading={isLoading}
-            onConfirm={() => deleteGarage(selectedGarageForDetails)}
-            onCancel={() => setShowDeleteConfirm(false)}
-          />
-        )}
+          {showDeleteConfirm && view === 'admin_garage_details' && selectedGarageForDetails && (
+            <DeleteGarageConfirmModal 
+              garage={selectedGarageForDetails}
+              isLoading={isLoading}
+              progress={garageDeletionProgress}
+              onConfirm={() => deleteGarage(selectedGarageForDetails)}
+              onCancel={() => setShowDeleteConfirm(false)}
+            />
+          )}
 
-        {showDeleteConfirm && selectedVehicle && (
-          <DeleteVehicleConfirmModal 
-            vehicle={selectedVehicle}
-            isLoading={isLoading}
-            onConfirm={handleDeleteVehicle}
-            onCancel={() => { setShowDeleteConfirm(false); setSelectedVehicle(null); }}
-          />
-        )}
+          {showDeleteConfirm && selectedVehicle && (
+            <DeleteVehicleConfirmModal 
+              vehicle={selectedVehicle}
+              isLoading={isLoading}
+              onConfirm={handleDeleteVehicle}
+              onCancel={() => { setShowDeleteConfirm(false); setSelectedVehicle(null); }}
+            />
+          )}
 
-        {showRecentExitWarning && recentVehicle && (
-          <RecentExitWarningModal 
-            vehicle={recentVehicle}
-            now={now}
-            onConfirm={() => {
-              if (pendingCheckInType) {
+          {showRecentExitWarning && recentVehicle && (
+            <RecentExitWarningModal 
+              vehicle={recentVehicle}
+              now={now}
+              onConfirm={() => {
+                if (pendingCheckInType) {
+                  setShowRecentExitWarning(false);
+                  handleCheckIn(pendingCheckInType);
+                }
+              }}
+              onCancel={() => {
                 setShowRecentExitWarning(false);
-                handleCheckIn(pendingCheckInType);
-              }
-            }}
-            onCancel={() => {
-              setShowRecentExitWarning(false);
-              setRecentVehicle(null);
-              setNewPlateNumber('');
-            }}
-          />
-        )}
+                setRecentVehicle(null);
+                setNewPlateNumber('');
+              }}
+            />
+          )}
 
-        {showSubscriberWarning && subscriberWarningPlate && (
-          <SubscriberWarningModal 
-            plateNumber={subscriberWarningPlate}
-            onConfirm={() => {
-              setShowSubscriberWarning(false);
-              setSubscriberWarningPlate('');
-            }}
-          />
-        )}
+          {showSubscriberWarning && subscriberWarningPlate && (
+            <SubscriberWarningModal 
+              plateNumber={subscriberWarningPlate}
+              onConfirm={() => {
+                setShowSubscriberWarning(false);
+                setSubscriberWarningPlate('');
+              }}
+            />
+          )}
 
-        {showLogoutConfirm && (
-          <LogoutConfirmModal 
-            onConfirm={handleLogout}
-            onCancel={() => setShowLogoutConfirm(false)}
-            correctPin={activeAdminPin}
-          />
-        )}
+          {showLogoutConfirm && (
+            <LogoutConfirmModal 
+              onConfirm={handleLogout}
+              onCancel={() => setShowLogoutConfirm(false)}
+              correctPin={activeAdminPin}
+            />
+          )}
+        </Suspense>
 
         <Suspense fallback={
           <div className="w-full h-full min-h-screen bg-[#faf9f6] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center font-sans" dir="rtl">

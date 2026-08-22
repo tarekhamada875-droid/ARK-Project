@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Save, 
-  ShieldAlert, 
   Loader2,
   Sparkles,
   CheckCircle2,
@@ -23,6 +22,7 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
   const [config, setConfig] = useState<SystemConfig>({
     defaultTrialDays: 15,
     warningDaysThreshold: 3,
+    monthlySubscribersFlatFee: 500,
     monthlySubscribersSurchargePercent: 25,
     isMaintenanceMode: false,
     maintenanceMessage: ''
@@ -65,7 +65,8 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
       await firestoreService.updateSystemConfig({
         defaultTrialDays: Number(config.defaultTrialDays) || 15,
         warningDaysThreshold: Number(config.warningDaysThreshold) || 3,
-        monthlySubscribersSurchargePercent: Number(config.monthlySubscribersSurchargePercent) || 25,
+        monthlySubscribersFlatFee: Number(config.monthlySubscribersFlatFee) || 500,
+        monthlySubscribersSurchargePercent: 25,
         isMaintenanceMode: !!config.isMaintenanceMode,
         maintenanceMessage: (config.maintenanceMessage || '').trim()
       });
@@ -150,60 +151,26 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
 
           <div className="space-y-2">
             <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
-              {t('نسبة الزيادة للمشتركين الشهريين (%)')}
+              {t('رسوم المشتركين الشهريين الثابتة (ج.م)')}
             </label>
             <div className="relative max-w-xs">
               <input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                value={config.monthlySubscribersSurchargePercent}
-                onChange={(e) => setConfig({ ...config, monthlySubscribersSurchargePercent: Number(e.target.value.replace(/\D/g, '')) || 0 })}
+                value={config.monthlySubscribersFlatFee}
+                onChange={(e) => setConfig({ ...config, monthlySubscribersFlatFee: Number(e.target.value.replace(/\D/g, '')) || 0 })}
                 className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-mono font-bold text-sm text-slate-900 dark:text-white outline-none focus:border-emerald-500"
                 required
               />
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                %
+                ج.م
               </span>
             </div>
             <p className="text-[10px] font-bold text-slate-400">
-              {t('النسبة المضافة تلقائياً عند تفعيل خيار المشتركين الشهريين للجراج (افتراضياً 25%)')}
+              {t('المبلغ الثابت المضاف تلقائياً عند تفعيل خيار المشتركين الشهريين للجراج (افتراضياً 500 ج.م)')}
             </p>
           </div>
-        </div>
-
-        {/* Section 2: System Maintenance Mode */}
-        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
-          <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex items-center justify-between">
-            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-rose-500" />
-              <span>{t('وضع الصيانة')}</span>
-            </h3>
-            <label className="relative inline-flex items-center cursor-pointer shrink-0">
-              <input
-                type="checkbox"
-                checked={config.isMaintenanceMode}
-                onChange={(e) => setConfig({ ...config, isMaintenanceMode: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-rose-600"></div>
-            </label>
-          </div>
-
-          {config.isMaintenanceMode && (
-            <div className="space-y-2 animate-in fade-in duration-150">
-              <label className="text-xs font-black text-rose-600 dark:text-rose-400 block">
-                {t('رسالة الصيانة التي تظهر للمستخدمين')}
-              </label>
-              <textarea
-                rows={3}
-                value={config.maintenanceMessage || ''}
-                onChange={(e) => setConfig({ ...config, maintenanceMessage: e.target.value })}
-                placeholder={t('مثال: النظام تحت الصيانة الدورية المجدولة وسيعود للعمل خلال نصف ساعة')}
-                className="w-full p-4 bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-200 dark:border-rose-900/50 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-rose-500 resize-none"
-              />
-            </div>
-          )}
         </div>
 
         {/* Status Feedback Banner */}

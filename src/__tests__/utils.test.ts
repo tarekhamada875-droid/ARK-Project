@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { isSubscriptionExpired, calculateFinalPrice, applyMonthlySubscribersSurcharge, packageIdToDays } from '../utils';
+import { isSubscriptionExpired, calculateFinalPrice, applyMonthlySubscribersFlatFee, packageIdToDays } from '../utils';
 
 describe('isSubscriptionExpired', () => {
   test('returns true for garage with no balanceExpiry', () => {
@@ -25,13 +25,13 @@ describe('calculateFinalPrice', () => {
     expect(result.hasDiscount).toBe(false);
   });
 
-  test('applies 25% surcharge for monthly subscribers by default', () => {
+  test('applies 500 EGP flat fee for monthly subscribers by default', () => {
     const result = calculateFinalPrice({ price: 1000 }, true);
-    expect(result.finalPrice).toBe(1250);
+    expect(result.finalPrice).toBe(1500);
   });
 
-  test('applies custom configured surcharge percent for monthly subscribers', () => {
-    const result = calculateFinalPrice({ price: 1000 }, true, 30);
+  test('applies custom configured flat fee for monthly subscribers', () => {
+    const result = calculateFinalPrice({ price: 1000 }, true, 300);
     expect(result.finalPrice).toBe(1300);
   });
 
@@ -46,24 +46,24 @@ describe('calculateFinalPrice', () => {
     expect(result.finalPrice).toBe(800);
   });
 
-  test('applies discount then surcharge', () => {
+  test('applies discount then flat fee', () => {
     const result = calculateFinalPrice({ price: 1000, discountType: 'percentage', discountValue: 20 }, true);
-    // 1000 - 20% = 800, then 800 * 1.25 = 1000
-    expect(result.finalPrice).toBe(1000);
+    // 1000 - 20% = 800, then 800 + 500 = 1300
+    expect(result.finalPrice).toBe(1300);
   });
 });
 
-describe('applyMonthlySubscribersSurcharge', () => {
+describe('applyMonthlySubscribersFlatFee', () => {
   test('returns same price without subscribers', () => {
-    expect(applyMonthlySubscribersSurcharge(750, false)).toBe(750);
+    expect(applyMonthlySubscribersFlatFee(750, false)).toBe(750);
   });
 
-  test('applies 25% with subscribers by default', () => {
-    expect(applyMonthlySubscribersSurcharge(750, true)).toBe(938); // 750 * 1.25 = 937.5 -> 938
+  test('applies 500 EGP flat fee with subscribers by default', () => {
+    expect(applyMonthlySubscribersFlatFee(750, true)).toBe(1250); // 750 + 500 = 1250
   });
 
-  test('applies custom configured surcharge percent with subscribers', () => {
-    expect(applyMonthlySubscribersSurcharge(750, true, 20)).toBe(900); // 750 * 1.20 = 900
+  test('applies custom configured flat fee with subscribers', () => {
+    expect(applyMonthlySubscribersFlatFee(750, true, 150)).toBe(900); // 750 + 150 = 900
   });
 });
 

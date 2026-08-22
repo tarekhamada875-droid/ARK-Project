@@ -98,7 +98,7 @@ export const AdminDelegateDetailsView = memo(({
           
           const desc = log.plateNumber || '';
           
-          // 2. Flexible parsing for "شحن X ج" or "شحن رصيد X ج"
+          // 2. Flexible parsing for "شحن X ج" or "تجديد اشتراك X ج"
           // This will catch the 100 and 500 from the screenshot
           const moneyMatch = desc.match(/شحن.*?(\d+)\s*ج/);
           if (moneyMatch && moneyMatch[1]) {
@@ -324,10 +324,10 @@ export const AdminDelegateDetailsView = memo(({
                 setSelectedDelegate(null);
                 setView('admin_dashboard');
               }}
-              className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white rounded-xl border border-slate-200 dark:border-slate-700 outline-none cursor-pointer transition-colors"
+              className="flex items-center justify-center w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl hover:bg-slate-800 dark:hover:bg-amber-500 outline-none cursor-pointer transition-colors shadow-sm shrink-0"
               title={t('رجوع')}
             >
-              <ChevronRight className={`w-5.5 h-5.5 text-slate-600 dark:text-slate-300 stroke-[3.5] ${adminLang === 'en' ? 'rotate-180' : ''}`} />
+              <ChevronRight className={`w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5] ${adminLang === 'en' ? 'rotate-180' : ''}`} />
             </button>
             <div>
               <h1 className="text-lg font-bold text-slate-900 dark:text-white">{t('بيانات المندوب')}</h1>

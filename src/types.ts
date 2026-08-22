@@ -223,7 +223,8 @@ export interface SystemConfig {
   warningDaysThreshold: number; // e.g. 3
   supportPhone?: string;
   walletNumber?: string;
-  monthlySubscribersSurchargePercent: number; // e.g. 25
+  monthlySubscribersSurchargePercent: number;
+  monthlySubscribersFlatFee: number; // e.g. 500
   isMaintenanceMode?: boolean;
   maintenanceMessage?: string;
   updatedAt?: any;

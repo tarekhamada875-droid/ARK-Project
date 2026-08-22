@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Users, ArrowRight, Car } from 'lucide-react';
+import { Users, ChevronRight, Car } from 'lucide-react';
 import { Staff, Vehicle } from '../../types';
 import { safeDate } from '../../utils';
 
@@ -37,10 +37,11 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
       <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 bg-slate-50 dark:bg-slate-900 shrink-0 transition-colors">
           <button 
             onClick={onClose}
-            className="w-10 h-10 bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400 rounded-xl flex items-center justify-center hover:bg-teal-200 dark:hover:bg-teal-900/60 transition-colors shadow-sm outline-none shrink-0"
+            className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none shrink-0"
             aria-label="الرجوع"
+            title="رجوع"
           >
-            <ArrowRight className="w-5 h-5" />
+            <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
           </button>
           <div>
             <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">موظفي الوردية</h2>

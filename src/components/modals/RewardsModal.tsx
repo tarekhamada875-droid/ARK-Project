@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { ArrowRight, HelpCircle } from 'lucide-react';
+import { ChevronRight, HelpCircle } from 'lucide-react';
 import { Garage } from '../../types';
 
 interface RewardsModalProps {
@@ -21,10 +21,11 @@ export const RewardsModal: React.FC<RewardsModalProps> = memo(({
         <button 
           type="button"
           onClick={onClose}
-          className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 rounded-xl flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
           aria-label="الرجوع"
+          title="رجوع"
         >
-          <ArrowRight className="w-5 h-5" />
+          <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
         </button>
         <div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none transition-colors">
@@ -43,7 +44,7 @@ export const RewardsModal: React.FC<RewardsModalProps> = memo(({
             
             <div className="flex items-center justify-between gap-4 relative z-10">
               <div>
-                <span className="text-xs font-bold text-emerald-400 block mb-1">رصيد الأيام المجانية المكتسبة</span>
+                <span className="text-xs font-bold text-emerald-400 block mb-1">أيام الاشتراك المجانية المكتسبة</span>
                 <span className="text-xs text-slate-300 font-medium block">تُضاف تلقائياً لتاريخ انتهاء اشتراكك</span>
               </div>
 

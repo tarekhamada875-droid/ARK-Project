@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, memo } from 'react';
-import { ArrowRight, Zap, Clock, User } from 'lucide-react';
+import { ChevronRight, Zap, Clock, User } from 'lucide-react';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { ActivityLog, Garage } from '../../types';
 import { safeDate } from '../../utils';
@@ -84,10 +84,11 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
           <button 
             type="button"
             onClick={onClose}
-            className="w-10 h-10 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 rounded-xl flex items-center justify-center hover:bg-rose-200 dark:hover:bg-rose-900/60 transition-colors shadow-sm outline-none shrink-0"
+            className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none shrink-0"
             aria-label="الرجوع"
+            title="رجوع"
           >
-            <ArrowRight className="w-5 h-5" />
+            <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
           </button>
           <div className="flex items-center gap-3">
             <div>
@@ -115,7 +116,6 @@ export const RechargeHistoryView = memo(({ garage, onClose, showToast: _showToas
                 <Zap className="w-8 h-8 text-slate-300 dark:text-slate-700" />
               </div>
               <p className="text-slate-500 dark:text-slate-400 font-bold text-sm">لا يوجد تاريخ شحن مسجل لهذا الجراج.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">تظهر هنا الباقات المشحونة فور تفعيلها بواسطة المناديب.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

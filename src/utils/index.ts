@@ -367,20 +367,20 @@ export {
 export { validateVehicleEntry, validateGarageCreation, validateRechargeRequest } from '../domain/garage/validation';
 
 /**
- * Applies the configured monthly-subscribers surcharge (default 25%).
- * Percent comes from system_config/global (monthlySubscribersSurchargePercent).
+ * Applies the configured monthly-subscribers fixed fee (default 500 EGP).
+ * Flat fee comes from system_config/global (monthlySubscribersFlatFee).
  */
-export const applyMonthlySubscribersSurcharge = (price: number, hasMonthlySubscribers: boolean, surchargePercent: number = 25): number => {
-  const pct = Number(surchargePercent) || 25;
-  return hasMonthlySubscribers ? Math.round(price * (1 + pct / 100)) : price;
+export const applyMonthlySubscribersFlatFee = (price: number, hasMonthlySubscribers: boolean, flatFee: number = 500): number => {
+  const fee = Number(flatFee) || 500;
+  return hasMonthlySubscribers ? price + fee : price;
 };
 
 /**
  * Calculates the final display price for a package:
  * 1. Apply discount (percentage or fixed)
- * 2. Apply monthly subscribers surcharge (configured percentage, default 25%)
+ * 2. Apply monthly subscribers flat fee (configured flat amount, default 500 EGP)
  */
-export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, surchargePercent: number = 25): {
+export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, flatFee: number = 500): {
   basePrice: number;
   hasDiscount: boolean;
   discountedPrice: number;
@@ -405,8 +405,8 @@ export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, su
         ? Math.round(basePrice * (1 - pkg.discountValue / 100))
         : Math.max(0, basePrice - pkg.discountValue))
     : basePrice;
-  const finalPrice = applyMonthlySubscribersSurcharge(discountedPrice, hasMonthlySubscribers, surchargePercent);
-  const displayBasePrice = applyMonthlySubscribersSurcharge(basePrice, hasMonthlySubscribers, surchargePercent);
+  const finalPrice = applyMonthlySubscribersFlatFee(discountedPrice, hasMonthlySubscribers, flatFee);
+  const displayBasePrice = applyMonthlySubscribersFlatFee(basePrice, hasMonthlySubscribers, flatFee);
   const totalDiscount = displayBasePrice - finalPrice;
   return { basePrice, hasDiscount, discountedPrice, finalPrice, totalDiscount, displayBasePrice };
 };

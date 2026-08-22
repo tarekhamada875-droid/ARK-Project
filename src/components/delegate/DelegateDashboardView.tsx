@@ -19,13 +19,15 @@ import {
   AlertCircle,
   Calendar,
   Sparkles,
-  Tag
+  Car,
+  Filter
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
 import { generateSafePin, safeDate, getRemainingDays, calculateFinalPrice } from '../../utils';
-import { useSystemSurchargePercent } from '../../hooks/useSystemSurchargePercent';
+import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
+import { FitText } from '../ui/FitText';
 
 interface DelegateDashboardViewProps {
   delegate: Delegate;
@@ -59,7 +61,8 @@ export const DelegateDashboardView = memo(({
   showToast,
   subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
 }: DelegateDashboardViewProps) => {
-  const surchargePercent = useSystemSurchargePercent();
+  const subscriberFlatFee = useSystemSubscribersFlatFee();
+  const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
   const [activeTab, setActiveTab] = useState<'garages' | 'performance'>('garages');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGarage, setSelectedGarage] = useState<Garage | null>(null);
@@ -316,7 +319,7 @@ export const DelegateDashboardView = memo(({
             onClick={() => setActiveTab('garages')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
               activeTab === 'garages'
-                ? 'bg-emerald-600 text-white shadow-sm font-black'
+                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/30'
             }`}
           >
@@ -327,7 +330,7 @@ export const DelegateDashboardView = memo(({
             onClick={() => setActiveTab('performance')}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
               activeTab === 'performance'
-                ? 'bg-emerald-600 text-white shadow-sm font-black'
+                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/30'
             }`}
           >
@@ -393,8 +396,10 @@ export const DelegateDashboardView = memo(({
                         ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
                         : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white'
                     }`}>
-                      <h3 className={`font-black text-center text-xs sm:text-base md:text-lg lg:text-xl truncate leading-none w-full ${isPending ? 'text-slate-500 dark:text-slate-400' : 'text-white'}`}>
-                        {g.name}
+                      <h3 className={`font-black text-center text-xs sm:text-base md:text-lg lg:text-xl leading-none w-full ${isPending ? 'text-slate-500 dark:text-slate-400' : 'text-white'}`}>
+                        <FitText minFontSize={12} className="text-center">
+                          {g.name}
+                        </FitText>
                       </h3>
                     </div>
 
@@ -501,7 +506,7 @@ export const DelegateDashboardView = memo(({
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-400/10 dark:bg-emerald-400/20 flex items-center justify-center text-emerald-500">
                     <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
                   </div>
-                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10">شحن الرصيد</span>
+                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10">تجديد الاشتراك</span>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1 leading-none">إجمالي مبيعات الشحن</p>
@@ -743,7 +748,7 @@ export const DelegateDashboardView = memo(({
               <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
                 <div className="space-y-0.5 text-right">
                   <label className="text-xs font-black text-slate-900 dark:text-white block">مشتركين شهريين / إيواء</label>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة {surchargePercent}% تلقائياً على الاشتراك/الباقة</span>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة 500 ج.م ثابتة تلقائياً على الاشتراك/الباقة</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input type="checkbox" name="hasMonthlySubscribers" className="sr-only peer" />
@@ -809,11 +814,11 @@ export const DelegateDashboardView = memo(({
                     * هذا الرمز يتم توليده تلقائياً لحماية الحساب من التكرار والتداخل.
                   </span>
                   {pinGenerationsRemaining > 0 ? (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap text-left sm:text-right">
+                    <span className="text-mobile-wrap text-[10px] font-bold text-emerald-600 dark:text-emerald-400 text-left sm:text-right leading-snug">
                       متبقي {pinGenerationsRemaining} {pinGenerationsRemaining === 1 ? 'محاولة' : 'محاولات'} لتغييره تلقائياً.
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-red-500 dark:text-red-400 whitespace-nowrap text-left sm:text-right">
+                    <span className="text-mobile-wrap text-[10px] font-bold text-red-500 dark:text-red-400 text-left sm:text-right leading-snug">
                       استنفدت محاولات التغيير.
                     </span>
                   )}
@@ -855,13 +860,13 @@ export const DelegateDashboardView = memo(({
                   <CheckCircle2 className="w-14 h-14" />
                 </div>
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white">تم إرسال الطلب!</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold mt-2">سيتم شحن رصيد {selectedGarage.name} فور موافقة المدير</p>
+                <p className="text-slate-500 dark:text-slate-400 font-bold mt-2">سيتم تجديد اشتراك {selectedGarage.name} فور موافقة المدير</p>
               </div>
             ) : (
               <>
                 <div className="flex justify-between items-start mb-6">
                   <div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-1">شحن رصيد الجراج</h2>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-1">تجديد اشتراك الجراج</h2>
                     <p className="text-sm font-bold text-slate-400 dark:text-slate-500">{selectedGarage.name}</p>
                   </div>
                   <button 
@@ -911,74 +916,167 @@ export const DelegateDashboardView = memo(({
                   <h3 className="font-black text-slate-900 dark:text-white text-base">باقات الشحن</h3>
                 </div>
 
-                {/* Package Slider */}
-                <div className="flex overflow-x-auto gap-4 pb-6 snap-x snap-mandatory scrollbar-hide -mx-2 px-2">
-                  {(() => {
-                    const list = packages;
-                    
-                    return list.map((pkg) => {
-                      const { finalPrice: effectivePrice, displayBasePrice: displayOriginal, hasDiscount } = calculateFinalPrice(pkg, selectedGarage.hasMonthlySubscribers || false, surchargePercent);
+                {/* Unified Packages Section */}
+                {(() => {
+                  const rawList = packages || [];
+                  const displayPackages = rawList
+                    .map(p => {
+                      const { finalPrice } = calculateFinalPrice(p, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee);
+                      return {
+                        ...p,
+                        _sortPrice: finalPrice
+                      };
+                    })
+                    .sort((a, b) => (a as any)._sortPrice - (b as any)._sortPrice);
 
-                      const info = getCleanPackageInfo(pkg);
+                  const filteredPackages = displayPackages.filter(pkg => {
+                    const info = getCleanPackageInfo(pkg);
+                    return info.durationDays === selectedDurationFilter;
+                  });
 
-                      return (
+                  const hasUnlimitedInFiltered = filteredPackages.some(p => getCleanPackageInfo(p).isUnlimited);
+                  const maxCapInFiltered = Math.max(...filteredPackages.map(p => getCleanPackageInfo(p).dailyCapacity || 0));
+
+                  return (
+                    <div className="space-y-4 pb-6">
+                      {/* Duration Filter Switcher */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-sm">
+                          <Filter className="w-4 h-4 text-amber-500" />
+                          <span>اختار مدة الاشتراك:</span>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500">
+                          ({filteredPackages.length} باقات)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/70 rounded-2xl">
                         <button
-                          key={pkg.id}
-                          onClick={() => {
-                            if (isProcessing) return;
-                            setPendingPackage({ ...pkg });
-                          }}
-                          className="flex-none w-[170px] snap-center bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] p-4 flex flex-col items-center justify-between hover:border-emerald-500 transition-all group relative overflow-hidden"
+                          type="button"
+                          onClick={() => setSelectedDurationFilter(15)}
+                          className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                            selectedDurationFilter === 15
+                              ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                          }`}
                         >
-                          {hasDiscount && (
-                            <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                              <Tag className="w-2.5 h-2.5" />
-                              {pkg.discountType === 'percentage' ? `%${pkg.discountValue}` : `${pkg.discountValue}ج`}
-                            </span>
-                          )}
-
-                          {selectedGarage.hasMonthlySubscribers && (
-                            <span className="absolute top-2 left-2 bg-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full z-10">
-                              +{surchargePercent}%
-                            </span>
-                          )}
-
-                          <span className="text-[10px] font-black text-amber-500 uppercase tracking-wide text-center line-clamp-2 mb-2 mt-2 px-1">
-                            {info.displayName}
-                          </span>
-                          
-                          <div className="flex flex-col items-center">
-                            <span className="text-3xl font-black text-slate-950 dark:text-white font-mono tracking-tighter leading-none">
-                              {info.isUnlimited ? 'سعة مفتوحة' : info.dailyCapacity}
-                            </span>
-                            {!info.isUnlimited && (
-                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                                سيارة / يوم
-                              </span>
-                            )}
-                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full mt-1.5">
-                              {info.durationText}
-                            </span>
-                          </div>
-
-                          <div className="mt-4 bg-emerald-600 text-white w-full py-2 rounded-2xl font-black text-sm font-mono flex flex-col items-center">
-                            {hasDiscount ? (
-                              <>
-                                <span>{effectivePrice} ج.م</span>
-                                <span className="text-[9px] line-through opacity-70">{displayOriginal} ج.م</span>
-                              </>
-                            ) : (
-                              <span>{effectivePrice} ج.م</span>
-                            )}
-                          </div>
+                          15 يوم (نصف شهر)
                         </button>
-                      );
-                    });
-                  })()}
-                  {packages.length === 0 && (
-                    <div className="w-full py-8 text-center text-slate-400 dark:text-slate-600 text-xs font-bold">لا توجد باقات حالية</div>
-                  )}
-                </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDurationFilter(30)}
+                          className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                            selectedDurationFilter === 30
+                              ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                          }`}
+                        >
+                          30 يوم (شهر)
+                        </button>
+                      </div>
+
+                      {/* Packages List */}
+                      <div className="space-y-3">
+                        {filteredPackages.map((pkg) => {
+                          const info = getCleanPackageInfo(pkg);
+                          const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(
+                            pkg, 
+                            selectedGarage.hasMonthlySubscribers || false, 
+                            subscriberFlatFee
+                          );
+
+                          const packageName = info.displayName;
+                          const isTopTier = filteredPackages.length > 1 && (
+                            info.isUnlimited || (!hasUnlimitedInFiltered && info.dailyCapacity !== null && info.dailyCapacity === maxCapInFiltered && maxCapInFiltered > 0)
+                          );
+
+                          return (
+                            <div
+                              key={pkg.id}
+                              className={`p-4 sm:p-5 rounded-3xl border-2 transition-all flex items-center justify-between gap-3 ${
+                                info.isUnlimited
+                                  ? 'bg-slate-900 border-amber-500 text-white shadow-xl'
+                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white shadow-sm'
+                              }`}
+                            >
+                              {/* Right Side: Package Name & Capacity */}
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-lg sm:text-xl font-black tracking-tight ${info.isUnlimited ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                                    {packageName}
+                                  </span>
+
+                                  {isTopTier && (
+                                    <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                                      <Sparkles className="w-3 h-3" />
+                                      الأكبر سعة
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className={`flex items-center gap-1.5 text-xs font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                                  <Car className="w-4 h-4 text-amber-500 shrink-0" />
+                                  <span>
+                                    {info.isUnlimited ? 'عربيات مفتوحة بدون حد أقصى' : `${info.dailyCapacity} عربية فى اليوم بس`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Left Side: Price & Action */}
+                              <div className="flex flex-col items-end text-left shrink-0 gap-2">
+                                <div>
+                                  {hasDiscount ? (
+                                    <div className="flex items-center gap-1.5 mb-0.5 justify-end">
+                                      <div className="relative overflow-hidden rounded px-2 py-0.5 flex items-center justify-center shrink-0">
+                                        <div 
+                                          className="absolute inset-[-250%] bg-[conic-gradient(from_0deg,transparent_75%,#fbbf24_100%)]" 
+                                          style={{ animation: 'spin 3.5s linear infinite' }} 
+                                        />
+                                        <div className={`absolute inset-[1.5px] rounded-[2.5px] ${info.isUnlimited ? 'bg-slate-900' : 'bg-white dark:bg-slate-900'}`} />
+                                        <div className="absolute inset-[1.5px] rounded-[2.5px] bg-emerald-500/10" />
+                                        <span className="relative z-10 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                                          خصم {pkg.discountType === 'percentage' ? `${pkg.discountValue}%` : `${pkg.discountValue} ج.م`}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
+                                        {displayBasePrice.toLocaleString('en-US')}
+                                      </span>
+                                    </div>
+                                  ) : null}
+                                  <div className="flex items-baseline gap-1 font-mono justify-end">
+                                    <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">
+                                      {effectivePrice.toLocaleString('en-US')}
+                                    </span>
+                                    <span className="text-xs font-black text-amber-700 dark:text-amber-400">ج.م</span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  disabled={isProcessing}
+                                  onClick={() => {
+                                    if (isProcessing) return;
+                                    setPendingPackage({ ...pkg });
+                                  }}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                                >
+                                  <span>شحن الآن</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {filteredPackages.length === 0 && (
+                          <div className="py-8 text-center text-slate-400 font-bold text-xs">
+                            لا توجد باقات متوفرة في هذه المدة
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -1000,7 +1098,7 @@ export const DelegateDashboardView = memo(({
                 </div>
 
                 {(() => {
-                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, surchargePercent);
+                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee);
 
                   return (
                     <>
@@ -1031,7 +1129,7 @@ export const DelegateDashboardView = memo(({
                         <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
                           <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
                             <Users className="w-3.5 h-3.5 shrink-0" />
-                            يتضمن زيادة {surchargePercent}% لحساب المشتركين الشهريين
+                            يتضمن إضافة 500 ج.م ثابتة لحساب المشتركين الشهريين
                           </p>
                         </div>
                       )}

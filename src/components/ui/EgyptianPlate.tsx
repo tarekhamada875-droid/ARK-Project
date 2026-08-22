@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { FitText } from './FitText';
 
 interface EgyptianPlateProps {
   plateNumber: string;
@@ -77,22 +78,34 @@ export const EgyptianPlate: React.FC<EgyptianPlateProps> = memo(({
       {/* Plate Main Content */}
       <div className="flex-1 flex items-center justify-between bg-[#fcfcfc] dark:bg-slate-200 overflow-hidden">
         {/* Numbers Section (Left side) */}
-        <div className="flex-1 h-full flex justify-center items-center font-black text-slate-900 tracking-tighter truncate px-1">
-          {numbers}
+        <div className="flex-1 h-full min-w-0 flex justify-center items-center px-1">
+          <FitText minFontSize={size === 'sm' ? 7 : size === 'md' ? 14 : 24} className="font-black text-slate-900 tracking-tighter text-center">
+            {numbers}
+          </FitText>
         </div>
         
         {/* Vertical Divider line - Centered and clean */}
         <div className="w-[1.5px] h-[70%] bg-slate-200 dark:bg-slate-400" />
         
         {/* Letters Section (Right side) - Spaced out properly */}
-        <div className={`flex-1 h-full flex justify-center items-center font-black text-slate-800 truncate px-1 transition-all ${
-          letters.length >= 4 
-            ? (size === 'sm' ? 'text-[10px] gap-0.5' : size === 'md' ? 'text-base gap-1' : 'text-3xl gap-1') 
-            : (size === 'sm' ? 'text-[10px] gap-1' : size === 'md' ? 'text-xl gap-2' : 'text-4xl gap-2')
-        }`} dir="rtl">
-          {letters.split('').map((char, index) => (
-            <span key={index}>{char}</span>
-          ))}
+        <div className="flex-1 h-full min-w-0 flex justify-center items-center px-1" dir="rtl">
+          <FitText
+            minFontSize={size === 'sm' ? 7 : size === 'md' ? 12 : 22}
+            className={`font-black text-slate-800 text-center transition-all ${
+              letters.length >= 4 
+                ? (size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-base' : 'text-3xl') 
+                : (size === 'sm' ? 'text-[10px]' : size === 'md' ? 'text-xl' : 'text-4xl')
+            }`}
+          >
+            {letters.split('').map((char, index) => (
+              <span 
+                key={index} 
+                className={`inline-block select-none ${letters.length >= 4 ? 'mx-[0.125em]' : 'mx-[0.25em]'}`}
+              >
+                {char}
+              </span>
+            ))}
+          </FitText>
         </div>
       </div>
 

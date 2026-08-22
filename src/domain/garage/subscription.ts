@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import { getCairoDateKey } from './businessDay';
 
 const safeDate = (date: any): Date => {
   if (!date) return new Date();
@@ -136,7 +137,7 @@ export const isUnlimitedCapacity = (garage: any): boolean => {
 };
 
 export const calculateCapacityUsed = (garage: any): { used: number; limit: number; isUnlimited: boolean } => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getCairoDateKey();
   const isToday = garage?.lastTransactionDate === today;
   const used = isToday ? (garage?.todayCount || 0) : 0;
   const limit = getEffectiveDailyCapacity(garage);

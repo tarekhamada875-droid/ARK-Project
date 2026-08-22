@@ -4,7 +4,8 @@ import { onAuthStateChanged, User, signOut, signInAnonymously } from 'firebase/a
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { APP_TEXT, ADMIN_PIN } from '../constants';
 import { getCleanPackageInfo } from '../constants/packages';
-import { firestoreServiceV2 as firestoreService, firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
+import { firestoreServiceV2 as firestoreService, firestoreServiceV2, type GarageDeletionProgress } from '../services/domain/firestoreServiceV2';
+import { getCairoDateKey } from '../domain/garage/businessDay';
 import { Garage, Vehicle, Package, Staff, RechargeRequest, Supervisor, GeneralManager } from '../types';
 import { 
   safeDate, 
@@ -18,13 +19,13 @@ import {
   isSubscriptionExpired,
   getEffectiveDailyCapacity,
   isUnlimitedCapacity,
-  applyMonthlySubscribersSurcharge,
+  applyMonthlySubscribersFlatFee,
   createAsyncLock
 } from '../utils';
 import { useLocalStorageState } from './useLocalStorage';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useServerTime } from './useServerTime';
-import { useSystemSurchargePercent } from './useSystemSurchargePercent';
+import { useSystemSubscribersFlatFee } from './useSystemSubscribersFlatFee';
 import { soundManager } from '../utils/sounds';
 import { useAppStore } from '../store/appStore';
 
@@ -85,7 +86,7 @@ export function useGarageApp() {
   }, []);
 
   // Persisted state fields
-  const surchargePercent = useSystemSurchargePercent();
+  const subscriberFlatFee = useSystemSubscribersFlatFee();
   const [view, setView] = useLocalStorageState<'login' | 'garage' | 'admin_login' | 'admin_dashboard' | 'admin_garage_details' | 'admin_delegate_details' | 'delegate_login' | 'delegate_dashboard' | 'packages' | 'staff_stats' | 'general_manager_dashboard'>('app_view', 'login');
   const [garage, setGarage] = useLocalStorageState<Garage | null>('app_garage', null);
   const [delegate, setDelegate] = useLocalStorageState<any | null>('app_delegate', null);
@@ -122,6 +123,7 @@ export function useGarageApp() {
   const [selectedGarageForDetails, setSelectedGarageForDetails] = useLocalStorageState<Garage | null>('app_selected_garage_details', null);
   const [selectedDelegateForDetails, setSelectedDelegateForDetails] = useLocalStorageState<any | null>('app_selected_delegate_details', null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [garageDeletionProgress, setGarageDeletionProgress] = useState<GarageDeletionProgress | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showPackages, setShowPackages] = useLocalStorageState<boolean>('app_show_packages', false);
   const [showStaffStats, setShowStaffStats] = useLocalStorageState<boolean>('app_show_staff_stats', false);
@@ -443,8 +445,15 @@ export function useGarageApp() {
   const loginWithSession = useCallback(async (collectionName: string, data: any, uid: string) => {
     if (!uid) return;
     const sessionRef = doc(db, collectionName, uid);
-    
-    // Create fresh session (rules require !exists)
+    const existingSession = await getDoc(sessionRef);
+
+    // Existing sessions are immutable except for their activity heartbeat.
+    if (existingSession.exists()) {
+      await setDoc(sessionRef, { lastActive: serverTimestamp() }, { merge: true });
+      return;
+    }
+
+    // Create the security session only once, after the collection rule validates its login data.
     await setDoc(sessionRef, {
       ...data,
       sessionId,
@@ -569,7 +578,7 @@ export function useGarageApp() {
             const data = { id: snapshot.id, ...snapshot.data() } as Garage;
             
             // Auto-heal legacy corrupted/stale data in Firestore
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getCairoDateKey();
             const updatesToHeal: any = {};
             
             if (data.balanceExpiry) {
@@ -1078,7 +1087,7 @@ export function useGarageApp() {
           revenueIncrement = Math.max(0, revenueIncrement - discountInfo.discountAmount);
         }
 
-        revenueIncrement = applyMonthlySubscribersSurcharge(revenueIncrement, g.hasMonthlySubscribers || false, surchargePercent);
+        revenueIncrement = applyMonthlySubscribersFlatFee(revenueIncrement, g.hasMonthlySubscribers || false, subscriberFlatFee);
 
         const rechargePayload: any = {
           garageId: garageId,
@@ -1106,7 +1115,7 @@ export function useGarageApp() {
     if (lockResult === null) {
       showToast('جاري إرسال الطلب... يرجى الانتظار', 'info');
     }
-  }, [isOnline, allGarages, delegate, surchargePercent, showToast]);
+  }, [isOnline, allGarages, delegate, subscriberFlatFee, showToast]);
 
   const handleCheckIn = useCallback(async (type: 'hourly' | 'overnight', bypassWarning = false) => {
     if (!isOnline) {
@@ -1372,7 +1381,7 @@ export function useGarageApp() {
     }
 
     // Daily limit guard (Max 3 deletions/day)
-    const todayYMD = new Date().toISOString().split('T')[0];
+    const todayYMD = getCairoDateKey();
     if (garage.lastDeletionDate === todayYMD && (garage.dailyDeletionCount ?? 0) >= 3) {
       showToast('وصلت للحد الأقصى للحذف اليوم (3 مرات)', 'error');
       return;
@@ -1400,19 +1409,19 @@ export function useGarageApp() {
         currentStaff ? currentStaff.id : undefined
       );
       if (success) {
+        setVehicles(prev => prev.filter(v => v.id !== selectedVehicle.id));
         showToast('اللوحة اتمسحت بنجاح');
+      } else {
+        showToast('فشل في حذف السيارة، جرب تانى', 'error');
       }
     } catch (err: any) {
       console.error('Delete Vehicle Error:', err);
       if (err?.message === 'reached_daily_deletion_limit' || err?.message?.includes('reached_daily_deletion_limit')) {
         showToast('وصلت للحد الأقصى للحذف اليوم (3 مرات)', 'error');
       } else {
-        showToast('فشل في حذف السيارة برصيد، جرب تانى', 'error');
+        showToast('فشل في حذف السيارة، جرب تانى', 'error');
       }
     } finally {
-      if (selectedVehicle) {
-        setVehicles(prev => prev.filter(v => v.id !== selectedVehicle.id));
-      }
       deletingVehicleRef.current = null;
       setSelectedVehicle(null);
       setNewPlateNumber('');
@@ -1422,6 +1431,7 @@ export function useGarageApp() {
   }, [isOnline, garage, selectedVehicle, currentStaff, showToast, isLoading]);
 
   const deleteGarage = useCallback(async (g: Garage | null) => {
+    if (isLoading) return;
     if (!isOnline) {
       showToast('لا يوجد اتصال بالإنترنت. يرجى المحاولة عند عودة النت.', 'error');
       return;
@@ -1430,23 +1440,26 @@ export function useGarageApp() {
     const garageId = g.id;
     closeKeyboard();
     setIsLoading(true);
-    
-    setShowDeleteConfirm(false);
-    setSelectedGarageForDetails(null);
-    setView('admin_dashboard');
-
-    await new Promise(resolve => setTimeout(resolve, 500));
+    setGarageDeletionProgress({
+      phase: 'preparing',
+      total: 0,
+      processed: 0,
+      percentage: 1
+    });
 
     try {
-      await firestoreService.deleteGarage(garageId);
+      await firestoreService.deleteGarage(garageId, setGarageDeletionProgress);
+      setShowDeleteConfirm(false);
+      setSelectedGarageForDetails(null);
+      setView('admin_dashboard');
       showToast(APP_TEXT.ADMIN.DELETE_CONFIRM);
     } catch (error) {
       showToast('فشل في حذف الجراج', 'error');
-      setView('admin_dashboard');
     } finally {
       setIsLoading(false);
+      setGarageDeletionProgress(null);
     }
-  }, [isOnline, closeKeyboard, showToast]);
+  }, [isLoading, isOnline, closeKeyboard, showToast, setSelectedGarageForDetails, setView]);
 
   const updateGarageRate = useCallback(async (g: Garage, field: 'hourlyRate' | 'overnightRate', value: number) => {
     try {
@@ -1584,6 +1597,7 @@ export function useGarageApp() {
     setSelectedDelegateForDetails,
     showDeleteConfirm,
     setShowDeleteConfirm,
+    garageDeletionProgress,
     showLogoutConfirm,
     setShowLogoutConfirm,
     showPackages,
