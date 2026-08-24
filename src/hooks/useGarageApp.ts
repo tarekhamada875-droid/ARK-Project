@@ -317,26 +317,15 @@ export function useGarageApp() {
     }
   }, [garage?.id, currentStaff?.id, delegate?.id, currentSupervisor?.id]);
 
+  // One-time cleanup for old lockout keys in v165
+  useEffect(() => {
+    localStorage.removeItem('logout_lockout_until');
+    localStorage.removeItem('logout_attempts');
+  }, []);
+
   const handleInitiateLogout = useCallback(() => {
-    const lockoutUntilStr = localStorage.getItem('logout_lockout_until');
-    if (lockoutUntilStr) {
-      const lockoutUntil = parseInt(lockoutUntilStr);
-      if (Date.now() < lockoutUntil) {
-        const remainingMs = lockoutUntil - Date.now();
-        const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
-        const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-        const msg = days > 0 
-          ? `تسجيل الخروج مقفل لمدة أسبوع. متبقي ${days} يوم و ${hours} ساعة.`
-          : `تسجيل الخروج مقفل لمدة أسبوع. متبقي ${hours} ساعة.`;
-        showToast(msg, 'error');
-        return;
-      } else {
-        localStorage.removeItem('logout_lockout_until');
-        localStorage.setItem('logout_attempts', '0');
-      }
-    }
     setShowLogoutConfirm(true);
-  }, [showToast]);
+  }, []);
 
   const closeKeyboard = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {

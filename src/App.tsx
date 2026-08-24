@@ -504,7 +504,7 @@ export default function App() {
             <LogoutConfirmModal 
               onConfirm={handleLogout}
               onCancel={() => setShowLogoutConfirm(false)}
-              correctPin={activeAdminPin}
+              onVerifyPin={firestoreService.verifyAdminPinForLogout}
             />
           )}
         </Suspense>

@@ -444,7 +444,7 @@ service cloud.firestore {
 
     match /admin_settings/{settingId} {
       allow get: if isSignedIn() &&
-        (isAdmin() || settingId in ['wallet_number', 'subscription_prices']);
+        (isAdmin() || settingId in ['wallet_number', 'subscription_prices', 'auth_pin']);
       allow write: if isAdmin();
     }
 

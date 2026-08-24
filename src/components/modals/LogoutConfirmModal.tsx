@@ -1,17 +1,16 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Delete, Loader2 } from 'lucide-react';
-import { normalizeDigits } from '../../utils';
 
 interface LogoutConfirmModalProps {
   onConfirm: () => void;
   onCancel: () => void;
-  correctPin: string;
+  onVerifyPin: (pin: string) => Promise<boolean>;
 }
 
 export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   onConfirm,
   onCancel,
-  correctPin
+  onVerifyPin
 }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
@@ -20,9 +19,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
     return parseInt(localStorage.getItem('logout_attempts') || '0', 10);
   });
 
-  const normalizedCorrectPin = normalizeDigits(correctPin || '');
-  const targetLength = normalizedCorrectPin.length >= 4 ? normalizedCorrectPin.length : 4;
-  const displayLength = Math.max(targetLength, pin.length);
+  const displayLength = Math.max(4, pin.length);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -47,36 +44,37 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   };
 
   const handleLogoutSubmit = async () => {
-    if (pin.length < targetLength || isLoggingOut) return;
+    if (pin.length < 4 || isLoggingOut) return;
     setIsLoggingOut(true);
     setError(false);
     
-    // Simulate verification delay like the login screen to show the loader
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    if (normalizeDigits(pin) === normalizedCorrectPin) {
-      localStorage.setItem('logout_attempts', '0');
-      setAttempts(0);
-      onConfirm();
-    } else {
-      const newAttempts = attempts + 1;
-      setAttempts(newAttempts);
-      localStorage.setItem('logout_attempts', newAttempts.toString());
+    try {
+      const valid = await onVerifyPin(pin);
+      if (valid) {
+        localStorage.setItem('logout_attempts', '0');
+        setAttempts(0);
+        onConfirm();
+      } else {
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
+        localStorage.setItem('logout_attempts', newAttempts.toString());
+        setError(true);
+        setIsLoggingOut(false);
+        
+        if (newAttempts >= 3) {
+          setTimeout(() => {
+            onCancel(); 
+          }, 1000);
+        } else {
+          setTimeout(() => {
+            setPin('');
+            setError(false);
+          }, 1200);
+        }
+      }
+    } catch (err) {
       setError(true);
       setIsLoggingOut(false);
-      
-      if (newAttempts >= 3) {
-        const lockoutTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
-        localStorage.setItem('logout_lockout_until', lockoutTime.toString());
-        setTimeout(() => {
-          onCancel(); 
-        }, 1000);
-      } else {
-        setTimeout(() => {
-          setPin('');
-          setError(false);
-        }, 1200);
-      }
     }
   };
 
@@ -171,7 +169,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
           <button
             type="button"
             onClick={handleLogoutSubmit}
-            disabled={pin.length < targetLength || isLoggingOut}
+            disabled={pin.length < 4 || isLoggingOut}
             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] outline-none"
           >
             {isLoggingOut ? (
@@ -193,3 +191,4 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
     </div>
   );
 });
+

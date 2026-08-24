@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkPinAvailability = exports.authenticateUser = exports.validateVehicleOnCreate = exports.validateRechargeRequestOnUpdate = exports.validateRechargeRequestOnCreate = exports.validateGarageOnCreate = void 0;
+exports.verifyAdminPinForLogout = exports.checkPinAvailability = exports.authenticateUser = exports.validateVehicleOnCreate = exports.validateRechargeRequestOnUpdate = exports.validateRechargeRequestOnCreate = exports.validateGarageOnCreate = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
@@ -273,5 +273,36 @@ exports.checkPinAvailability = functions.https.onCall(async (data, context) => {
         }
     }
     return { taken: false };
+});
+// ============================================
+// VERIFY ADMIN PIN FOR LOGOUT (v165)
+// ============================================
+exports.verifyAdminPinForLogout = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        return { valid: false };
+    }
+    const rawPin = data?.pin ? String(data.pin) : '';
+    const normalizedPin = rawPin
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+        .replace(/\D/g, '');
+    if (!normalizedPin) {
+        return { valid: false };
+    }
+    try {
+        const adminPinDoc = await db.collection('admin_settings').doc('auth_pin').get();
+        const activeAdminPin = adminPinDoc.exists ? adminPinDoc.data()?.pin : '8899';
+        const normalizedActivePin = String(activeAdminPin)
+            .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+            .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+            .replace(/\D/g, '');
+        if (normalizedPin === normalizedActivePin) {
+            return { valid: true };
+        }
+    }
+    catch (err) {
+        console.error('Error verifying admin pin for logout in function:', err);
+    }
+    return { valid: false };
 });
 //# sourceMappingURL=index.js.map

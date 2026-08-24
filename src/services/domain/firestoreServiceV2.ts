@@ -40,7 +40,7 @@ import type {
 } from '../../types';
 import { ADMIN_PIN } from '../../constants';
 import { getCleanPackageInfo } from '../../constants/packages';
-import { packageIdToDays, withRetry, applyMonthlySubscribersFlatFee, isSessionActive } from '../../utils';
+import { packageIdToDays, withRetry, applyMonthlySubscribersFlatFee, isSessionActive, normalizeDigits } from '../../utils';
 import { validateGarageCreation, validateRechargeRequest } from '../../domain/garage/validation';
 import { isSubscriptionExpired, calculateCapacityUsed } from '../../domain/garage/subscription';
 import { getCairoDateKey } from '../../domain/garage/businessDay';
@@ -623,6 +623,38 @@ export const firestoreServiceV2 = {
       console.warn("Cloud function checkPinAvailability fallback:", err);
     }
     return await localCheckPinAvailabilityFallback(normalizedPin, excludeId);
+  },
+
+  verifyAdminPinForLogout: async (pin: string): Promise<boolean> => {
+    const normalizedPin = normalizeDigits(pin || '').replace(/\D/g, '');
+    if (!normalizedPin) return false;
+
+    // 1. Try Cloud Function
+    try {
+      const callable = httpsCallable<{ pin: string }, { valid?: boolean }>(functions, 'verifyAdminPinForLogout');
+      const result = await callable({ pin: normalizedPin });
+      if (result.data?.valid === true) {
+        return true;
+      }
+    } catch (error) {
+      console.warn('Cloud Function verifyAdminPinForLogout fallback to direct doc verification:', error);
+    }
+
+    // 2. Direct Firestore Doc Verification Fallback
+    try {
+      const docSnap = await getDoc(doc(db, 'admin_settings', 'auth_pin'));
+      const activePin = (docSnap && typeof docSnap.exists === 'function' && docSnap.exists() && docSnap.data()?.pin) ? docSnap.data().pin : ADMIN_PIN;
+      const normalizedActivePin = normalizeDigits(String(activePin || '')).replace(/\D/g, '');
+      if (normalizedPin === normalizedActivePin) {
+        return true;
+      }
+    } catch (err) {
+      console.warn('Direct doc verification failed, checking default ADMIN_PIN:', err);
+    }
+
+    // 3. Fallback to default ADMIN_PIN
+    const normalizedDefaultPin = normalizeDigits(ADMIN_PIN).replace(/\D/g, '');
+    return normalizedPin === normalizedDefaultPin;
   },
 
   // Vehicles
