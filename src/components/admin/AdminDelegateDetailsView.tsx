@@ -23,10 +23,15 @@ import {
   RotateCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Delegate, ActivityLog } from '../../types';
+import { Delegate, ActivityLog, RechargeRequest } from '../../types';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { Spinner } from '../ui/Spinner';
 import { safeDate } from '../../utils';
+import { 
+  calculateApprovedCommission, 
+  calculateApprovedRechargeTotal, 
+  getAvailableRequestMonths 
+} from '../../utils/delegateCommissionCalculations';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { serverTimestamp } from 'firebase/firestore';
@@ -45,10 +50,8 @@ export const AdminDelegateDetailsView = memo(({
   removeDelegate
 }: AdminDelegateDetailsViewProps) => {
   const [recharges, setRecharges] = useState<ActivityLog[]>([]);
+  const [requests, setRequests] = useState<RechargeRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [rateInput, setRateInput] = useState(String(delegate.commissionRate || 0));
-  const [isUpdatingRate, setIsUpdatingRate] = useState(false);
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -87,37 +90,17 @@ export const AdminDelegateDetailsView = memo(({
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const data = await firestoreService.getDelegateRecharges(delegate.id);
-        setRecharges(data);
+        const [logsData, reqsData] = await Promise.all([
+          firestoreService.getDelegateRecharges(delegate.id),
+          firestoreService.getDelegateRechargeRequests(delegate.id)
+        ]);
+        setRecharges(logsData || []);
+        setRequests(reqsData || []);
         
         // Calculate sum from history for initial display if totalRechargedAmount is missing or 0
-        const items = data.filter(log => log.actionType === 'recharge');
+        const items = (logsData || []).filter(log => log.actionType === 'recharge');
         const sum = items.reduce((acc, log) => {
-          // 1. Try to use the explicit amount field if it exists (for new logs)
           if (typeof log.amount === 'number' && !isNaN(log.amount)) return acc + log.amount;
-          
-          const desc = log.plateNumber || '';
-          
-          // 2. Flexible parsing for "شحن X ج" or "تجديد اشتراك X ج"
-          // This will catch the 100 and 500 from the screenshot
-          const moneyMatch = desc.match(/شحن.*?(\d+)\s*ج/);
-          if (moneyMatch && moneyMatch[1]) {
-            return acc + parseInt(moneyMatch[1]);
-          }
-
-          // 3. Fallback for package names if amount is still not found
-          // Adjusting based on user report: 2500 total
-          // (400 * 2) + (X * 2) + 100 + 500 = 2500 => 800 + 2X + 600 = 2500 => 1400 + 2X = 2500 => 2X = 1100 => X = 550
-          // It seems "باقة 1" with 750 cars was 550 EGP or similar in his system
-          if (desc.includes('باقة 1')) {
-            if (desc.includes('750')) return acc + 550; // Just an inference based on his 2500 total
-            return acc + 400;
-          }
-          if (desc.includes('باقة 2')) return acc + 1200;
-          if (desc.includes('باقة 3')) return acc + 2500;
-          if (desc.includes('باقة 4')) return acc + 5000;
-          if (desc.includes('باقة 5')) return acc + 10000;
-          
           return acc;
         }, 0);
         setHistoryTotal(sum);
@@ -129,27 +112,6 @@ export const AdminDelegateDetailsView = memo(({
     };
     fetchHistory();
   }, [delegate.id]);
-
-  const handleUpdateCommission = async () => {
-    const finalRate = parseFloat(rateInput) || 0;
-    setIsUpdatingRate(true);
-    try {
-      await firestoreService.updateDelegate(delegate.id, { commissionRate: finalRate });
-      setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 2000);
-    } catch (err) {
-      setConfirmDialog({
-        isOpen: true,
-        title: t('خطأ'),
-        message: t('فشل تحديث النسبة. يرجى المحاولة مرة أخرى.'),
-        onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
-        confirmText: t('حسناً'),
-        type: 'danger'
-      });
-    } finally {
-      setIsUpdatingRate(false);
-    }
-  };
 
   const handleDelete = async () => {
     setConfirmDialog({
@@ -181,29 +143,11 @@ export const AdminDelegateDetailsView = memo(({
     });
   };
 
-  const sumRechargeLogs = (logs: ActivityLog[]) => {
-    return logs.reduce((acc, log) => {
-      if (log.actionType !== 'recharge') return acc;
-      if (typeof log.amount === 'number' && !isNaN(log.amount)) return acc + log.amount;
-      
-      const desc = log.plateNumber || '';
-      const moneyMatch = desc.match(/شحن.*?(\d+)\s*ج/);
-      if (moneyMatch && moneyMatch[1]) {
-        return acc + parseInt(moneyMatch[1]);
-      }
-
-      if (desc.includes('باقة 1')) {
-        if (desc.includes('750')) return acc + 550;
-        return acc + 400;
-      }
-      if (desc.includes('باقة 2')) return acc + 1200;
-      if (desc.includes('باقة 3')) return acc + 2500;
-      if (desc.includes('باقة 4')) return acc + 5000;
-      if (desc.includes('باقة 5')) return acc + 10000;
-      
-      return acc;
-    }, 0);
-  };
+  // Active dataset preference: recharge requests if available, fallback to activity logs
+  const activeDataset = React.useMemo(() => {
+    if (requests && requests.length > 0) return requests;
+    return recharges;
+  }, [requests, recharges]);
 
   // Monthly calculations logic
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('current');
@@ -230,34 +174,36 @@ export const AdminDelegateDetailsView = memo(({
 
   // Unique list of months with recharge activity
   const availableMonths = React.useMemo(() => {
-    const monthsSet = new Set<string>();
-    monthsSet.add(currentMonthKey);
-    recharges.forEach(log => {
-      const d = safeDate(log.timestamp);
-      if (!isNaN(d.getTime())) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        monthsSet.add(`${y}-${m}`);
-      }
-    });
-    return Array.from(monthsSet).sort().reverse();
-  }, [recharges, currentMonthKey]);
+    return getAvailableRequestMonths(activeDataset, currentMonthKey);
+  }, [activeDataset, currentMonthKey]);
 
   const activeMonthKey = selectedMonthKey === 'current' ? currentMonthKey : selectedMonthKey;
 
-  // Filtered recharges based on selected month or all time
-  const activeMonthLogs = React.useMemo(() => {
-    if (activeMonthKey === 'all') return recharges;
-    return recharges.filter(log => {
-      const d = safeDate(log.timestamp);
-      if (isNaN(d.getTime())) return false;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      return key === activeMonthKey;
-    });
-  }, [recharges, activeMonthKey]);
+  const totalRecharged = React.useMemo(() => {
+    if (activeMonthKey === 'all') {
+      const calculated = calculateApprovedRechargeTotal(activeDataset, 'all');
+      return Math.max(calculated, delegate.totalRechargedAmount || 0, historyTotal);
+    }
+    return calculateApprovedRechargeTotal(activeDataset, activeMonthKey);
+  }, [activeDataset, activeMonthKey, delegate.totalRechargedAmount, historyTotal]);
 
-  const selectedMonthTotal = sumRechargeLogs(activeMonthLogs);
-  const allTimeTotal = sumRechargeLogs(recharges);
+  const allTimeTotal = React.useMemo(() => {
+    const calculated = calculateApprovedRechargeTotal(activeDataset, 'all');
+    return Math.max(calculated, delegate.totalRechargedAmount || 0, historyTotal);
+  }, [activeDataset, delegate.totalRechargedAmount, historyTotal]);
+
+  const commissionValue = React.useMemo(() => {
+    if (activeMonthKey === 'all') {
+      const calculated = calculateApprovedCommission(activeDataset, 'all');
+      return calculated > 0 ? calculated : (delegate.totalCommissionEarned || 0);
+    }
+    return calculateApprovedCommission(activeDataset, activeMonthKey);
+  }, [activeDataset, activeMonthKey, delegate.totalCommissionEarned]);
+
+  const allTimeCommission = React.useMemo(() => {
+    const calculated = calculateApprovedCommission(activeDataset, 'all');
+    return calculated > 0 ? calculated : (delegate.totalCommissionEarned || 0);
+  }, [activeDataset, delegate.totalCommissionEarned]);
 
   // Unsettled total since last manual settlement
   const unsettledCycleTotal = (() => {
@@ -265,14 +211,13 @@ export const AdminDelegateDetailsView = memo(({
       return typeof delegate.totalRechargedAmount === 'number' ? delegate.totalRechargedAmount : historyTotal;
     }
     const settleDate = safeDate(delegate.lastSettledAt);
-    const filteredLogs = recharges.filter(log => safeDate(log.timestamp) > settleDate);
-    return sumRechargeLogs(filteredLogs);
+    const filteredItems = activeDataset.filter(item => {
+      const rawDate = (item as any).resolvedAt || (item as any).createdAt || (item as any).timestamp;
+      const itemDate = safeDate(rawDate);
+      return itemDate > settleDate;
+    });
+    return calculateApprovedRechargeTotal(filteredItems, 'all');
   })();
-
-  const totalRecharged = selectedMonthTotal;
-  const commissionRateValue = parseFloat(rateInput) || 0;
-  const commissionValue = isNaN(totalRecharged * commissionRateValue) ? 0 : (totalRecharged * commissionRateValue) / 100;
-  const allTimeCommission = isNaN(allTimeTotal * commissionRateValue) ? 0 : (allTimeTotal * commissionRateValue) / 100;
 
   const handleSettleAccount = () => {
     setConfirmDialog({
@@ -583,63 +528,42 @@ export const AdminDelegateDetailsView = memo(({
               </div>
             </div>
 
-            {/* Commission Settings */}
+            {/* Commission Stats */}
             <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-8 space-y-6 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/20 text-amber-500 rounded-xl flex items-center justify-center">
                     <Percent className="w-5 h-5" />
                   </div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">{t('إعدادات النسبة')}</h3>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">
+                    {selectedMonthKey === 'all' ? t('إجمالي العمولات المستحقة') : `${t('عمولة')} ${formatMonthName(activeMonthKey)}`}
+                  </h3>
                 </div>
-                {showSaveSuccess && (
-                  <div className="flex items-center gap-1.5 text-emerald-500 text-[10px] font-black animate-in fade-in slide-in-from-right-2">
-                    <Check className="w-3 h-3" />
-                    <span>{t('تم الحفظ')}</span>
-                  </div>
-                )}
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
+                </span>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 relative group">
-                    <input 
-                      type="text" 
-                      inputMode="decimal"
-                      value={rateInput}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                          setRateInput(val);
-                        }
-                      }}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 p-4 rounded-2xl text-xl font-black text-slate-900 dark:text-white text-center focus:outline-none focus:border-amber-400 transition-all font-sans"
-                      dir="ltr"
-                      placeholder="0"
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
-                      <span className="text-slate-400 font-black text-lg">%</span>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={handleUpdateCommission}
-                    disabled={isUpdatingRate || parseFloat(rateInput) === delegate.commissionRate}
-                    className="h-14 w-14 bg-slate-900 dark:bg-amber-400 text-white dark:text-slate-900 rounded-2xl flex items-center justify-center hover:opacity-90 disabled:opacity-30 transition-all outline-none"
-                  >
-                    {isUpdatingRate ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-6 h-6" />}
-                  </button>
+              <div>
+                <div className="flex items-baseline gap-2" dir="ltr">
+                  <span className="text-4xl font-black font-sans tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(commissionValue)}
+                  </span>
+                  <span className="text-lg font-bold text-slate-400">{t('ج.م')}</span>
                 </div>
+                <p className="text-slate-500 text-[10px] font-bold mt-2 uppercase tracking-[0.2em]">
+                  {selectedMonthKey === 'all' ? 'TOTAL EARNED COMMISSION' : `${formatMonthName(activeMonthKey).toUpperCase()} COMMISSION`}
+                </p>
+              </div>
 
-                <div className="pt-4 border-t border-slate-50 dark:border-slate-800">
-                  <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 text-xs font-bold">
-                    <span>{t('قيمة العمولة المستحقة:')}</span>
-                    <div className="flex items-baseline gap-1" dir="ltr">
-                      <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-sans tracking-tight">
-                        {formatCurrency(commissionValue)}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400">{t('ج.م')}</span>
-                    </div>
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 text-xs font-bold">
+                  <span>{t('إجمالي العمولات التاريخية:')}</span>
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className="text-base font-black text-slate-900 dark:text-white font-sans">
+                      {formatCurrency(allTimeCommission)}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">{t('ج.م')}</span>
                   </div>
                 </div>
               </div>

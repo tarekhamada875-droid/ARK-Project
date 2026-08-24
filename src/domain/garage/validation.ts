@@ -44,11 +44,13 @@ export const validateGarageCreation = (data: any): ValidationResult => {
 export const validateRechargeRequest = (data: any): ValidationResult => {
   const errors: string[] = [];
   
-  if (!data.garageId) errors.push('معرف الجراج مطلوب');
-  if (!data.packageId) errors.push('الباقة مطلوبة');
-  if (!data.revenueAmount || data.revenueAmount <= 0) errors.push('المبلغ يجب أن يكون أكبر من صفر');
-  if (!data.durationDays || data.durationDays <= 0) errors.push('مدة الاشتراك مطلوبة');
-  if (data.dailyCapacity === undefined) errors.push('السعة اليومية مطلوبة');
+  if (!data?.garageId) errors.push('معرف الجراج مطلوب');
+  if (!data?.packageId && !data?.packageName) errors.push('الباقة مطلوبة');
+  
+  const rawAmount = data?.revenueAmount !== undefined ? data.revenueAmount : data?.amount;
+  if (rawAmount === undefined || rawAmount === null || isNaN(Number(rawAmount)) || Number(rawAmount) < 0) {
+    errors.push('المبلغ غير صالح');
+  }
   
   return { valid: errors.length === 0, errors };
 };

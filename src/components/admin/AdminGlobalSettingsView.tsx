@@ -24,6 +24,7 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
     warningDaysThreshold: 3,
     monthlySubscribersFlatFee: 500,
     monthlySubscribersSurchargePercent: 25,
+    referralFeePerRenewal: 30,
     isMaintenanceMode: false,
     maintenanceMessage: ''
   });
@@ -38,7 +39,13 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
       try {
         const config = await firestoreService.getSystemConfig();
         if (config) {
-          setConfig(prev => ({ ...prev, ...config }));
+          setConfig(prev => ({ 
+            ...prev, 
+            ...config,
+            referralFeePerRenewal: config.referralFeePerRenewal !== undefined 
+              ? (Number(config.referralFeePerRenewal) >= 0 ? Math.floor(Number(config.referralFeePerRenewal)) : 30) 
+              : 30
+          }));
         }
       } catch (e) {
         console.error('Failed to load system config:', e);
@@ -62,11 +69,16 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
     setIsSaving(true);
     setStatusMessage(null);
     try {
+      const sanitizedReferralFee = config.referralFeePerRenewal !== undefined && !isNaN(Number(config.referralFeePerRenewal)) && Number(config.referralFeePerRenewal) >= 0
+        ? Math.floor(Number(config.referralFeePerRenewal))
+        : 30;
+
       await firestoreService.updateSystemConfig({
         defaultTrialDays: Number(config.defaultTrialDays) || 15,
         warningDaysThreshold: Number(config.warningDaysThreshold) || 3,
         monthlySubscribersFlatFee: Number(config.monthlySubscribersFlatFee) || 500,
         monthlySubscribersSurchargePercent: 25,
+        referralFeePerRenewal: sanitizedReferralFee,
         isMaintenanceMode: !!config.isMaintenanceMode,
         maintenanceMessage: (config.maintenanceMessage || '').trim()
       });
@@ -149,27 +161,58 @@ export const AdminGlobalSettingsView: React.FC<AdminGlobalSettingsViewProps> = (
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
-              {t('رسوم المشتركين الشهريين الثابتة (ج.م)')}
-            </label>
-            <div className="relative max-w-xs">
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={config.monthlySubscribersFlatFee}
-                onChange={(e) => setConfig({ ...config, monthlySubscribersFlatFee: Number(e.target.value.replace(/\D/g, '')) || 0 })}
-                className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-mono font-bold text-sm text-slate-900 dark:text-white outline-none focus:border-emerald-500"
-                required
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                ج.م
-              </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
+                {t('رسوم المشتركين الشهريين الثابتة (ج.م)')}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={config.monthlySubscribersFlatFee}
+                  onChange={(e) => setConfig({ ...config, monthlySubscribersFlatFee: Number(e.target.value.replace(/\D/g, '')) || 0 })}
+                  className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-mono font-bold text-sm text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                  required
+                />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  ج.م
+                </span>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400">
+                {t('المبلغ الثابت المضاف تلقائياً عند تفعيل خيار المشتركين الشهريين للجراج (افتراضياً 500 ج.م)')}
+              </p>
             </div>
-            <p className="text-[10px] font-bold text-slate-400">
-              {t('المبلغ الثابت المضاف تلقائياً عند تفعيل خيار المشتركين الشهريين للجراج (افتراضياً 500 ج.م)')}
-            </p>
+
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300 block">
+                {t('عمولة المندوب لكل تجديد')}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  min={0}
+                  step={1}
+                  value={config.referralFeePerRenewal ?? 30}
+                  onChange={(e) => {
+                    const rawVal = e.target.value.replace(/\D/g, '');
+                    const numVal = rawVal === '' ? 0 : Math.max(0, parseInt(rawVal, 10));
+                    setConfig({ ...config, referralFeePerRenewal: numVal });
+                  }}
+                  className="w-full p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-mono font-bold text-sm text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                  required
+                />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  ج.م
+                </span>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400">
+                {t('تُضاف هذه القيمة إلى سعر كل باقة للجراج الذي سجّله مندوب، وتُحوّل للمندوب عند نجاح التجديد.')}
+              </p>
+            </div>
           </div>
         </div>
 

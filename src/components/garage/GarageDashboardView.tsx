@@ -99,7 +99,12 @@ export const GarageDashboardView = memo((props: any) => {
     Ft = useRef(null),
     [De, He] = useState(!!Qt.currentUser),
     [activeAnnouncements, setActiveAnnouncements] = useState<Announcement[]>([]),
-    [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
+    [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({}),
+    [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+
+  const visibleAnnouncement = activeAnnouncements.find(
+    (announcement) => !dismissedAnnouncements[announcement.id]
+  ) ?? null;
 
   useEffect(() => {
     const unsub = me.onAnnouncementsChange((list) => {
@@ -299,17 +304,45 @@ export const GarageDashboardView = memo((props: any) => {
             <div className="max-w-4xl mx-auto flex justify-between items-center w-full">
               {
                 <div className="flex items-center">
-                  {
+                  {!visibleAnnouncement ? (
                     <div className="h-11 px-4 bg-slate-900 dark:bg-slate-800 border border-slate-900 dark:border-slate-800 text-white rounded-2xl flex items-center justify-center shadow-sm font-black text-xs select-none">
-                      {
-                        <span className="text-slate-100 dark:text-slate-200">
-                          {t.name}
-                        </span>
-                      }
+                      <span className="text-slate-100 dark:text-slate-200">
+                        {t.name}
+                      </span>
                     </div>
-                  }
+                  ) : (
+                    <div
+                      className="h-11 w-11 bg-slate-900 dark:bg-slate-800 border border-slate-900 dark:border-slate-800 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-sm select-none pointer-events-none"
+                      title={t.name}
+                    >
+                      <Crown className="w-5 h-5 text-white" />
+                    </div>
+                  )}
                 </div>
               }
+              {visibleAnnouncement && (
+                <button
+                  type="button"
+                  aria-label="عرض الإعلان المهم"
+                  onClick={() => {
+                    setSelectedAnnouncement(visibleAnnouncement);
+                    setDismissedAnnouncements((previous) => ({
+                      ...previous,
+                      [visibleAnnouncement.id]: true,
+                    }));
+                  }}
+                  className="absolute left-1/2 -translate-x-1/2 h-11 max-w-[min(60vw,280px)] px-4 bg-[#f8f6f0] dark:bg-slate-800 border-2 border-[#1a1915] dark:border-slate-700 rounded-2xl shadow-[2px_2px_0px_0px_#1a1915] dark:shadow-none font-black text-xs truncate transition-transform active:translate-y-[2px] active:shadow-none flex items-center justify-center"
+                >
+                  <span className={`inline-flex items-center gap-2 truncate ${
+                    visibleAnnouncement.priority === 'urgent' ? 'text-red-600 dark:text-red-400' :
+                    visibleAnnouncement.priority === 'important' ? 'text-amber-600 dark:text-amber-400' :
+                    'text-[#1a1915] dark:text-amber-400'
+                  }`}>
+                    <Megaphone className="w-4 h-4 shrink-0" />
+                    <span className="truncate">إعلان مهم</span>
+                  </span>
+                </button>
+              )}
               {
                 <div className="flex items-center gap-3">
                   {
@@ -617,55 +650,7 @@ export const GarageDashboardView = memo((props: any) => {
             s ? "gap-3 pt-3 pb-3" : "gap-4",
           )}
         >
-          {/* Feature 3: Announcements Banner for Garage */}
-          {!s && activeAnnouncements.length > 0 && (
-            <div className="space-y-2">
-              {activeAnnouncements.map((ann) => {
-                if (dismissedAnnouncements[ann.id]) return null;
-                const isUrgent = ann.priority === 'urgent';
-                const isImportant = ann.priority === 'important';
-
-                return (
-                  <div
-                    key={ann.id}
-                    className={`p-3.5 sm:p-4 rounded-2xl border flex items-start justify-between gap-3 shadow-sm transition-all animate-in fade-in duration-200 ${
-                      isUrgent
-                        ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300'
-                        : isImportant
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
-                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Megaphone className={`w-5 h-5 shrink-0 mt-0.5 ${
-                        isUrgent ? 'text-red-500' : isImportant ? 'text-amber-500' : 'text-emerald-500'
-                      }`} />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-black text-xs sm:text-sm">{ann.title}</h4>
-                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                            isUrgent ? 'bg-red-500 text-white' : isImportant ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
-                          }`}>
-                            {isUrgent ? 'عاجل' : isImportant ? 'هام' : 'إعلان'}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap leading-relaxed">
-                          {ann.content}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDismissedAnnouncements(prev => ({ ...prev, [ann.id]: true }))}
-                      className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0"
-                    >
-                      <XIcon className="w-4 h-4 opacity-60" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Removed old announcements banner from here */}
 
           {/* Removed Expiry Warning Banner as requested */}
 
@@ -1322,6 +1307,56 @@ export const GarageDashboardView = memo((props: any) => {
           }
         </div>
       )}
+      <AnimatePresence>
+        {selectedAnnouncement && (
+          <motion.div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcement-modal-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedAnnouncement(null)}
+          >
+            <motion.div
+              className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-700 bg-[#faf9f6] dark:bg-slate-900 p-5 shadow-2xl"
+              dir="rtl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black text-amber-600 dark:text-amber-400">إعلان مهم</p>
+                  <h2 id="announcement-modal-title" className="mt-1 text-lg font-black text-slate-900 dark:text-slate-100">
+                    {selectedAnnouncement.title}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  aria-label="إغلاق الإعلان"
+                  onClick={() => setSelectedAnnouncement(null)}
+                  className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 flex items-center justify-center shrink-0"
+                >
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700 dark:text-slate-200">
+                {selectedAnnouncement.content}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAnnouncement(null)}
+                className="mt-5 w-full h-11 rounded-2xl bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 font-black"
+              >
+                فهمت
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });

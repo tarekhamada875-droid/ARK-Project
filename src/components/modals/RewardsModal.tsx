@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { ChevronRight, HelpCircle } from 'lucide-react';
+import { ChevronRight, Gift, Sparkles, Users } from 'lucide-react';
 import { Garage } from '../../types';
 
 interface RewardsModalProps {
@@ -14,10 +14,12 @@ export const RewardsModal: React.FC<RewardsModalProps> = memo(({
   garage,
   onClose
 }) => {
+  const rewardDays = garage?.totalReferralRewardDays ?? 0;
+
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
+      <div className="p-4 sm:p-6 border-b border-slate-150 dark:border-slate-800 flex items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 transition-colors">
         <button 
           type="button"
           onClick={onClose}
@@ -36,67 +38,53 @@ export const RewardsModal: React.FC<RewardsModalProps> = memo(({
 
       {/* Main Content */}
       <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar-slate stable-scrollbar flex-1">
-        <div className="max-w-xl mx-auto w-full space-y-4 sm:space-y-6">
+        <div className="max-w-md mx-auto w-full space-y-4 sm:space-y-6">
 
-          {/* Card 1: Reward Days Banner */}
-          <div className="p-5 sm:p-6 bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 rounded-2xl border border-emerald-500/30 text-right shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+          {/* Card 1: Centered Big Number Reward Days */}
+          <div className="p-6 sm:p-8 bg-gradient-to-b from-emerald-950/80 via-slate-900 to-slate-950 rounded-2xl border border-emerald-500/30 text-center shadow-lg relative overflow-hidden flex flex-col items-center justify-center">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
             
-            <div className="flex items-center justify-between gap-4 relative z-10">
-              <div>
-                <span className="text-xs font-bold text-emerald-400 block mb-1">أيام الاشتراك المجانية المكتسبة</span>
-                <span className="text-xs text-slate-300 font-medium block">تُضاف تلقائياً لتاريخ انتهاء اشتراكك</span>
-              </div>
-
-              <div className="text-left shrink-0">
-                <span className="text-4xl sm:text-5xl font-black text-emerald-400 font-mono tracking-tight leading-none">
-                  {garage?.totalReferralRewardDays || 0}
-                </span>
-                <span className="text-xs font-bold text-slate-300 block text-left mt-1 font-mono">يوم مجاناً</span>
-              </div>
+            <div className="relative z-10 flex flex-col items-center">
+              <span className="text-6xl sm:text-7xl font-black text-emerald-400 font-mono tracking-tight leading-none mb-3 drop-shadow-sm">
+                {rewardDays}
+              </span>
+              <span className="text-base sm:text-lg font-black text-emerald-300">
+                {rewardDays === 0 ? "أيام مجانية برصيدك" : rewardDays === 1 ? "يوم مجاني برصيدك" : rewardDays === 2 ? "يومان مجانيان برصيدك" : `${rewardDays} يوماً مجانياً برصيدك`}
+              </span>
+              <span className="text-xs text-slate-400 mt-1 font-medium">
+                تُضاف تلقائياً لتاريخ انتهاء اشتراكك
+              </span>
             </div>
           </div>
 
-          {/* Card 2: Referral Instructions Card */}
-          <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-slate-900 dark:text-white pb-3 border-b border-slate-100 dark:border-slate-800">
-              <HelpCircle className="w-5 h-5 text-emerald-500" />
-              <h4 className="font-black text-base">ازاي تكسب 15 يوم مجاناً؟</h4>
+          {/* Card 2: Simple 2-Line Gift Logic */}
+          <div className="p-5 sm:p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 text-right">
+            <div className="flex items-center gap-2 text-amber-500 dark:text-amber-400 pb-3 border-b border-slate-100 dark:border-slate-800 font-black text-base">
+              <Gift className="w-5 h-5 shrink-0 text-amber-500 dark:text-amber-400" />
+              <span>يومان مجانيان عن كل تجديد ناجح لجراج تم ترشيحه 🎁</span>
             </div>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 font-mono">
-                  1
+            <div className="space-y-3">
+              {/* Row 1 */}
+              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950/60 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5" />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 block">رشّح جراج جديد</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    يختار اسم جراجك (<span className="font-bold text-emerald-600 dark:text-emerald-400">{garage?.name || ''}</span>) كمرشِّح عند التسجيل.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 font-mono">
-                  2
-                </div>
-                <div>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 block">شحنة الجراج الأولى</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    عند موافقة الإدارة على أول شحنة تجديد اشتراك للجراج المرشَّح.
-                  </p>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-900 dark:text-slate-100">رشّح جراج جديد</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">أي صاحب جراج تعرفه وينضم للخدمة</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 font-mono">
-                  3
+              {/* Row 2 */}
+              <div className="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/30 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-500/30">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
                 </div>
-                <div>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 block">إضافة +15 يوماً مجاناً 🎉</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    يتم تمديد اشتراكك فوراً بـ <strong className="text-emerald-600 dark:text-emerald-400 font-black">+15 يوماً مجاناً</strong> وتفعيل الحساب تلقائياً!
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">عن كل تجديد ناجح له</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
+                    يومان مجانيان عن كل تجديد ناجح لجراج تم ترشيحه
                   </p>
                 </div>
               </div>
@@ -110,3 +98,4 @@ export const RewardsModal: React.FC<RewardsModalProps> = memo(({
 });
 
 RewardsModal.displayName = 'RewardsModal';
+

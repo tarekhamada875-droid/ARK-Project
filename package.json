@@ -17,27 +17,27 @@
     "motion": "^12.38.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "vite": "^6.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-legacy": "^6.0.1",
+    "@tailwindcss/vite": "^4.1.14",
+    "tailwindcss": "^4.1.14",
+    "terser": "^5.46.2",
+    "typescript": "~5.8.2",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@babel/generator": "^8.0.0",
     "@babel/parser": "^8.0.4",
     "@babel/traverse": "^8.0.4",
-    "@tailwindcss/vite": "^4.1.14",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-legacy": "^6.0.1",
-    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "jsdom": "^30.0.1",
-    "tailwindcss": "^4.1.14",
-    "terser": "^5.46.2",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0",
     "vitest": "^4.1.10"
   }
 }

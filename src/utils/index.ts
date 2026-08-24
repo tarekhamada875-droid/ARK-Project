@@ -377,10 +377,16 @@ export const applyMonthlySubscribersFlatFee = (price: number, hasMonthlySubscrib
 
 /**
  * Calculates the final display price for a package:
- * 1. Apply discount (percentage or fixed)
- * 2. Apply monthly subscribers flat fee (configured flat amount, default 500 EGP)
+ * 1. Add referralFee for delegate-referred garage (default 30 EGP if referred, 0 otherwise)
+ * 2. Apply discount (percentage or fixed) on the base price
+ * 3. Apply monthly subscribers flat fee (configured flat amount, default 500 EGP)
  */
-export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, flatFee: number = 500): {
+export const calculateFinalPrice = (
+  pkg: any, 
+  hasMonthlySubscribers: boolean = false, 
+  flatFee: number = 500,
+  referralFee: number = 0
+): {
   basePrice: number;
   hasDiscount: boolean;
   discountedPrice: number;
@@ -398,7 +404,9 @@ export const calculateFinalPrice = (pkg: any, hasMonthlySubscribers: boolean, fl
       displayBasePrice: 0,
     };
   }
-  const basePrice = pkg.price || 0;
+  const rawBasePrice = pkg.price || 0;
+  const refFee = Number(referralFee) >= 0 ? Number(referralFee) : 0;
+  const basePrice = rawBasePrice + refFee;
   const hasDiscount = !!(pkg.discountValue && pkg.discountValue > 0);
   const discountedPrice = hasDiscount
     ? (pkg.discountType === 'percentage'

@@ -32,7 +32,7 @@ import {
   AlertTriangle,
   BarChart3,
 } from 'lucide-react';
-import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../../types';
+import { Garage, Delegate, Package, RechargeRequest, Supervisor } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { Spinner } from '../ui/Spinner';
 import { firestoreServiceV2 as firestoreService, firestoreServiceV2 } from '../../services/domain/firestoreServiceV2';
@@ -40,7 +40,7 @@ import { AppearanceSettingsModal } from '../modals/AppearanceSettingsModal';
 import { soundManager } from '../../utils/sounds';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
-import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor } from '../../utils';
+import { generateSafePin, normalizeArabicSearch, resolveShimmerColor, isLightColor, normalizeDigits } from '../../utils';
 import { useLocalStorageState } from '../../hooks/useLocalStorage';
 import { AdminGarageList } from './AdminGarageList';
 import { AdminAnnouncementsView } from './AdminAnnouncementsView';
@@ -65,11 +65,11 @@ interface AdminDashboardProps {
   // Supervisor addition
   currentSupervisor?: Supervisor | null;
   supervisors?: Supervisor[];
-  generalManagers?: GeneralManager[];
   currentAdminPin: string;
   currentWalletNumber: string;
   onUpdateWalletNumber: (wallet: string) => Promise<void>;
   subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
+  showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
 export const AdminDashboard = memo(({
@@ -86,17 +86,17 @@ export const AdminDashboard = memo(({
   rechargeRequests,
   currentSupervisor = null,
   supervisors = [],
-  generalManagers = [],
   currentAdminPin,
   currentWalletNumber,
   onUpdateWalletNumber,
-  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
+  subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
+  showToast
 }: AdminDashboardProps) => {
 
   // Localized states to encapsulate admin view and prevent global App re-renders
   const [adminSearch, setAdminSearch] = React.useState<string>('');
   const [packageDurationFilter, setPackageDurationFilter] = React.useState<15 | 30>(30);
-  const [activeTab, setActiveTab] = useLocalStorageState<'overview' | 'menu' | 'garages' | 'packages' | 'people' | 'delegates' | 'requests' | 'supervisors' | 'general_managers' | 'wallet' | 'admin-pin' | 'announcements' | 'global_settings' | 'catalog_settings'>('app_admin_tab', 'overview');
+  const [activeTab, setActiveTab] = useLocalStorageState<'overview' | 'menu' | 'garages' | 'packages' | 'people' | 'delegates' | 'requests' | 'supervisors' | 'wallet' | 'admin-pin' | 'announcements' | 'global_settings' | 'catalog_settings'>('app_admin_tab', 'overview');
 
   const ADMIN_GARAGES_PER_PAGE = 50;
   const [adminGarageRows, setAdminGarageRows] = React.useState<Garage[]>([]);
@@ -182,12 +182,16 @@ export const AdminDashboard = memo(({
   const [isAdminPinVerified, setIsAdminPinVerified] = React.useState(false);
   const [currentPinAttempt, setCurrentPinAttempt] = React.useState('');
   const [newAdminPinValue, setNewAdminPinValue] = React.useState('');
+  const [adminPinError, setAdminPinError] = React.useState('');
+  const [adminPinSuccess, setAdminPinSuccess] = React.useState('');
 
   React.useEffect(() => {
     if (activeTab !== 'admin-pin') {
       setIsAdminPinVerified(false);
       setCurrentPinAttempt('');
       setNewAdminPinValue('');
+      setAdminPinError('');
+      setAdminPinSuccess('');
     }
   }, [activeTab]);
 
@@ -264,7 +268,7 @@ export const AdminDashboard = memo(({
     setConfirmDialog({
       isOpen: true,
       title: 'تفعيل الشحن',
-      message: `هل أنت متأكد من تفعيل تجديد اشتراك جراج "${request.garageName}"؟`,
+      message: `هل أنت متأكد من تفعيل تجديد اشتراك جراج "${request.garageName || 'الجراج'}"؟`,
       confirmText: 'تفعيل الآن',
       cancelText: 'تراجع',
       type: 'success',
@@ -273,9 +277,15 @@ export const AdminDashboard = memo(({
           const result = await firestoreServiceV2.approveRechargeRequest(request);
           if (result.success) {
             soundManager.play('checkIn');
+            showToast?.('تم تفعيل اشتراك الجراج بنجاح', 'success');
+          } else {
+            soundManager.play('error');
+            showToast?.(result.error || 'تعذر تفعيل الاشتراك', 'error');
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Failed to approve request:', error);
+          soundManager.play('error');
+          showToast?.(error?.message || 'حدث خطأ أثناء تفعيل الطلب', 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -294,8 +304,10 @@ export const AdminDashboard = memo(({
       onConfirm: async () => {
         try {
           await firestoreService.rejectRechargeRequest(requestId);
-        } catch (error) {
+          showToast?.('تم رفض طلب الشحن', 'error');
+        } catch (error: any) {
           console.error('Failed to reject request:', error);
+          showToast?.(error?.message || 'حدث خطأ أثناء رفض الطلب', 'error');
         } finally {
           setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         }
@@ -367,6 +379,11 @@ export const AdminDashboard = memo(({
 
   const handleAddGarage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (currentSupervisor) {
+      showToast?.('غير مصرح للمشرف بإضافة جراجات', 'error');
+      setShowOverview(false);
+      return;
+    }
     await createNewGarage(e);
     setShowOverview(false);
   };
@@ -672,24 +689,24 @@ export const AdminDashboard = memo(({
                 <span>{t('الجراجات')}</span>
               </button>
 
-              {/* Tab 3: People (Delegates, Supervisors, GMs) */}
+              {/* Tab 3: People (Delegates, Supervisors) */}
               <button
                 type="button"
                 onClick={() => setActiveTab('people')}
                 className={`flex shrink-0 snap-start items-center gap-2.5 px-4 py-2.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
-                  activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers'
+                  activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors'
                     ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span>{t('الأشخاص')}</span>
+                <span>{currentSupervisor ? t('المناديب') : t('الأشخاص')}</span>
                 <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                  activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers'
+                  activeTab === 'delegates' || activeTab === 'supervisors'
                     ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
                     : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                 }`}>
-                  {delegates.length + supervisors.length + generalManagers.length}
+                  {currentSupervisor ? delegates.length : (delegates.length + supervisors.length)}
                 </span>
               </button>
 
@@ -763,23 +780,25 @@ export const AdminDashboard = memo(({
             <AdminOverviewView
               allGarages={approvedGarages}
               delegates={delegates}
+              isSupervisor={Boolean(currentSupervisor)}
               onSelectGarage={(g) => {
                 if (currentSupervisor) return;
                 setSelectedGarageForDetails(g);
                 setView('admin_garage_details');
               }}
-              onOpenAddGarage={() => {
+              onOpenAddGarage={!currentSupervisor ? () => {
                 setPinInput('');
                 setShowOverview(true);
-              }}
+              } : undefined}
             />
-          ) : activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors' || activeTab === 'general_managers' ? (
+          ) : activeTab === 'people' || activeTab === 'delegates' || activeTab === 'supervisors' ? (
             <AdminPeopleView
               delegates={delegates}
               supervisors={supervisors}
-              generalManagers={generalManagers}
               currentSupervisor={currentSupervisor}
+              allGarages={approvedGarages}
               onSelectDelegate={(d) => {
+                if (currentSupervisor) return;
                 setSelectedDelegateForDetails(d);
                 setView('admin_delegate_details');
               }}
@@ -858,17 +877,19 @@ export const AdminDashboard = memo(({
             </div>
         ) : activeTab === 'garages' ? (
           <div className="grid grid-cols-1 gap-6">
-            {/* Add Garage Button */}
-            <button
-              onClick={() => {
-                setPinInput('');
-                setShowOverview(true);
-              }}
-              className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-2xl font-black text-base flex items-center justify-center gap-4 hover:opacity-90 transition-all outline-none active:scale-[0.98]"
-            >
-              <Plus className="w-5 h-5 stroke-[3]" />
-              <span>{t('إضافة جراج جديد')}</span>
-            </button>
+            {/* Add Garage Button - Hidden for Supervisors */}
+            {!currentSupervisor && (
+              <button
+                onClick={() => {
+                  setPinInput('');
+                  setShowOverview(true);
+                }}
+                className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-2xl font-black text-base flex items-center justify-center gap-4 hover:opacity-90 transition-all outline-none active:scale-[0.98]"
+              >
+                <Plus className="w-5 h-5 stroke-[3]" />
+                <span>{t('إضافة جراج جديد')}</span>
+              </button>
+            )}
 
             <section className="w-full">
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
@@ -1661,17 +1682,33 @@ export const AdminDashboard = memo(({
                       {t('التحقق من الهوية')}
                     </h2>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 max-w-md mx-auto text-balance">
-                      {t('الرجاء إدخال رمز الدخول الحالي للآدمن:')}
+                      {t('أدخل رمز الدخول الحالي للمتابعة')}
                     </p>
                   </div>
 
                   {/* Verification Form */}
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (currentPinAttempt === currentAdminPin) {
-                        setIsAdminPinVerified(true);
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      setAdminPinError('');
+                      setAdminPinSuccess('');
+
+                      const attempt = normalizeDigits(currentPinAttempt);
+                      const current = normalizeDigits(currentAdminPin || '');
+
+                      if (attempt.length < 4) {
+                        setAdminPinError('أدخل رمز الدخول الحالي للمتابعة.');
+                        return;
                       }
+
+                      if (attempt !== current) {
+                        setAdminPinError('رمز الدخول الحالي غير صحيح.');
+                        return;
+                      }
+
+                      setCurrentPinAttempt('');
+                      setNewAdminPinValue('');
+                      setIsAdminPinVerified(true);
                     }}
                     className="space-y-6 relative z-10"
                   >
@@ -1686,6 +1723,7 @@ export const AdminDashboard = memo(({
                           setCurrentPinAttempt(val);
                         }}
                         maxLength={6}
+                        aria-label="رمز الدخول الحالي"
                         required
                         placeholder="••••"
                         className="w-full max-w-xs mx-auto text-center p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-black text-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-red-500 dark:focus:border-red-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all tracking-[0.5em] font-mono"
@@ -1703,12 +1741,24 @@ export const AdminDashboard = memo(({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setActiveTab('menu')}
+                        onClick={() => {
+                          setNewAdminPinValue('');
+                          setAdminPinError('');
+                          setAdminPinSuccess('');
+                          setCurrentPinAttempt('');
+                          setIsAdminPinVerified(false);
+                          setActiveTab('menu');
+                        }}
                         className="px-6 py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-extrabold text-sm rounded-2xl transition-all cursor-pointer"
                       >
                         {t('رجوع')}
                       </button>
                     </div>
+                    {adminPinError && (
+                      <p role="alert" className="mt-4 text-center text-sm font-black text-red-500">
+                        {adminPinError}
+                      </p>
+                    )}
                   </form>
                 </div>
               ) : (
@@ -1723,24 +1773,45 @@ export const AdminDashboard = memo(({
                       {t('رمز دخول الآدمن')}
                     </h2>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 max-w-md mx-auto text-balance">
-                      {t('رمز الدخول يجب أن يكون 4 أرقام على الأقل')}
+                      {t('أدخل رمز دخول جديداً مكوّناً من 6 أرقام')}
                     </p>
                   </div>
 
                   {/* Edit Passcode Form */}
                   <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (newAdminPinValue.length < 4) {
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      setAdminPinError('');
+                      setAdminPinSuccess('');
+
+                      const newPin = normalizeDigits(newAdminPinValue);
+                      const current = normalizeDigits(currentAdminPin || '');
+
+                      if (newPin.length !== 6) {
+                        setAdminPinError('رمز الدخول الجديد يجب أن يتكون من 6 أرقام بالضبط.');
                         return;
                       }
+
+                      if (newPin === current) {
+                        setAdminPinError('رمز الدخول الجديد يجب أن يكون مختلفاً عن الرمز الحالي.');
+                        return;
+                      }
+
                       setIsSavingAdminPin(true);
                       try {
-                        await firestoreService.updateAdminPin(newAdminPinValue);
+                        await firestoreService.updateAdminPin(newPin);
+                        setAdminPinSuccess('تم تغيير رمز الدخول بنجاح.');
+                        setCurrentPinAttempt('');
+                        setNewAdminPinValue('');
                         setIsAdminPinVerified(false);
-                        setActiveTab('menu');
-                      } catch (err) {
-                        console.error(err);
+
+                        window.setTimeout(() => {
+                          setAdminPinSuccess('');
+                          setActiveTab('menu');
+                        }, 1200);
+                      } catch (error) {
+                        console.error('Failed to update admin PIN:', error);
+                        setAdminPinError('تعذر حفظ رمز الدخول. تحقق من الاتصال وحاول مرة أخرى.');
                       } finally {
                         setIsSavingAdminPin(false);
                       }
@@ -1758,8 +1829,10 @@ export const AdminDashboard = memo(({
                           setNewAdminPinValue(val);
                         }}
                         maxLength={6}
+                        minLength={6}
+                        aria-label="رمز الدخول الجديد"
                         required
-                        placeholder="••••"
+                        placeholder="••••••"
                         className="w-full max-w-xs mx-auto text-center p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl font-black text-2xl text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:border-emerald-500 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all tracking-[0.5em] font-mono"
                         autoFocus
                       />
@@ -1772,7 +1845,10 @@ export const AdminDashboard = memo(({
                         className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl flex items-center justify-center gap-4 active:scale-[0.98] transition-all outline-none cursor-pointer"
                       >
                         {isSavingAdminPin ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>جارٍ الحفظ...</span>
+                          </>
                         ) : (
                           <>
                             <Check className="w-5 h-5 stroke-[3]" />
@@ -1783,6 +1859,9 @@ export const AdminDashboard = memo(({
                       <button
                         type="button"
                         onClick={() => {
+                          setNewAdminPinValue('');
+                          setAdminPinError('');
+                          setAdminPinSuccess('');
                           setIsAdminPinVerified(false);
                         }}
                         className="px-6 py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-extrabold text-sm rounded-2xl transition-all cursor-pointer"
@@ -1790,6 +1869,16 @@ export const AdminDashboard = memo(({
                         {t('رجوع')}
                       </button>
                     </div>
+                    {adminPinError && (
+                      <p role="alert" className="mt-4 text-center text-sm font-black text-red-500">
+                        {adminPinError}
+                      </p>
+                    )}
+                    {adminPinSuccess && (
+                      <p role="status" className="mt-4 text-center text-sm font-black text-emerald-500">
+                        {adminPinSuccess}
+                      </p>
+                    )}
                   </form>
                 </div>
               )}

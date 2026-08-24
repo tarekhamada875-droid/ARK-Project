@@ -1,8 +1,10 @@
-import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
+import { auth, db, functions, handleFirestoreError, OperationType } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
 import { 
   collection, 
   query, 
   where, 
+  or,
   onSnapshot, 
   addDoc, 
   updateDoc, 
@@ -31,7 +33,6 @@ import type {
   Package, 
   RechargeRequest, 
   Supervisor, 
-  GeneralManager, 
   Coupon, 
   Subscriber, 
   Announcement, 
@@ -39,7 +40,7 @@ import type {
 } from '../../types';
 import { ADMIN_PIN } from '../../constants';
 import { getCleanPackageInfo } from '../../constants/packages';
-import { packageIdToDays, withRetry } from '../../utils';
+import { packageIdToDays, withRetry, applyMonthlySubscribersFlatFee, isSessionActive } from '../../utils';
 import { validateGarageCreation, validateRechargeRequest } from '../../domain/garage/validation';
 import { isSubscriptionExpired, calculateCapacityUsed } from '../../domain/garage/subscription';
 import { getCairoDateKey } from '../../domain/garage/businessDay';
@@ -53,7 +54,6 @@ export type {
   Package, 
   RechargeRequest, 
   Supervisor, 
-  GeneralManager, 
   Coupon, 
   Subscriber, 
   Announcement, 
@@ -90,6 +90,39 @@ export const firestoreServiceV2 = {
       });
       callback([...cachedData]);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'garages'));
+  },
+
+  subscribeToDelegateGarages: (delegateId: string, callback: (garages: Garage[]) => void) => {
+    if (!delegateId) {
+      callback([]);
+      return () => {};
+    }
+    const q = query(
+      collection(db, 'garages'),
+      or(
+        where('createdByDelegateId', '==', delegateId),
+        where('referrerId', '==', delegateId)
+      )
+    );
+    let cachedData: Garage[] = [];
+    return onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        const id = change.doc.id;
+        const data = { id, ...change.doc.data() } as Garage;
+        if (change.type === 'added') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'modified') {
+          const idx = cachedData.findIndex(d => d.id === id);
+          if (idx !== -1) cachedData[idx] = data;
+          else cachedData.push(data);
+        } else if (change.type === 'removed') {
+          cachedData = cachedData.filter(d => d.id !== id);
+        }
+      });
+      callback([...cachedData]);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'garages/delegate'));
   },
 
   getAdminGaragesPage: async (pageSize = 50, lastDocRef: any = null) => {
@@ -156,6 +189,9 @@ export const firestoreServiceV2 = {
       hasMonthlySubscribers: data.hasMonthlySubscribers === true,
       referredByGarageId: data.referredByGarageId || null,
       referredByGarageName: data.referredByGarageName || null,
+      referrerId: data.referrerId || data.createdByDelegateId || null,
+      createdByDelegateId: data.createdByDelegateId || data.referrerId || null,
+      createdByDelegateName: data.createdByDelegateName || null,
       referralRewardClaimed: false,
       totalReferralRewardDays: 0,
       totalGaragesReferredCount: 0,
@@ -219,76 +255,9 @@ export const firestoreServiceV2 = {
     }
   },
 
-  processReferralRewardForRecharge: async (garageId: string) => {
-    try {
-      await withRetry(async () => {
-        const garageRef = doc(db, 'garages', garageId);
-        const garageSnap = await getDoc(garageRef);
-        if (!garageSnap.exists()) return;
-        const garageData = garageSnap.data() as Garage;
-
-        // Must have been referred by another garage
-        if (!garageData.referredByGarageId) return;
-
-        // Reward is granted ONCE with the first successful recharge of the referred garage
-        if (garageData.referralRewardClaimed) return;
-
-        const referrerRef = doc(db, 'garages', garageData.referredByGarageId);
-        const referrerSnap = await getDoc(referrerRef);
-        if (!referrerSnap.exists()) return;
-        const referrerData = referrerSnap.data() as Garage;
-
-        // Calculate 15 days addition for referrer
-        let baseDate = new Date();
-        const currentExpiry = referrerData.balanceExpiry;
-        if (currentExpiry) {
-          const expDate = currentExpiry.toDate ? currentExpiry.toDate() : new Date(currentExpiry);
-          if (expDate > baseDate) {
-            baseDate = expDate;
-          }
-        }
-        baseDate.setDate(baseDate.getDate() + 15);
-
-        const batch = writeBatch(db);
-
-        // Update Referrer garage: Add 15 days, unlock if locked, set capacity to at least 40
-        const referrerUpdates: any = {
-          balanceExpiry: Timestamp.fromDate(baseDate),
-          isLocked: false,
-          totalReferralRewardDays: increment(15),
-          totalGaragesReferredCount: increment(1)
-        };
-
-        if (!referrerData.dailyCapacity || referrerData.dailyCapacity <= 0) {
-          referrerUpdates.dailyCapacity = 40;
-        }
-
-        batch.update(referrerRef, referrerUpdates);
-
-        // Update the referred garage so reward is only claimed once
-        batch.update(garageRef, {
-          referralRewardClaimed: true,
-          referralRewardAwardedAt: serverTimestamp()
-        });
-
-        // Add activity log for referrer
-        const logRef = doc(collection(db, 'activity_logs'));
-        batch.set(logRef, {
-          garageId: referrerData.id,
-          garageName: referrerData.name,
-          staffId: null,
-          staffName: 'النظام (مكافأة ترشيح تلقائية)',
-          actionType: 'recharge',
-          plateNumber: `مكافأة ترشيح جراج (${garageData.name}) - إضافة 15 يوم اشتراك مجاناً (سعة 40 سيارة)`,
-          timestamp: serverTimestamp(),
-          amount: 0
-        });
-
-        await batch.commit();
-      });
-    } catch (error) {
-      console.error('Error in processReferralRewardForRecharge:', error);
-    }
+  processReferralRewardForRecharge: async (_garageId: string) => {
+    // Deprecated in v149: Referral rewards are now processed atomically inside approveRechargeRequest
+    return Promise.resolve();
   },
 
   deleteGarage: async (
@@ -310,7 +279,6 @@ export const firestoreServiceV2 = {
           { countQuery: query(collection(db, 'topup_requests'), where('garageId', '==', id)), pageQuery: query(collection(db, 'topup_requests'), where('garageId', '==', id), limit(pageSize)) },
           { countQuery: query(collection(db, 'recharge_requests'), where('garageId', '==', id)), pageQuery: query(collection(db, 'recharge_requests'), where('garageId', '==', id), limit(pageSize)) },
           { countQuery: query(collection(db, 'announcements'), where('targetGarageId', '==', id)), pageQuery: query(collection(db, 'announcements'), where('targetGarageId', '==', id), limit(pageSize)) },
-          { countQuery: query(collection(db, 'general_managers'), where('garageIds', 'array-contains', id)), pageQuery: query(collection(db, 'general_managers'), where('garageIds', 'array-contains', id), limit(pageSize)) },
           { countQuery: query(collection(db, 'garages'), where('referredByGarageId', '==', id)), pageQuery: query(collection(db, 'garages'), where('referredByGarageId', '==', id), limit(pageSize)) }
         ];
 
@@ -389,7 +357,7 @@ export const firestoreServiceV2 = {
   },
 
   // Session Management
-  updateSession: async (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors' | 'general_managers', id: string, sessionId: string | null) => {
+  updateSession: async (collectionName: 'garages' | 'staff' | 'delegates' | 'supervisors', id: string, sessionId: string | null) => {
     try {
       await withRetry(() => updateDoc(doc(db, collectionName, id), { 
         currentSessionId: sessionId,
@@ -412,12 +380,71 @@ export const firestoreServiceV2 = {
     return firestoreServiceV2.updateSession('delegates', delegateId, sessionId);
   },
 
-  updateSupervisorSession: async (supervisorId: string, sessionId: string | null) => {
-    return firestoreServiceV2.updateSession('supervisors', supervisorId, sessionId);
+  claimOrRefreshDelegateSession: async (
+    delegateId: string,
+    sessionId: string,
+    serverTimeOffset = 0,
+    deviceInfo?: string
+  ) => {
+    const delegateRef = doc(db, 'delegates', delegateId);
+
+    return withRetry(() => runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(delegateRef);
+      if (!snapshot.exists()) throw new Error('DELEGATE_NOT_FOUND');
+
+      const data = snapshot.data();
+      const currentSessionId = data.currentSessionId;
+      const lastActive = data.lastActive;
+      const active = isSessionActive(lastActive, serverTimeOffset);
+
+      if (currentSessionId && currentSessionId !== sessionId && active) {
+        throw new Error('DELEGATE_SESSION_OCCUPIED');
+      }
+
+      const updates: any = {
+        currentSessionId: sessionId,
+        lastActive: serverTimestamp(),
+      };
+      if (deviceInfo) {
+        updates.deviceInfo = deviceInfo;
+      }
+
+      transaction.update(delegateRef, updates);
+
+      return { ...data, id: snapshot.id, currentSessionId: sessionId };
+    }));
   },
 
-  updateGeneralManagerSession: async (generalManagerId: string, sessionId: string | null) => {
-    return firestoreServiceV2.updateSession('general_managers', generalManagerId, sessionId);
+  claimDelegateSession: async (
+    delegateId: string,
+    sessionId: string,
+    serverTimeOffset = 0,
+    deviceInfo?: string
+  ) => {
+    return firestoreServiceV2.claimOrRefreshDelegateSession(delegateId, sessionId, serverTimeOffset, deviceInfo);
+  },
+
+  releaseDelegateSession: async (
+    delegateId: string,
+    sessionId: string
+  ) => {
+    const delegateRef = doc(db, 'delegates', delegateId);
+
+    return withRetry(() => runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(delegateRef);
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.data();
+      if (data.currentSessionId === sessionId) {
+        transaction.update(delegateRef, {
+          currentSessionId: null,
+        });
+      }
+    }));
+  },
+
+  updateSupervisorSession: async (supervisorId: string, sessionId: string | null) => {
+    return firestoreServiceV2.updateSession('supervisors', supervisorId, sessionId);
   },
 
   // Logs
@@ -563,46 +590,39 @@ export const firestoreServiceV2 = {
     });
   },
 
+  authenticateUserCredentials: async (credentials: { input?: string; phone?: string; pin?: string }): Promise<{
+    success: boolean;
+    role?: 'admin' | 'supervisor' | 'delegate' | 'staff' | 'garage';
+    accountId?: string;
+    account?: any;
+    error?: string;
+  }> => {
+    try {
+      const callable = httpsCallable<{ input?: string; phone?: string; pin?: string }, any>(functions, 'authenticateUser');
+      const res = await callable(credentials);
+      if (res && res.data && typeof res.data.success === 'boolean') {
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('Cloud Function auth fallback:', err);
+    }
+    return await localAuthenticateFallback(credentials);
+  },
+
   isPinTaken: async (pin: string, excludeId?: string): Promise<{ taken: boolean; role?: string; name?: string }> => {
-    const normalizedPin = pin.trim();
+    const normalizedPin = pin.trim().replace(/\D/g, '');
     if (!normalizedPin) return { taken: false };
 
     try {
-      const settingsSnap = await getDoc(doc(db, 'admin_settings', 'auth_pin'));
-      const activeAdminPin = settingsSnap.exists() ? settingsSnap.data()?.pin : ADMIN_PIN;
-      if (normalizedPin === activeAdminPin) {
-        return { taken: true, role: 'مسؤول النظام (الآدمن الرئيسي)', name: 'الآدمن' };
+      const callable = httpsCallable<{ pin: string; excludeId?: string }, any>(functions, 'checkPinAvailability');
+      const res = await callable({ pin: normalizedPin, excludeId });
+      if (res && res.data && typeof res.data.taken === 'boolean') {
+        return res.data;
       }
     } catch (err) {
-      console.warn("Failed to check admin pin during uniqueness verification:", err);
+      console.warn("Cloud function checkPinAvailability fallback:", err);
     }
-
-    const collectionsToCheck = [
-      { name: 'general_managers', label: 'مدير عام / مالك نظام' },
-      { name: 'supervisors', label: 'مشرف نظام' },
-      { name: 'delegates', label: 'مندوب شحن' },
-      { name: 'staff', label: 'موظف جراج' },
-      { name: 'garages', label: 'صاحب جراج' }
-    ];
-
-    for (const coll of collectionsToCheck) {
-      const q = query(collection(db, coll.name), where('pin', '==', normalizedPin), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const docFound = snap.docs[0];
-        if (excludeId && docFound.id === excludeId) {
-          continue;
-        }
-        const docData = docFound.data();
-        return { 
-          taken: true, 
-          role: coll.label, 
-          name: docData.name || docData.ownerName || docData.garageName || 'مستخدم آخر'
-        };
-      }
-    }
-
-    return { taken: false };
+    return await localCheckPinAvailabilityFallback(normalizedPin, excludeId);
   },
 
   // Vehicles
@@ -1046,60 +1066,6 @@ export const firestoreServiceV2 = {
     }
   },
 
-  // General Managers
-  addGeneralManager: async (data: Omit<GeneralManager, 'id'>) => {
-    try {
-      return await withRetry(() => addDoc(collection(db, 'general_managers'), {
-        ...data,
-        createdAt: serverTimestamp()
-      }));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'general_managers');
-      throw error;
-    }
-  },
-
-  removeGeneralManager: async (id: string) => {
-    try {
-      return await withRetry(() => deleteDoc(doc(db, 'general_managers', id)));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `general_managers/${id}`);
-      throw error;
-    }
-  },
-
-  updateGeneralManager: async (id: string, data: Partial<GeneralManager>) => {
-    try {
-      return await withRetry(() => updateDoc(doc(db, 'general_managers', id), data));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `general_managers/${id}`);
-      throw error;
-    }
-  },
-
-  subscribeToGeneralManagers: (callback: (generalManagers: GeneralManager[]) => void) => {
-    const q = query(collection(db, 'general_managers'), orderBy('createdAt', 'desc'));
-    let cachedData: GeneralManager[] = [];
-    return onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        const id = change.doc.id;
-        const data = { id, ...change.doc.data() } as GeneralManager;
-        if (change.type === 'added') {
-          const idx = cachedData.findIndex(d => d.id === id);
-          if (idx !== -1) cachedData[idx] = data;
-          else cachedData.push(data);
-        } else if (change.type === 'modified') {
-          const idx = cachedData.findIndex(d => d.id === id);
-          if (idx !== -1) cachedData[idx] = data;
-          else cachedData.push(data);
-        } else if (change.type === 'removed') {
-          cachedData = cachedData.filter(d => d.id !== id);
-        }
-      });
-      callback([...cachedData]);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'general_managers'));
-  },
-
   // Delegates
   addDelegate: async (data: Omit<Delegate, 'id'>) => {
     try {
@@ -1184,6 +1150,26 @@ export const firestoreServiceV2 = {
       return logs.slice(0, 50);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'activity_logs');
+      throw error;
+    }
+  },
+
+  getDelegateRechargeRequests: async (delegateId: string): Promise<RechargeRequest[]> => {
+    try {
+      const q = query(
+        collection(db, 'recharge_requests'),
+        where('delegateId', '==', delegateId)
+      );
+      const snapshot = await getDocs(q);
+      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RechargeRequest));
+      requests.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt ? new Date(a.createdAt).getTime() : 0));
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt ? new Date(b.createdAt).getTime() : 0));
+        return timeB - timeA;
+      });
+      return requests;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'recharge_requests');
       throw error;
     }
   },
@@ -1440,6 +1426,82 @@ export const firestoreServiceV2 = {
         const garageRef = doc(db, 'garages', request.garageId);
         const garageSnap = await transaction.get(garageRef);
         const garageData = garageSnap.data() || {};
+
+        // Pre-read referral reward documents BEFORE any writes in transaction
+        const referrerGarageId = garageData.referredByGarageId;
+        let referrerRef: any = null;
+        let referrerSnap: any = null;
+        let rewardRef: any = null;
+        let rewardSnap: any = null;
+
+        const isEligibleForReferral = 
+          Boolean(referrerGarageId) && 
+          referrerGarageId !== request.garageId &&
+          (typeof request.revenueAmount === 'number' ? request.revenueAmount >= 0 : true);
+
+        if (isEligibleForReferral && referrerGarageId) {
+          referrerRef = doc(db, 'garages', referrerGarageId);
+          referrerSnap = await transaction.get(referrerRef);
+
+          rewardRef = doc(db, 'referral_rewards', request.id);
+          rewardSnap = await transaction.get(rewardRef);
+        }
+
+        if (!request.packageId || request.packageId === 'custom') {
+          throw new Error('لا يمكن اعتماد طلبات غير محددة الباقة من مسار الاعتماد الموحد');
+        }
+        
+        const packageRef = doc(db, 'packages', request.packageId);
+        const packageSnap = await transaction.get(packageRef);
+        
+        if (!packageSnap.exists()) {
+          throw new Error('الباقة المحددة في الطلب لم تعد متوفرة بالنظام');
+        }
+        const packageData = packageSnap.data();
+
+        // Pre-read system_config/global for referralFeePerRenewal and flat fee
+        const settingsRef = doc(db, 'system_config', 'global');
+        const settingsSnap = await transaction.get(settingsRef);
+        const systemConfig = settingsSnap.exists() ? settingsSnap.data() : null;
+        
+        const referralFeePerRenewal = systemConfig?.referralFeePerRenewal !== undefined
+          ? Math.max(0, Number(systemConfig.referralFeePerRenewal))
+          : 30;
+        const subscriberFlatFee = systemConfig?.subscriberFlatFee !== undefined
+          ? Math.max(0, Number(systemConfig.subscriberFlatFee))
+          : 500;
+
+        const delegateReferrerId = garageData.referrerId || garageData.createdByDelegateId || null;
+        const referredByDelegate = Boolean(delegateReferrerId);
+        const commission = referredByDelegate ? referralFeePerRenewal : 0;
+        
+        let finalRevenue = Number(packageData.price || 0);
+        if (referredByDelegate) {
+          finalRevenue += referralFeePerRenewal;
+        }
+        const effectiveOriginalRevenue = finalRevenue;
+
+        // Apply existing discount policy using requestData's known discount amount
+        if (request.discountAmount && request.discountAmount > 0) {
+          finalRevenue = Math.max(0, finalRevenue - request.discountAmount);
+        }
+
+        // Apply existing monthly subscriber flat fee
+        finalRevenue = applyMonthlySubscribersFlatFee(
+          finalRevenue,
+          garageData.hasMonthlySubscribers === true,
+          subscriberFlatFee
+        );
+        const effectiveRevenue = finalRevenue;
+
+        // Pre-read delegate document if delegateReferrerId or request.delegateId exists
+        const targetDelegateId = delegateReferrerId || request.delegateId || null;
+        let delegateRef: any = null;
+        let delegateSnap: any = null;
+        if (targetDelegateId) {
+          delegateRef = doc(db, 'delegates', targetDelegateId);
+          delegateSnap = await transaction.get(delegateRef);
+        }
         
         let baseDate = new Date();
         const currentExpiry = garageData.balanceExpiry;
@@ -1449,12 +1511,13 @@ export const firestoreServiceV2 = {
         }
         
         let days = 30;
-        const pkgDays = packageIdToDays(request.packageId, request.packageName);
-        days = Math.min(pkgDays, 365);
         if (request.durationDays && typeof request.durationDays === 'number' && request.durationDays > 0 && request.durationDays <= 365) {
           days = request.durationDays;
         } else if (request.carsCount && typeof request.carsCount === 'number' && request.carsCount > 0 && request.carsCount <= 365) {
           days = request.carsCount;
+        } else if (request.packageId || request.packageName) {
+          const pkgDays = packageIdToDays(request.packageId, request.packageName);
+          if (pkgDays > 0) days = Math.min(pkgDays, 365);
         }
         baseDate.setDate(baseDate.getDate() + days);
         
@@ -1473,13 +1536,14 @@ export const firestoreServiceV2 = {
           const match = pkgName.match(/(\d+)\s*سيارة/);
           if (match && match[1]) {
             effCapacity = parseInt(match[1], 10);
-          } else if (request.carsCount && request.carsCount > 0 && request.carsCount <= 1000 && ![7, 15, 30].includes(request.carsCount)) {
+          } else if (request.carsCount && request.carsCount > 0 && request.carsCount <= 1000 && ![7, 15, 30, 365].includes(request.carsCount)) {
             effCapacity = request.carsCount;
           } else {
             effCapacity = 40;
           }
         }
 
+        // 1. Update recharged garage
         transaction.update(garageRef, {
           balanceExpiry: Timestamp.fromDate(baseDate),
           dailyCapacity: effCapacity,
@@ -1488,51 +1552,119 @@ export const firestoreServiceV2 = {
           billingModel: 'subscription',
           isLocked: false,
           isTrial: false,
-          totalAdminRevenue: increment(request.revenueAmount),
+          totalAdminRevenue: increment(effectiveRevenue),
           lastRechargeDate: serverTimestamp()
         });
         
+        // 2. Update recharge request status
         transaction.update(requestRef, {
           status: 'approved',
+          commission: commission,
+          referrerId: delegateReferrerId,
+          amount: effectiveRevenue,
+          revenueAmount: effectiveRevenue,
+          originalRevenueAmount: effectiveOriginalRevenue,
           resolvedAt: serverTimestamp()
         });
         
-        if (request.delegateId) {
-          const delegateRef = doc(db, 'delegates', request.delegateId);
-          transaction.update(delegateRef, {
-            totalRechargedAmount: increment(request.revenueAmount)
-          });
+        // 3. Update delegate if present
+        if (delegateRef && delegateSnap && delegateSnap.exists()) {
+          const delegateUpdates: any = {
+            totalRechargedAmount: increment(effectiveRevenue)
+          };
+          if (commission > 0) {
+            delegateUpdates.totalCommissionEarned = increment(commission);
+          }
+          transaction.update(delegateRef, delegateUpdates);
         }
 
+        // 4. Activity log for recharge
         const logRef = doc(collection(db, 'activity_logs'));
         transaction.set(logRef, {
           garageId: request.garageId,
-          garageName: request.garageName,
-          staffId: request.delegateId,
-          staffName: request.delegateName,
+          garageName: request.garageName || garageData.name || '',
+          staffId: delegateReferrerId || request.delegateId || null,
+          staffName: request.delegateName || null,
           actionType: 'recharge',
-          plateNumber: `شحن ${request.packageName} (${request.durationDays || 30} يوم - ${request.dailyCapacity || request.carsCount || 0} سيارة) - الأصلي ${request.originalRevenueAmount !== undefined ? request.originalRevenueAmount : request.revenueAmount} ج${request.discountAmount ? ` | بعد الخصم ${request.revenueAmount} ج` : ''}`,
+          plateNumber: `شحن ${request.packageName || 'الباقة'} (${days} يوم - ${effCapacity === 0 ? 'مفتوح' : `${effCapacity} سيارة`}) - الأصلي ${effectiveOriginalRevenue} ج${request.discountAmount ? ` | بعد الخصم ${effectiveRevenue} ج` : ''}`,
           timestamp: serverTimestamp(),
-          amount: request.revenueAmount,
-          packageId: request.packageId,
+          amount: effectiveRevenue,
+          packageId: request.packageId || null,
           details: {
             packageName: request.packageName,
-            durationDays: request.durationDays || 30,
-            carsCount: request.dailyCapacity || request.carsCount || 0,
-            revenueAmount: request.revenueAmount,
-            originalRevenueAmount: request.originalRevenueAmount,
-            discountAmount: request.discountAmount,
-            couponCode: request.couponCode,
-            requestId: request.id
+            durationDays: days,
+            carsCount: effCapacity,
+            revenueAmount: effectiveRevenue,
+            originalRevenueAmount: effectiveOriginalRevenue,
+            discountAmount: request.discountAmount || 0,
+            couponCode: request.couponCode || null,
+            requestId: request.id,
+            commission: commission,
+            referrerId: delegateReferrerId
           }
         });
+
+        // 5. Award 2 days referral reward to referrer inside the same transaction
+        if (referrerSnap && referrerSnap.exists() && rewardRef && rewardSnap && !rewardSnap.exists()) {
+          const referrerData = referrerSnap.data() || {};
+          const REFERRAL_REWARD_DAYS = 2;
+
+          let rewardBaseDate = new Date();
+          const referrerExpiry = referrerData.balanceExpiry;
+          if (referrerExpiry) {
+            const expDate = referrerExpiry.toDate ? referrerExpiry.toDate() : new Date(referrerExpiry);
+            if (expDate > rewardBaseDate) {
+              rewardBaseDate = expDate;
+            }
+          }
+          rewardBaseDate.setDate(rewardBaseDate.getDate() + REFERRAL_REWARD_DAYS);
+
+          transaction.update(referrerRef, {
+            balanceExpiry: Timestamp.fromDate(rewardBaseDate),
+            isLocked: false,
+            totalReferralRewardDays: increment(REFERRAL_REWARD_DAYS),
+            totalGaragesReferredCount: increment(1),
+            lastReferralRewardAt: serverTimestamp()
+          });
+
+          transaction.set(rewardRef, {
+            requestId: request.id,
+            referrerGarageId: referrerGarageId,
+            referrerGarageName: referrerData.name || '',
+            referredGarageId: request.garageId,
+            referredGarageName: request.garageName || garageData.name || '',
+            rewardDays: REFERRAL_REWARD_DAYS,
+            rewardPackageName: referrerData.activePackageName || referrerData.packageName || '',
+            rewardDailyCapacity: referrerData.dailyCapacity ?? 0,
+            triggeredByPackageName: request.packageName || '',
+            triggeredByPackageId: request.packageId || '',
+            createdAt: serverTimestamp(),
+            status: 'awarded'
+          });
+
+          const rewardLogRef = doc(collection(db, 'activity_logs'));
+          transaction.set(rewardLogRef, {
+            garageId: referrerData.id || referrerGarageId,
+            garageName: referrerData.name || '',
+            staffId: null,
+            staffName: 'النظام — مكافأة إحالة تلقائية',
+            actionType: 'recharge',
+            plateNumber: `مكافأة إحالة من ${garageData.name || request.garageName || ''} — يومان مجانيان`,
+            timestamp: serverTimestamp(),
+            amount: 0,
+            packageId: referrerData.packageId || referrerData.activePackageId || null,
+            details: {
+              type: 'referral_reward',
+              requestId: request.id,
+              referrerGarageId: referrerGarageId,
+              referredGarageId: request.garageId,
+              rewardDays: REFERRAL_REWARD_DAYS,
+              rewardPackageName: referrerData.activePackageName || referrerData.packageName || '',
+              rewardDailyCapacity: referrerData.dailyCapacity ?? 0
+            }
+          });
+        }
       });
-      
-      try {
-        await firestoreServiceV2.processReferralRewardForRecharge(request.garageId);
-      } catch (err) {
-        console.error('Failed processing referral reward after recharge approval:', err);
-      }
 
       return { success: true };
     } catch (err: any) {
@@ -1745,6 +1877,7 @@ export const firestoreServiceV2 = {
           walletNumber: '01000000000',
           monthlySubscribersFlatFee: 500,
           monthlySubscribersSurchargePercent: 25,
+          referralFeePerRenewal: 30,
           isMaintenanceMode: false,
           maintenanceMessage: ''
         };
@@ -1771,6 +1904,7 @@ export const firestoreServiceV2 = {
         walletNumber: '01000000000',
         monthlySubscribersFlatFee: 500,
         monthlySubscribersSurchargePercent: 25,
+        referralFeePerRenewal: 30,
         isMaintenanceMode: false,
         maintenanceMessage: ''
       };
@@ -1792,3 +1926,156 @@ export const firestoreServiceV2 = {
     }
   }
 };
+
+async function localAuthenticateFallback(credentials: { input?: string; phone?: string; pin?: string }) {
+  const pin = credentials.pin || credentials.input || '';
+  const phone = credentials.phone || credentials.input || '';
+  const normalizedPin = pin.replace(/\D/g, '');
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  if (!normalizedPin && !normalizedPhone) {
+    return { success: false, error: 'بيانات الدخول غير صحيحة' };
+  }
+
+  // 1. Check Admin PIN
+  if (normalizedPin) {
+    let activeAdminPin = ADMIN_PIN;
+    try {
+      const settingsSnap = await getDoc(doc(db, 'admin_settings', 'auth_pin'));
+      if (settingsSnap.exists() && settingsSnap.data()?.pin) {
+        activeAdminPin = String(settingsSnap.data()?.pin);
+      }
+    } catch (e) {}
+
+    if (normalizedPin === activeAdminPin) {
+      return { success: true, role: 'admin' as const };
+    }
+  }
+
+  // 2. Check Supervisors
+  if (normalizedPin) {
+    try {
+      const snap = await getDocs(query(collection(db, 'supervisors'), limit(50)));
+      for (const dDoc of snap.docs) {
+        const d = dDoc.data();
+        let p = d.pin;
+        try {
+          const pDoc = await getDoc(doc(db, 'private_pins', dDoc.id));
+          if (pDoc.exists() && pDoc.data()?.pin) p = pDoc.data()?.pin;
+        } catch (e) {}
+        if (p === normalizedPin) {
+          const { pin: _, ...cleanData } = d;
+          return { success: true, role: 'supervisor' as const, accountId: dDoc.id, account: { id: dDoc.id, ...cleanData } };
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 4. Check Delegates
+  try {
+    const snap = await getDocs(query(collection(db, 'delegates'), limit(50)));
+    for (const dDoc of snap.docs) {
+      const d = dDoc.data();
+      let p = d.pin;
+      try {
+        const pDoc = await getDoc(doc(db, 'private_pins', dDoc.id));
+        if (pDoc.exists() && pDoc.data()?.pin) p = pDoc.data()?.pin;
+      } catch (e) {}
+      const docPhone = d.phone ? String(d.phone).replace(/\D/g, '') : '';
+      const pinMatch = normalizedPin && p === normalizedPin;
+      const phoneMatch = normalizedPhone && docPhone === normalizedPhone;
+
+      if (pinMatch || (phoneMatch && p === normalizedPin)) {
+        const { pin: _, ...cleanData } = d;
+        return { success: true, role: 'delegate' as const, accountId: dDoc.id, account: { id: dDoc.id, ...cleanData } };
+      }
+    }
+  } catch (e) {}
+
+  // 5. Check Staff
+  if (normalizedPin) {
+    try {
+      const snap = await getDocs(query(collection(db, 'staff'), limit(50)));
+      for (const dDoc of snap.docs) {
+        const d = dDoc.data();
+        let p = d.pin;
+        try {
+          const pDoc = await getDoc(doc(db, 'private_pins', dDoc.id));
+          if (pDoc.exists() && pDoc.data()?.pin) p = pDoc.data()?.pin;
+        } catch (e) {}
+        if (p === normalizedPin) {
+          const { pin: _, ...cleanData } = d;
+          return { success: true, role: 'staff' as const, accountId: dDoc.id, account: { id: dDoc.id, ...cleanData } };
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 6. Check Garages
+  try {
+    const snap = await getDocs(query(collection(db, 'garages'), limit(50)));
+    for (const dDoc of snap.docs) {
+      const d = dDoc.data();
+      let p = d.pin;
+      try {
+        const pDoc = await getDoc(doc(db, 'private_pins', dDoc.id));
+        if (pDoc.exists() && pDoc.data()?.pin) p = pDoc.data()?.pin;
+      } catch (e) {}
+      const docPhone = d.phone ? String(d.phone).replace(/\D/g, '') : '';
+      const pinMatch = normalizedPin && p === normalizedPin;
+      const phoneMatch = normalizedPhone && docPhone === normalizedPhone;
+
+      if (pinMatch || phoneMatch) {
+        const { pin: _, ...cleanData } = d;
+        return { success: true, role: 'garage' as const, accountId: dDoc.id, account: { id: dDoc.id, ...cleanData } };
+      }
+    }
+  } catch (e) {}
+
+  return { success: false, error: 'بيانات الدخول غير صحيحة' };
+}
+
+async function localCheckPinAvailabilityFallback(normalizedPin: string, excludeId?: string) {
+  let activeAdminPin = ADMIN_PIN;
+  try {
+    const settingsSnap = await getDoc(doc(db, 'admin_settings', 'auth_pin'));
+    if (settingsSnap.exists() && settingsSnap.data()?.pin) {
+      activeAdminPin = String(settingsSnap.data()?.pin);
+    }
+  } catch (err) {}
+
+  if (normalizedPin === activeAdminPin) {
+    return { taken: true, role: 'مسؤول النظام (الآدمن الرئيسي)', name: 'الآدمن' };
+  }
+
+  const collectionsToCheck = [
+    { name: 'supervisors', label: 'مشرف نظام' },
+    { name: 'delegates', label: 'مندوب شحن' },
+    { name: 'staff', label: 'موظف جراج' },
+    { name: 'garages', label: 'صاحب جراج' }
+  ];
+
+  for (const coll of collectionsToCheck) {
+    try {
+      const snap = await getDocs(query(collection(db, coll.name), limit(50)));
+      for (const dDoc of snap.docs) {
+        if (excludeId && dDoc.id === excludeId) continue;
+        const docData = dDoc.data();
+        let p = docData.pin;
+        try {
+          const pDoc = await getDoc(doc(db, 'private_pins', dDoc.id));
+          if (pDoc.exists() && pDoc.data()?.pin) p = pDoc.data()?.pin;
+        } catch (e) {}
+        if (p === normalizedPin) {
+          return {
+            taken: true,
+            role: coll.label,
+            name: docData.name || docData.ownerName || docData.garageName || 'مستخدم آخر'
+          };
+        }
+      }
+    } catch (e) {}
+  }
+
+  return { taken: false };
+}

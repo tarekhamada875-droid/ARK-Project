@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Garage, Delegate, Package, RechargeRequest, Supervisor, GeneralManager } from '../types';
+import { Garage, Delegate, Package, RechargeRequest, Supervisor } from '../types';
 
 export interface ToastItem {
   id: string;
@@ -40,14 +40,12 @@ interface AppState {
   setIsAuthenticated: (auth: boolean) => void;
   view: string;
   setView: (view: string) => void;
-  role: 'admin' | 'delegate' | 'garage' | 'general_manager' | null;
+  role: 'admin' | 'delegate' | 'garage' | null;
   setRole: (role: any) => void;
   rechargeRequests: RechargeRequest[];
   setRechargeRequests: (requests: RechargeRequest[]) => void;
   supervisors: Supervisor[];
   setSupervisors: (supervisors: Supervisor[]) => void;
-  generalManagers: GeneralManager[];
-  setGeneralManagers: (managers: GeneralManager[]) => void;
 
   // Selected Items
   selectedGarageForDetails: Garage | null;
@@ -101,8 +99,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setRechargeRequests: (rechargeRequests) => set({ rechargeRequests }),
   supervisors: [],
   setSupervisors: (supervisors) => set({ supervisors }),
-  generalManagers: [],
-  setGeneralManagers: (generalManagers) => set({ generalManagers }),
   selectedGarageForDetails: null,
   setSelectedGarageForDetails: (selectedGarageForDetails) => set({ selectedGarageForDetails }),
   selectedDelegateForDetails: null,

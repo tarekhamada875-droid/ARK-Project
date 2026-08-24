@@ -33,7 +33,6 @@ import { firestoreServiceV2 as firestoreService } from './services/domain/firest
 
 // Lazy Loaded Dashboard Views
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const GeneralManagerDashboard = lazy(() => import('./components/general_manager/GeneralManagerDashboard').then(m => ({ default: m.GeneralManagerDashboard })));
 const DelegateDashboardView = lazy(() => import('./components/delegate/DelegateDashboardView').then(m => ({ default: m.DelegateDashboardView })));
 const AdminGarageDetailsView = lazy(() => import('./components/admin/AdminGarageDetailsView').then(m => ({ default: m.AdminGarageDetailsView })));
 const AdminDelegateDetailsView = lazy(() => import('./components/admin/AdminDelegateDetailsView').then(m => ({ default: m.AdminDelegateDetailsView })));
@@ -87,8 +86,6 @@ export default function App() {
     setShowSubscribers,
     currentSupervisor,
     supervisors,
-    currentGeneralManager,
-    generalManagers,
     isInputFocused,
     setIsInputFocused,
     staffList,
@@ -144,15 +141,13 @@ export default function App() {
         setView('login');
       } else if (view === 'delegate_dashboard' && !delegate) {
         setView('login');
-      } else if (view === 'general_manager_dashboard' && !currentGeneralManager) {
-        setView('login');
       } else if (view === 'admin_garage_details' && !selectedGarageForDetails) {
         setView('admin_dashboard');
       } else if (view === 'admin_delegate_details' && !selectedDelegateForDetails) {
         setView('admin_dashboard');
       }
     }
-  }, [view, garage, delegate, currentGeneralManager, selectedGarageForDetails, selectedDelegateForDetails, isLoading, isAuthReady, setView]);
+  }, [view, garage, delegate, selectedGarageForDetails, selectedDelegateForDetails, isLoading, isAuthReady, setView]);
 
   // Call useBackTrapping hook to handle browser navigation / Android popstate
   useBackTrapping({
@@ -229,23 +224,11 @@ export default function App() {
             rechargeRequests={rechargeRequests}
             currentSupervisor={currentSupervisor}
             supervisors={supervisors}
-            generalManagers={generalManagers}
             currentAdminPin={activeAdminPin}
             currentWalletNumber={walletNumber}
             onUpdateWalletNumber={firestoreService.updateWalletNumber}
             subscriptionPrices={subscriptionPrices}
-          />
-        </ErrorBoundary>
-      );
-    }
-
-    if (view === 'general_manager_dashboard' && currentGeneralManager) {
-      return (
-        <ErrorBoundary>
-          <GeneralManagerDashboard 
-            currentGeneralManager={currentGeneralManager}
-            allGarages={allGarages}
-            onLogout={handleInitiateLogout}
+            showToast={showToast}
           />
         </ErrorBoundary>
       );
@@ -363,6 +346,7 @@ export default function App() {
           walletNumber={walletNumber}
           subscriptionPrices={subscriptionPrices}
           hasMonthlySubscribers={garage.hasMonthlySubscribers}
+          referrerId={garage.referrerId || garage.createdByDelegateId || null}
         />
       );
     }

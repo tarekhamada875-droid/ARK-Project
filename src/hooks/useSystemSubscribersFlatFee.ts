@@ -16,3 +16,21 @@ export function useSystemSubscribersFlatFee(): number {
 
   return fee;
 }
+
+/** Subscribes to system_config/global.referralFeePerRenewal (default 30). */
+export function useSystemReferralFee(): number {
+  const [fee, setFee] = useState<number>(30);
+
+  useEffect(() => {
+    const unsub = firestoreService.subscribeToSystemConfig((config) => {
+      if (config?.referralFeePerRenewal !== undefined) {
+        const val = Number(config.referralFeePerRenewal);
+        setFee(isNaN(val) || val < 0 ? 30 : Math.floor(val));
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  return fee;
+}
+

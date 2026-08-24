@@ -4,6 +4,7 @@ import {
   initializeFirestore, 
   enableIndexedDbPersistence
 } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
@@ -12,6 +13,8 @@ const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
 }, firebaseConfig.firestoreDatabaseId);
+
+export const functions = getFunctions(app);
 
 enableIndexedDbPersistence(db)
   .catch((err) => {

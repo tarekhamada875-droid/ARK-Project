@@ -117,24 +117,6 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl p-6 sm:p-8 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm shrink-0">
-            <Megaphone className="w-8 h-8 text-white" />
-          </div>
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black">{t('الإعلانات والتنبيهات العامة')}</h2>
-            <p className="text-xs sm:text-sm text-emerald-100 font-bold mt-1">
-              {t('بث رسائل وتنبيهات تظهر داخل لوحات تحكم الجراجات')}
-            </p>
-          </div>
-        </div>
-        <div className="bg-white/15 px-4 py-2 rounded-xl text-xs font-black font-mono">
-          {announcements.filter(a => a.isActive).length} {t('إعلان نشط')}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Create Announcement Form */}
         <section className="lg:col-span-1">

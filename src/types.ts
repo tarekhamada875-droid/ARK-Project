@@ -65,7 +65,8 @@ export interface Garage {
   referralBonusBalance?: number; // Cash bonus balance in EGP (fallback/manual)
   referredByGarageId?: string | null; // ID of referring garage
   referredByGarageName?: string | null; // Name of referring garage
-  referralRewardClaimed?: boolean; // true when the 15-day reward has been given on first recharge
+  referrerId?: string | null; // ID of referring delegate
+  referralRewardClaimed?: boolean; // Legacy field for initial 15-day reward (v149: now 2 days per-renewal)
   referralRewardAwardedAt?: any; // Timestamp
   totalReferralRewardDays?: number; // Total free subscription days earned via referrals
   totalGaragesReferredCount?: number; // Total count of garages referred
@@ -98,12 +99,15 @@ export interface Delegate {
   phone: string;
   pin: string;
   role: 'delegate';
+  isActive?: boolean;
+  garageCount?: number;
   currentSessionId?: string | null;
   lastActive?: any; // Timestamp
   createdAt: any;
   canCreateGarage?: boolean;
   commissionRate?: number;
   totalRechargedAmount?: number;
+  totalCommissionEarned?: number;
   lastSettledAt?: any; // Timestamp
 }
 
@@ -113,18 +117,6 @@ export interface Supervisor {
   phone: string;
   pin: string;
   role: 'supervisor';
-  currentSessionId?: string | null;
-  lastActive?: any; // Timestamp
-  createdAt: any;
-}
-
-export interface GeneralManager {
-  id: string;
-  name: string;
-  phone: string;
-  pin: string;
-  garageIds: string[];
-  role: 'general_manager';
   currentSessionId?: string | null;
   lastActive?: any; // Timestamp
   createdAt: any;
@@ -152,6 +144,8 @@ export interface ActivityLog {
     discountAmount?: number;
     couponCode?: string;
     requestId?: string;
+    commission?: number;
+    referrerId?: string;
   };
 }
 
@@ -199,6 +193,8 @@ export interface RechargeRequest {
   originalRevenueAmount?: number;
   couponCode?: string;
   discountAmount?: number;
+  commission?: number;
+  referrerId?: string | null;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
   resolvedAt?: any;
@@ -225,9 +221,26 @@ export interface SystemConfig {
   walletNumber?: string;
   monthlySubscribersSurchargePercent: number;
   monthlySubscribersFlatFee: number; // e.g. 500
+  referralFeePerRenewal?: number; // e.g. 30
   isMaintenanceMode?: boolean;
   maintenanceMessage?: string;
   updatedAt?: any;
+}
+
+export interface ReferralReward {
+  id?: string;
+  requestId: string;
+  referrerGarageId: string;
+  referrerGarageName: string;
+  referredGarageId: string;
+  referredGarageName: string;
+  rewardDays: number;
+  rewardPackageName?: string;
+  rewardDailyCapacity?: number;
+  triggeredByPackageName?: string;
+  triggeredByPackageId?: string;
+  createdAt: any;
+  status: 'awarded';
 }
 
 // Domain V2 Types

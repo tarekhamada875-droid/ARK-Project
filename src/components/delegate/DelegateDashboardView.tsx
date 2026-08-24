@@ -13,20 +13,21 @@ import {
   MoreVertical,
   RefreshCw,
   BarChart3,
-  Coins,
-  TrendingUp,
-  XCircle,
-  AlertCircle,
   Calendar,
-  Sparkles,
-  Car,
-  Filter
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
 import { generateSafePin, safeDate, getRemainingDays, calculateFinalPrice } from '../../utils';
-import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
+import { 
+  calculateApprovedCommission, 
+  calculateApprovedRechargeTotal, 
+  getAvailableRequestMonths 
+} from '../../utils/delegateCommissionCalculations';
+import { useSystemSubscribersFlatFee, useSystemReferralFee } from '../../hooks/useSystemSubscribersFlatFee';
+import { useSystemConfig } from '../../hooks/useSystemConfig';
 import { FitText } from '../ui/FitText';
 
 interface DelegateDashboardViewProps {
@@ -62,6 +63,9 @@ export const DelegateDashboardView = memo(({
   subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
 }: DelegateDashboardViewProps) => {
   const subscriberFlatFee = useSystemSubscribersFlatFee();
+  const systemReferralFee = useSystemReferralFee();
+  const config = useSystemConfig();
+  const warningDaysThreshold = typeof config?.warningDaysThreshold === 'number' ? config.warningDaysThreshold : 3;
   const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
   const [activeTab, setActiveTab] = useState<'garages' | 'performance'>('garages');
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,6 +78,7 @@ export const DelegateDashboardView = memo(({
   const [newGaragePin, setNewGaragePin] = useState('');
   const [pinGenerationsRemaining, setPinGenerationsRemaining] = useState(3);
   const [showMenu, setShowMenu] = useState(false);
+  const [showAllOperations, setShowAllOperations] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -106,9 +111,7 @@ export const DelegateDashboardView = memo(({
   const handleRechargeSubmit = async (customAmount?: number, pkg?: Package, discountInfo?: { discountAmount?: number }) => {
     if (!selectedGarage) return;
     
-    // Determine amount and package
     let amount = customAmount || 0;
-    
     if (isNaN(amount) || (amount <= 0 && !pkg)) return;
 
     setIsProcessing(true);
@@ -143,59 +146,41 @@ export const DelegateDashboardView = memo(({
     return d.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
   };
 
-  const approvedRequests = React.useMemo(() => {
-    return delegateRequests.filter(r => r.status === 'approved');
-  }, [delegateRequests]);
-
   const availablePerformanceMonths = React.useMemo(() => {
-    const monthsSet = new Set<string>();
-    monthsSet.add(currentMonthKey);
-    approvedRequests.forEach(req => {
-      const d = safeDate(req.createdAt || req.resolvedAt);
-      if (!isNaN(d.getTime())) {
-        monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-      }
-    });
-    return Array.from(monthsSet).sort().reverse();
-  }, [approvedRequests, currentMonthKey]);
+    return getAvailableRequestMonths(delegateRequests, currentMonthKey);
+  }, [delegateRequests, currentMonthKey]);
 
   const activePerfMonthKey = selectedPerformanceMonth === 'current' ? currentMonthKey : selectedPerformanceMonth;
 
   const currentMonthRechargedSum = React.useMemo(() => {
-    return approvedRequests.reduce((acc, req) => {
-      const d = safeDate(req.createdAt || req.resolvedAt);
-      if (isNaN(d.getTime())) return acc;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (key === currentMonthKey) {
-        return acc + (req.revenueAmount || req.amount || 0);
-      }
-      return acc;
-    }, 0);
-  }, [approvedRequests, currentMonthKey]);
+    return calculateApprovedRechargeTotal(delegateRequests, currentMonthKey);
+  }, [delegateRequests, currentMonthKey]);
 
   const activeMonthRechargedSum = React.useMemo(() => {
     if (activePerfMonthKey === 'all') {
-      const requestsSum = approvedRequests.reduce((acc, req) => acc + (req.revenueAmount || req.amount || 0), 0);
+      const requestsSum = calculateApprovedRechargeTotal(delegateRequests, 'all');
       return Math.max(requestsSum, delegate.totalRechargedAmount || 0);
     }
-    return approvedRequests.reduce((acc, req) => {
-      const d = safeDate(req.createdAt || req.resolvedAt);
-      if (isNaN(d.getTime())) return acc;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (key === activePerfMonthKey) {
-        return acc + (req.revenueAmount || req.amount || 0);
-      }
-      return acc;
-    }, 0);
-  }, [approvedRequests, activePerfMonthKey, delegate.totalRechargedAmount]);
-
-  const commissionRate = delegate.commissionRate || 0;
+    return calculateApprovedRechargeTotal(delegateRequests, activePerfMonthKey);
+  }, [delegateRequests, activePerfMonthKey, delegate.totalRechargedAmount]);
 
   const totalRechargedAmount = activePerfMonthKey === currentMonthKey 
     ? (currentMonthRechargedSum > 0 ? currentMonthRechargedSum : (delegate.totalRechargedAmount || 0))
     : activeMonthRechargedSum;
 
-  const commissionValue = (totalRechargedAmount * commissionRate) / 100;
+  const currentMonthCommissionValue = React.useMemo(() => {
+    return calculateApprovedCommission(delegateRequests, currentMonthKey);
+  }, [delegateRequests, currentMonthKey]);
+
+  const commissionValue = React.useMemo(() => {
+    if (activePerfMonthKey === 'all') {
+      const requestsCommission = calculateApprovedCommission(delegateRequests, 'all');
+      return requestsCommission > 0 ? requestsCommission : (delegate.totalCommissionEarned || 0);
+    }
+    return calculateApprovedCommission(delegateRequests, activePerfMonthKey);
+  }, [delegateRequests, activePerfMonthKey, delegate.totalCommissionEarned]);
+
+  const pendingRequestsCount = delegateRequests.filter(r => r.status === 'pending').length;
 
   const sortedRequests = React.useMemo(() => {
     return [...delegateRequests].sort((a, b) => {
@@ -223,86 +208,92 @@ export const DelegateDashboardView = memo(({
     });
   };
 
+  const handleOpenAddGarage = () => {
+    const initialPin = generateSafePin(allGarages.map(g => g.pin));
+    setNewGaragePin(initialPin);
+    setPinGenerationsRemaining(3);
+    setShowAddGarage(true);
+  };
+
+  const recentRequests = sortedRequests.slice(0, 3);
+  const displayedRequests = showAllOperations ? sortedRequests : recentRequests;
+
   return (
-    <div className={`h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors overflow-x-hidden ${showAddGarage || selectedGarage ? 'overflow-hidden' : 'overflow-y-auto'}`} dir="rtl">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 sticky top-0 z-40 transition-colors">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white overflow-hidden transform rotate-3">
-              <Users className="w-4 h-4 -rotate-3" />
+    <div className={`h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors overflow-x-hidden ${showAddGarage || selectedGarage ? 'overflow-hidden' : 'overflow-y-auto'}`} dir="rtl">
+      {/* 2) Header */}
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3 sticky top-0 z-40 transition-colors">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 rounded-xl flex items-center justify-center">
+              <Users className="w-5 h-5" />
             </div>
-            <div>
-              <h1 className="text-base font-semibold text-slate-900 dark:text-white leading-tight">لوحة المندوب</h1>
-            </div>
+            <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-none">لوحة المندوب</h1>
           </div>
+
           <div className="flex items-center gap-2 relative" ref={menuRef}>
             <button 
               onClick={() => setShowMenu(!showMenu)}
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all outline-none border-2 ${showMenu ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'}`}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all outline-none border ${showMenu ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}
+              aria-label="القائمة"
             >
-              <MoreVertical className="w-5 h-5 text-slate-600 dark:text-slate-400 stroke-[3]" />
+              <MoreVertical className="w-5 h-5 text-slate-600 dark:text-slate-400" />
             </button>
 
             {showMenu && (
               <>
-                {/* Backdrop to prevent the menu from melting into the background */}
                 <div 
                   className="fixed inset-0 z-40 bg-slate-900/10 dark:bg-black/35" 
                   onClick={() => setShowMenu(false)}
                 />
                 
-                <div className="absolute top-14 left-0 w-64 bg-white dark:bg-slate-900 border-2 border-emerald-500/40 dark:border-emerald-500/40 shadow-2xl shadow-slate-300 dark:shadow-slate-950/80 rounded-[2rem] z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-4 flex flex-col gap-2">
+                <div className="absolute top-12 left-0 w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="p-3.5 flex flex-col gap-2">
                     <span className="font-bold text-xs text-slate-400 dark:text-slate-500 pr-1 select-none text-right">وضع الشاشة:</span>
                     <div className="flex gap-2">
-                      {/* النهارى (Light Mode) Button */}
                       <button 
                         type="button"
                         onClick={() => {
                           if (theme !== 'light') toggleTheme();
                           setShowMenu(false);
                         }}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border transition-all outline-none font-bold text-xs ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl border transition-all outline-none font-bold text-xs ${
                           theme === 'light'
-                            ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            ? 'bg-amber-500 border-amber-500 text-slate-950 font-black'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                         }`}
                       >
-                        <Sun className={`w-3.5 h-3.5 ${theme === 'light' ? 'stroke-[2.5px]' : ''}`} />
+                        <Sun className="w-3.5 h-3.5" />
                         <span>النهاري</span>
                       </button>
 
-                      {/* الليلى (Dark Mode) Button */}
                       <button 
                         type="button"
                         onClick={() => {
                           if (theme !== 'dark') toggleTheme();
                           setShowMenu(false);
                         }}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border transition-all outline-none font-bold text-xs ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl border transition-all outline-none font-bold text-xs ${
                           theme === 'dark'
-                            ? 'bg-emerald-600 border-emerald-600 text-white scale-[1.02]'
-                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            ? 'bg-amber-500 border-amber-500 text-slate-950 font-black'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                         }`}
                       >
-                        <Moon className={`w-3.5 h-3.5 ${theme === 'dark' ? 'stroke-[2.5px]' : ''}`} />
+                        <Moon className="w-3.5 h-3.5" />
                         <span>الليلي</span>
                       </button>
                     </div>
                   </div>
 
-                  <div className="p-2 space-y-1 border-t border-slate-100 dark:border-slate-800/60">
-
+                  <div className="p-2 border-t border-slate-100 dark:border-slate-800">
                     <button 
                       onClick={() => {
                         onLogout();
                         setShowMenu(false);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 rounded-2xl transition-colors group"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-right hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl transition-colors font-bold text-xs"
                     >
-                      <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform rotate-180" />
-                      <span className="font-bold text-sm">تسجيل الخروج</span>
+                      <LogOut className="w-4 h-4 rotate-180" />
+                      <span>تسجيل الخروج</span>
                     </button>
                   </div>
                 </div>
@@ -312,26 +303,28 @@ export const DelegateDashboardView = memo(({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 w-full flex-1 flex flex-col gap-6">
-        {/* Tab Switcher */}
-        <div className="flex bg-slate-105 dark:bg-slate-900/60 p-1 rounded-2xl max-w-sm w-full border border-slate-200/40 dark:border-slate-800/40 self-start shrink-0">
-          <button
-            onClick={() => setActiveTab('garages')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
+      <main className="max-w-4xl mx-auto p-4 sm:p-6 w-full flex-1 flex flex-col gap-4 sm:gap-6">
+        {/* 3) Tab Switcher */}
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full">
+          <button 
+            type="button"
+            onClick={() => setActiveTab('garages')} 
+            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
               activeTab === 'garages'
-                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/30'
+                ? 'bg-slate-900 dark:bg-amber-500 text-amber-400 dark:text-slate-950 shadow-sm font-black'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
             <Building2 className="w-4 h-4" />
             <span>جراجاتي</span>
           </button>
-          <button
-            onClick={() => setActiveTab('performance')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
+          <button 
+            type="button"
+            onClick={() => setActiveTab('performance')} 
+            className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all focus:outline-none ${
               activeTab === 'performance'
-                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm font-black'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/30'
+                ? 'bg-slate-900 dark:bg-amber-500 text-amber-400 dark:text-slate-950 shadow-sm font-black'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
             <BarChart3 className="w-4 h-4" />
@@ -340,31 +333,71 @@ export const DelegateDashboardView = memo(({
         </div>
 
         {activeTab === 'garages' ? (
-          <>
-            {/* Search */}
-            <div className="relative group shrink-0 w-full max-w-sm sm:max-w-md md:max-w-xl transition-all">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-300 dark:text-slate-600 group-focus-within:text-emerald-500 transition-colors" />
+          <div className="space-y-4">
+            {/* 4.a) Top 3-Indicators Summary */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 block mb-1">جراجاتي</span>
+                <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono leading-none">
+                  {allGarages.length}
+                </span>
+              </div>
+
+              <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 block mb-1">طلبات معلقة</span>
+                <span className="text-xl sm:text-2xl font-black text-amber-500 font-mono leading-none">
+                  {pendingRequestsCount}
+                </span>
+              </div>
+
+              <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 block mb-1">عمولتي هذا الشهر</span>
+                <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 font-mono leading-none flex items-baseline justify-center gap-0.5">
+                  <FitText minFontSize={12}>
+                    {currentMonthCommissionValue.toLocaleString('en-US', { maximumFractionDigits: 1 })}
+                  </FitText>
+                  <span className="text-[10px] font-bold">ج.م</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4.b) Add Garage Button (Clear in-page action) */}
+            {delegate.canCreateGarage && (
+              <button
+                type="button"
+                onClick={handleOpenAddGarage}
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-amber-400 dark:text-slate-950 p-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2.5 transition-all shadow-sm cursor-pointer"
+              >
+                <PlusCircle className="w-5 h-5" />
+                <span>إضافة جراج جديد</span>
+              </button>
+            )}
+
+            {/* 4.c) Search Bar */}
+            <div className="relative w-full">
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
-                placeholder="ابحث باسم الجراج أو رقم الموبايل..."
+                placeholder="ابحث عن جراج..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl sm:rounded-2xl py-3 sm:py-5 pr-11 sm:pr-14 pl-4 text-sm sm:text-base md:text-lg font-medium text-slate-900 dark:text-white placeholder:text-slate-200 dark:placeholder:text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl py-3 pr-11 pl-4 text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
               />
             </div>
 
-            {/* Garage List */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+            {/* 4.d) Garage List */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {filteredGarages.map(g => {
                 const isPending = g.status === 'pending';
                 const hasPending = pendingRequests.some(r => r.garageId === g.id);
                 const remDays = getRemainingDays(g);
-                const isExpiringSoon = !isPending && !hasPending && remDays <= 3 && remDays > 0;
+                const isExpiringSoon = !isPending && !hasPending && remDays <= warningDaysThreshold && remDays > 0;
                 const isExpired = !isPending && !hasPending && remDays <= 0;
 
                 return (
                   <button
                     key={g.id}
+                    type="button"
                     onClick={() => {
                       if (isPending) {
                         showToast('عذراً، هذا الجراج قيد المراجعة والإنشاء من قبل الإدارة. يرجى الانتظار حتى تتم الموافقة عليه.', 'error');
@@ -376,76 +409,57 @@ export const DelegateDashboardView = memo(({
                       }
                       setSelectedGarage(g);
                     }}
-                    className={`bg-white dark:bg-slate-900/40 border-2 rounded-2xl sm:rounded-[2rem] cursor-pointer group flex flex-col justify-between h-36 sm:h-48 md:h-56 overflow-hidden transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 relative text-right w-full ${
+                    className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 cursor-pointer flex flex-col justify-between min-h-[120px] transition-all shadow-sm hover:shadow-md text-right w-full ${
                       isPending 
-                        ? 'border-dashed border-slate-200 dark:border-slate-800 opacity-75' 
+                        ? 'border-dashed border-slate-300 dark:border-slate-800 opacity-75' 
                         : isExpired
-                        ? 'border-red-300 dark:border-red-900/80 hover:border-red-500'
+                        ? 'border-red-300 dark:border-red-900/60'
                         : isExpiringSoon
-                        ? 'border-amber-300 dark:border-amber-900/80 hover:border-amber-500'
-                        : 'border-slate-105 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500'
-                    } ${hasPending ? 'opacity-95' : ''}`}
+                        ? 'border-amber-300 dark:border-amber-900/60'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-amber-500'
+                    }`}
                   >
-                    {/* Header */}
-                    <div className={`px-4 py-3.5 sm:py-5 text-center border-b border-emerald-600/10 shadow-sm shrink-0 flex items-center justify-center w-full ${
-                      isPending 
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' 
-                        : isExpired
-                        ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white'
-                        : isExpiringSoon
-                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
-                        : 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white'
-                    }`}>
-                      <h3 className={`font-black text-center text-xs sm:text-base md:text-lg lg:text-xl leading-none w-full ${isPending ? 'text-slate-500 dark:text-slate-400' : 'text-white'}`}>
-                        <FitText minFontSize={12} className="text-center">
-                          {g.name}
-                        </FitText>
+                    {/* Top: Garage Name */}
+                    <div className="flex items-center justify-between gap-3 w-full">
+                      <h3 className="font-black text-slate-900 dark:text-white text-base leading-snug">
+                        {g.name}
                       </h3>
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center shrink-0">
+                        <Building2 className="w-4 h-4" />
+                      </div>
                     </div>
 
-                    {/* Card Body */}
-                    <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 relative bg-slate-50/25 dark:bg-slate-900/15 w-full">
-                      <Building2 className={`w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 transition-all duration-300 ${
-                        isPending 
-                          ? 'text-slate-300 dark:text-slate-700' 
-                          : isExpired
-                          ? 'text-red-300 dark:text-red-800 group-hover:text-red-500'
-                          : isExpiringSoon
-                          ? 'text-amber-300 dark:text-amber-800 group-hover:text-amber-500'
-                          : 'text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 dark:group-hover:text-emerald-400'
-                      }`} />
-                      
+                    {/* Bottom: Single Clear Status Badge */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between w-full">
                       {isPending ? (
-                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[8.5px] sm:text-xs font-black px-2.5 py-1 sm:py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 uppercase tracking-widest leading-none">
-                            قيد مراجعة الإنشاء
-                          </span>
-                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                          قيد مراجعة الإنشاء
+                        </span>
                       ) : hasPending ? (
-                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-widest leading-none">
-                            طلب معلق
-                          </span>
-                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                          طلب شحن معلق
+                        </span>
                       ) : isExpired ? (
-                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-red-500 text-white shadow-sm uppercase tracking-widest leading-none">
-                            منتهي الاشتراك
-                          </span>
-                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-red-500/15 text-red-600 dark:text-red-400">
+                          منتهي الاشتراك
+                        </span>
                       ) : isExpiringSoon ? (
-                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-amber-500 text-white shadow-sm uppercase tracking-widest leading-none">
-                            ينتهي خلال {remDays} {remDays === 1 ? 'يوم' : remDays === 2 ? 'يومين' : 'أيام'}
-                          </span>
-                        </div>
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                          ينتهي خلال {remDays} {remDays === 1 ? 'يوم' : remDays === 2 ? 'يومين' : 'أيام'}
+                        </span>
                       ) : g.isTrial ? (
-                        <div className="absolute bottom-2 sm:bottom-4 inset-x-2 text-center">
-                          <span className="inline-block text-[10px] sm:text-xs font-black px-2.5 py-0.5 sm:py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 uppercase tracking-widest leading-none">
-                            تجريبي ({remDays} يوم)
-                          </span>
-                        </div>
-                      ) : null}
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          تجريبي ({remDays} يوم)
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          نشط ({remDays} يوم)
+                        </span>
+                      )}
+
+                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                        {g.hourlyRate} ج.ساعة / {g.overnightRate} ج.مبيت
+                      </span>
                     </div>
                   </button>
                 );
@@ -453,244 +467,166 @@ export const DelegateDashboardView = memo(({
             </div>
 
             {filteredGarages.length === 0 && (
-              <div className="text-center py-20 bg-white dark:bg-slate-900/50 rounded-[3rem] border-4 border-dashed border-slate-100 dark:border-slate-800">
-                <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Building2 className="w-10 h-10 text-slate-200 dark:text-slate-700" />
-                </div>
-                <p className="text-slate-400 dark:text-slate-600 font-bold">لا توجد جراجات مطابقة للبحث</p>
+              <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                <Building2 className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-400 dark:text-slate-500 font-bold text-sm">لا توجد جراجات مطابقة للبحث</p>
               </div>
             )}
-          </>
+          </div>
         ) : (
-          /* Performance Report View */
-          <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
-            {/* Monthly Auto Filter Banner */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 dark:text-white">إحصائيات العمولات والمبيعات الشهرية (تلقائي)</h4>
-                  <p className="text-[10px] text-slate-400 font-semibold mt-0.5">تتم المتابعة والاحتساب أوتوماتيكياً لكل شهر ميلادي بدون الحاجة لتصفية يدوية</p>
-                </div>
-              </div>
+          /* 5) Performance Report View */
+          <div className="space-y-4">
+            {/* 5.a) Period Selector */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                اختر الفترة التي تريد مراجعتها:
+              </span>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-xs font-bold text-slate-400 shrink-0">الفترة:</span>
-                <select
-                  value={selectedPerformanceMonth}
-                  onChange={(e) => setSelectedPerformanceMonth(e.target.value)}
-                  className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-black text-xs px-3 py-2 rounded-xl outline-none focus:border-emerald-500 transition-colors cursor-pointer"
-                >
-                  <option value="current">
-                    الشهر الحالي ({formatDelegateMonthName(currentMonthKey)})
+              <select
+                value={selectedPerformanceMonth}
+                onChange={(e) => setSelectedPerformanceMonth(e.target.value)}
+                className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold text-xs px-3 py-2 rounded-xl outline-none focus:border-amber-500 transition-colors cursor-pointer"
+              >
+                <option value="current">
+                  الشهر الحالي ({formatDelegateMonthName(currentMonthKey)})
+                </option>
+                {availablePerformanceMonths.filter(m => m !== currentMonthKey).map(m => (
+                  <option key={m} value={m}>
+                    {formatDelegateMonthName(m)}
                   </option>
-                  {availablePerformanceMonths.filter(m => m !== currentMonthKey).map(m => (
-                    <option key={m} value={m}>
-                      {formatDelegateMonthName(m)}
-                    </option>
-                  ))}
-                  <option value="all">
-                    جميع الأوقات (التاريخ الكلي)
-                  </option>
-                </select>
-              </div>
+                ))}
+                <option value="all">
+                  جميع الأوقات (التاريخ الكلي)
+                </option>
+              </select>
             </div>
 
-            {/* Stat Cards Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-              
-              {/* Total Recharges Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 shadow-sm flex flex-col justify-between relative overflow-hidden group transition-all hover:shadow-md">
-                <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-400/5 rounded-full -translate-x-12 -translate-y-12 group-hover:scale-110 transition-transform duration-300" />
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-400/10 dark:bg-emerald-400/20 flex items-center justify-center text-emerald-500">
-                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+            {/* 5.b) Compact Summary Card */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-slate-100 dark:divide-slate-800">
+                {/* Metric 1: Recharges */}
+                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات الشحن</span>
+                  <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-mono leading-none flex items-baseline gap-1">
+                    <span>{totalRechargedAmount.toLocaleString('en-US')}</span>
+                    <span className="text-xs font-bold text-slate-400">ج.م</span>
                   </div>
-                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10">تجديد الاشتراك</span>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1 leading-none">إجمالي مبيعات الشحن</p>
-                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
-                    {totalRechargedAmount.toLocaleString('en-US')} <span className="text-xs font-bold text-slate-400 mr-1">ج.م</span>
-                  </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">مجموع المبيعات التي قمت بإجرائها لكل الجراجات الخاصة بك</p>
-                </div>
-              </div>
 
-              {/* Commission Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 shadow-sm flex flex-col justify-between relative overflow-hidden group transition-all hover:shadow-md">
-                <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-x-12 -translate-y-12 group-hover:scale-110 transition-transform duration-300" />
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-500">
-                    <Coins className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+                {/* Metric 2: Commission */}
+                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">العمولة المستحقة</span>
+                  <div className="text-lg sm:text-xl font-black text-amber-500 dark:text-amber-400 font-mono leading-none flex items-baseline gap-1">
+                    <span>{commissionValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                    <span className="text-xs font-bold text-slate-400">ج.م</span>
                   </div>
-                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10">الأرباح</span>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1 leading-none">أرباح العمولات المستحقة</p>
-                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
-                    {commissionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-400 mr-1">ج.م</span>
-                  </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">
-                    محسوبة بناءً على نسبة عمولاتك المحددة وهي <span className="font-bold text-emerald-500 font-mono text-xs">{commissionRate}%</span>
-                  </p>
-                </div>
-              </div>
 
-              {/* Registered Garages Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 shadow-sm flex flex-col justify-between relative overflow-hidden group transition-all hover:shadow-md">
-                <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500/5 rounded-full -translate-x-12 -translate-y-12 group-hover:scale-110 transition-transform duration-300" />
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-500">
-                    <Building2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+                {/* Metric 3: Garages */}
+                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الجراجات</span>
+                  <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-mono leading-none">
+                    <span>{allGarages.length}</span>
                   </div>
-                  <span className="text-[9px] sm:text-[10px] font-black px-2.5 py-1 rounded-full bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10">الشبكة</span>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1 leading-none">مجموع الجراجات</p>
-                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono leading-none tracking-tight">
-                    {allGarages.length} <span className="text-xs font-bold text-slate-400 mr-1">موقع</span>
-                  </h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 font-semibold">عدد الجراجات النشطة التي قمت بإنشائها وتفعيلها</p>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Performance Summary Banner */}
-            <div className="bg-gradient-to-r from-emerald-600/10 via-emerald-600/5 to-transparent border border-emerald-600/20 rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white shrink-0">
-                  <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-950 dark:text-white text-sm sm:text-base">إحصائيات فريدة يا {delegate.name}!</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">تقوم بإدارة جراجاتك بكل ثقة ومتابعة مستمرة لعمولاتك ومبيعاتك.</p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="bg-white/50 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-800 rounded-xl px-4 py-2 text-center shrink-0">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">طلبات معلقة</span>
-                  <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
-                    {sortedRequests.filter(r => r.status === 'pending').length}
-                  </span>
-                </div>
-                <div className="bg-white/50 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-800 rounded-xl px-4 py-2 text-center shrink-0">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">طلبات مقبولة</span>
-                  <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
-                    {sortedRequests.filter(r => r.status === 'approved').length}
-                  </span>
                 </div>
               </div>
             </div>
 
-            {/* History Table/List Section */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 shadow-sm overflow-hidden">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg">سجل العمليات الأخير</h3>
-                  <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">حالة وتفاصيل آخر طلبات الشحن المقدمة لجراجاتك</p>
+            {/* 5.c) Operations History */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-sm">
+                  <Calendar className="w-4 h-4 text-amber-500" />
+                  <span>سجل العمليات</span>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-slate-55 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-600">
-                  <Calendar className="w-5 h-5" />
-                </div>
+                <span className="text-xs font-bold text-slate-400 font-mono">
+                  ({sortedRequests.length})
+                </span>
               </div>
 
-              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                {sortedRequests.map((req) => (
+              <div className="space-y-2.5">
+                {displayedRequests.map((req) => (
                   <div 
                     key={req.id} 
-                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50/50 dark:bg-slate-900/10 border border-slate-100 dark:border-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl sm:rounded-2xl gap-3 transition-all"
+                    className="p-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-right"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 font-black text-sm shrink-0">
-                        <Coins className="w-5 h-5 text-emerald-500" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{req.garageName}</h4>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5 flex flex-wrap items-center gap-1.5 sm:gap-2">
-                          <span>باقة {req.packageName}</span>
-                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
-                          <span className="font-mono text-[9px]">{formatRequestDate(req.createdAt)}</span>
-                        </p>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                        {req.garageName}
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                        <span>باقة {req.packageName}</span>
+                        <span>•</span>
+                        <span className="font-mono text-[10px]">{formatRequestDate(req.createdAt)}</span>
+                      </p>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 border-t border-dashed border-slate-200/50 dark:border-slate-800 pt-2 sm:pt-0">
-                      <div className="text-right pl-4">
-                        <span className="text-[9px] font-bold text-slate-400 block leading-none">مبلغ الشحن</span>
-                        <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{req.revenueAmount} ج.م</span>
-                      </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
+                        {req.revenueAmount || req.amount} ج.م
+                      </span>
 
-                      {/* Status badge */}
                       {req.status === 'pending' && (
-                        <div className="flex items-center gap-1.5 py-1.5 px-3 bg-emerald-500/10 border border-emerald-500/15 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-black leading-none">في الانتظار</span>
-                        </div>
+                        <span className="text-[10px] font-bold px-2 py-1 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-lg">
+                          في الانتظار
+                        </span>
                       )}
                       {req.status === 'approved' && (
-                        <div className="flex items-center gap-1.5 py-1.5 px-3 bg-emerald-500/10 border border-emerald-500/15 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-black leading-none">تم القبول</span>
-                        </div>
+                        <span className="text-[10px] font-bold px-2 py-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                          تم القبول
+                        </span>
                       )}
                       {req.status === 'rejected' && (
-                        <div className="flex items-center gap-1.5 py-1.5 px-3 bg-red-500/10 border border-red-500/15 rounded-xl text-red-600 dark:text-red-400 shrink-0">
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-black leading-none">مرفوض</span>
-                        </div>
+                        <span className="text-[10px] font-bold px-2 py-1 bg-red-500/15 text-red-600 dark:text-red-400 rounded-lg">
+                          مرفوض
+                        </span>
                       )}
                     </div>
                   </div>
                 ))}
 
                 {sortedRequests.length === 0 && (
-                  <div className="text-center py-12">
-                    <Calendar className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-3" />
-                    <p className="text-sm text-slate-400 font-bold">لا توجد عمليات شحن سابقة مسجلة لك بعد</p>
+                  <div className="py-8 text-center text-slate-400 font-bold text-xs">
+                    لا توجد عمليات بعد
                   </div>
                 )}
               </div>
+
+              {sortedRequests.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllOperations(prev => !prev)}
+                  className="mt-3 w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 rounded-xl font-bold text-xs text-slate-700 dark:text-slate-300 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>{showAllOperations ? 'إخفاء العمليات القديمة' : 'عرض كل العمليات'}</span>
+                  {showAllOperations ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              )}
             </div>
           </div>
         )}
       </main>
 
-      {/* Add Garage Button (Floating) */}
-      {delegate.canCreateGarage && (
-        <button
-          onClick={() => {
-            const initialPin = generateSafePin(allGarages.map(g => g.pin));
-            setNewGaragePin(initialPin);
-            setPinGenerationsRemaining(3);
-            setShowAddGarage(true);
-          }}
-          className="fixed bottom-6 left-6 w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center hover:bg-emerald-700 transition-all z-40"
-        >
-          <PlusCircle className="w-8 h-8" />
-        </button>
-      )}
-
-      {/* Add Garage Modal */}
+      {/* 6) Add Garage Modal */}
       {showAddGarage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 overflow-y-auto" onClick={() => setShowAddGarage(false)}>
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl p-8 relative my-auto border border-slate-200 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-900 dark:bg-slate-800 rounded-xl flex items-center justify-center">
-                  <PlusCircle className="w-5 h-5 text-white" />
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 sm:p-8 relative my-auto border border-slate-200 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 rounded-xl flex items-center justify-center">
+                  <PlusCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">إضافة جراج جديد</h2>
-                  <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-0.5">تسجيل جراج جديد وتحديد التعريفة</p>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">إضافة جراج جديد</h2>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">تسجيل جراج جديد وتحديد التعريفة</p>
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={() => setShowAddGarage(false)}
-                className="w-10 h-10 bg-red-500 dark:bg-red-600 text-white rounded-xl flex shrink-0 items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition-colors outline-none"
+                className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -699,68 +635,37 @@ export const DelegateDashboardView = memo(({
                 await onCreateGarage(e);
                 setShowAddGarage(false);
               }}
-              className="space-y-5"
+              className="space-y-4 text-right"
             >
-              {/* Step 1: Identity */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">اسم الجراج</label>
-                <input name="name" placeholder="جراج التوفيق" required className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700" dir="rtl" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">اسم الجراج</label>
+                <input name="name" placeholder="جراج التوفيق" required className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-400" dir="rtl" />
               </div>
 
-              {/* Step 2: Pricing */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 text-center">
-                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">سعر الساعة</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 text-center">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">سعر الساعة</label>
                   <div className="relative">
-                    <input name="hourlyRate" type="text" inputMode="numeric" placeholder="10" required className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 font-mono text-xl" dir="ltr" />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] text-slate-300 dark:text-slate-600 font-bold">ج.م</span>
+                    <input name="hourlyRate" type="text" inputMode="numeric" placeholder="10" required className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" dir="ltr" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">ج.م</span>
                   </div>
                 </div>
-                <div className="space-y-2 text-center">
-                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">سعر المبيت</label>
+                <div className="space-y-1.5 text-center">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">سعر المبيت</label>
                   <div className="relative">
-                    <input name="overnightRate" type="text" inputMode="numeric" placeholder="50" required className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 font-mono text-xl" dir="ltr" />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] text-slate-300 dark:text-slate-600 font-bold">ج.م</span>
+                    <input name="overnightRate" type="text" inputMode="numeric" placeholder="50" required className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" dir="ltr" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">ج.م</span>
                   </div>
                 </div>
               </div>
 
               <input type="hidden" name="billingModel" value="subscription" />
 
-              {/* Subscription Package Selection */}
-              <div className="space-y-2 text-right animate-in fade-in duration-200">
-                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">باقة الاشتراك الابتدائي</label>
-                <select 
-                  name="initialPackageId"
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 appearance-none transition-all" 
-                  dir="rtl"
-                >
-                  <option value="">اختر باقة الاشتراك النظامية</option>
-                  {packages.map(pkg => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} - {pkg.price} ج.م ({getCleanPackageInfo(pkg).isUnlimited ? 'سعة مفتوحة' : `${getCleanPackageInfo(pkg).dailyCapacity} سيارة/يوم`})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Monthly Subscribers Toggle */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
-                <div className="space-y-0.5 text-right">
-                  <label className="text-xs font-black text-slate-900 dark:text-white block">مشتركين شهريين / إيواء</label>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">زيادة 500 ج.م ثابتة تلقائياً على الاشتراك/الباقة</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input type="checkbox" name="hasMonthlySubscribers" className="sr-only peer" />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-purple-600"></div>
-                </label>
-              </div>
-
               {/* Free Trial Toggle */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between">
+              <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl flex items-center justify-between">
                 <div className="space-y-0.5 text-right">
-                  <label className="text-xs font-black text-blue-950 dark:text-blue-200 block">تفعيل فترة تجريبية مجانية (15 يوم)</label>
-                  <span className="text-[10px] font-bold text-blue-500/80 block">صلاحية مجانية لمدة 15 يوماً للجراج الجديد</span>
+                  <label className="text-xs font-black text-slate-900 dark:text-emerald-300 block">تفعيل فترة تجريبية مجانية (15 يوم)</label>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">صلاحية مجانية لمدة 15 يوماً للجراج الجديد</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input 
@@ -771,19 +676,17 @@ export const DelegateDashboardView = memo(({
                     className="sr-only peer" 
                   />
                   <input type="hidden" name="isTrial_hidden" value={isTrial ? 'true' : 'false'} />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
                 </label>
               </div>
 
-              {/* Step 4: Contact */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">رقم الموبايل (اختياري)</label>
-                <input name="phone" placeholder="01xxxxxxxxx" className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono tracking-wider outline-none focus:border-slate-900 dark:focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-900 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700" dir="ltr" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">رقم الموبايل (اختياري)</label>
+                <input name="phone" placeholder="01xxxxxxxxx" className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono outline-none focus:border-amber-500 transition-all placeholder:text-slate-400" dir="ltr" />
               </div>
 
-              {/* Step 4.5: PIN */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-2 uppercase tracking-widest">رمز الدخول (PIN)</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">رمز الدخول (PIN)</label>
                 <div className="relative">
                   <input 
                     name="pin" 
@@ -791,7 +694,7 @@ export const DelegateDashboardView = memo(({
                     value={newGaragePin}
                     readOnly
                     required 
-                    className="w-full p-4 bg-slate-100/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono tracking-wider outline-none cursor-not-allowed text-center pl-14" 
+                    className="w-full p-3.5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono outline-none cursor-not-allowed text-center pl-12" 
                     dir="ltr" 
                   />
                   {pinGenerationsRemaining > 0 && (
@@ -802,39 +705,23 @@ export const DelegateDashboardView = memo(({
                         setNewGaragePin(nextPin);
                         setPinGenerationsRemaining(prev => prev - 1);
                       }}
-                      className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors"
                       title="توليد رقم سري عشوائي"
                     >
-                      <RefreshCw className="w-5 h-5 mx-auto" strokeWidth={2} />
+                      <RefreshCw className="w-4 h-4" />
                     </button>
-                  )}
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-2 gap-1">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 text-right leading-relaxed">
-                    * هذا الرمز يتم توليده تلقائياً لحماية الحساب من التكرار والتداخل.
-                  </span>
-                  {pinGenerationsRemaining > 0 ? (
-                    <span className="text-mobile-wrap text-[10px] font-bold text-emerald-600 dark:text-emerald-400 text-left sm:text-right leading-snug">
-                      متبقي {pinGenerationsRemaining} {pinGenerationsRemaining === 1 ? 'محاولة' : 'محاولات'} لتغييره تلقائياً.
-                    </span>
-                  ) : (
-                    <span className="text-mobile-wrap text-[10px] font-bold text-red-500 dark:text-red-400 text-left sm:text-right leading-snug">
-                      استنفدت محاولات التغيير.
-                    </span>
                   )}
                 </div>
               </div>
 
-
-
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white rounded-xl py-5 font-bold text-lg hover:bg-slate-800 dark:hover:bg-emerald-700 transition-all disabled:opacity-50 mt-4 flex items-center justify-center gap-3 uppercase tracking-widest"
+                className="w-full bg-slate-900 dark:bg-amber-500 text-amber-400 dark:text-slate-950 rounded-xl py-3.5 font-black text-base hover:opacity-95 transition-all disabled:opacity-50 mt-2 flex items-center justify-center gap-2"
               >
-                {isLoading ? <Loader2 className="w-7 h-7 animate-spin" /> : (
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>
-                    <PlusCircle className="w-5 h-5" />
+                    <PlusCircle className="w-4 h-4" />
                     <span>تأكيد الإضافة</span>
                   </>
                 )}
@@ -844,84 +731,62 @@ export const DelegateDashboardView = memo(({
         </div>
       )}
 
-      {/* Recharge Modal */}
+      {/* 6) Recharge Modal */}
       {selectedGarage && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80"
           onClick={() => !isProcessing && setSelectedGarage(null)}
         >
           <div 
-            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-8 relative overflow-hidden border border-transparent dark:border-slate-800 transition-colors"
+            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 sm:p-8 relative overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors"
             onClick={e => e.stopPropagation()}
           >
             {success ? (
-              <div className="flex flex-col items-center py-10 text-center">
-                <div className="w-24 h-24 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-6 animate-bounce">
-                  <CheckCircle2 className="w-14 h-14" />
+              <div className="flex flex-col items-center py-8 text-center">
+                <div className="w-20 h-20 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-4">
+                  <CheckCircle2 className="w-10 h-10" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white">تم إرسال الطلب!</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold mt-2">سيتم تجديد اشتراك {selectedGarage.name} فور موافقة المدير</p>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">تم إرسال الطلب!</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-bold text-xs mt-1">سيتم تجديد اشتراك {selectedGarage.name} فور موافقة المدير</p>
               </div>
             ) : (
               <>
-                <div className="flex justify-between items-start mb-6">
+                <div className="flex justify-between items-start mb-5">
                   <div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-1">تجديد اشتراك الجراج</h2>
-                    <p className="text-sm font-bold text-slate-400 dark:text-slate-500">{selectedGarage.name}</p>
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white">تجديد اشتراك الجراج</h2>
+                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-0.5">{selectedGarage.name}</p>
                   </div>
                   <button 
+                    type="button"
                     onClick={() => setSelectedGarage(null)}
-                    className="w-10 h-10 bg-red-500 dark:bg-red-600 text-white rounded-xl flex shrink-0 items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition-colors outline-none"
+                    className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none"
                   >
-                    <X className="w-6 h-6" />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Simplified Garage Info */}
-                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 mb-8 border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                {/* Garage Info */}
+                <div className="bg-slate-50 dark:bg-slate-950/60 rounded-xl p-4 mb-5 border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     الاشتراك المتبقي للجراج
                   </span>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-5xl font-black text-slate-950 dark:text-white font-mono tracking-tighter">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl sm:text-4xl font-black text-slate-950 dark:text-white font-mono">
                       {getRemainingDays(selectedGarage)}
                     </span>
                     <span className="text-xs font-bold text-slate-400">
                       يوم
                     </span>
                   </div>
-                  {selectedGarage.balanceExpiry && (
-                    <span className="text-[10px] font-bold text-slate-400 mt-2">
-                      تاريخ الانتهاء: {(() => {
-                        const expiry = selectedGarage.balanceExpiry;
-                        const expiryDate = safeDate(expiry);
-                        return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-                      })()}
-                    </span>
-                  )}
-                  <div className="flex gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 w-full justify-center">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">ساعة</span>
-                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{selectedGarage.hourlyRate}ج.م</span>
-                    </div>
-                    <div className="w-px h-6 bg-slate-100 dark:bg-slate-800 self-center" />
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">مبيت</span>
-                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{selectedGarage.overnightRate}ج.م</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black text-slate-900 dark:text-white text-base">باقات الشحن</h3>
                 </div>
 
                 {/* Unified Packages Section */}
                 {(() => {
+                  const effectiveReferralFee = (selectedGarage.referrerId || selectedGarage.createdByDelegateId) ? systemReferralFee : 0;
                   const rawList = packages || [];
                   const displayPackages = rawList
                     .map(p => {
-                      const { finalPrice } = calculateFinalPrice(p, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee);
+                      const { finalPrice } = calculateFinalPrice(p, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee, effectiveReferralFee);
                       return {
                         ...p,
                         _sortPrice: finalPrice
@@ -938,26 +803,15 @@ export const DelegateDashboardView = memo(({
                   const maxCapInFiltered = Math.max(...filteredPackages.map(p => getCleanPackageInfo(p).dailyCapacity || 0));
 
                   return (
-                    <div className="space-y-4 pb-6">
-                      {/* Duration Filter Switcher */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-sm">
-                          <Filter className="w-4 h-4 text-amber-500" />
-                          <span>اختار مدة الاشتراك:</span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-500">
-                          ({filteredPackages.length} باقات)
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/70 rounded-2xl">
+                    <div className="space-y-3 pb-2">
+                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
                         <button
                           type="button"
                           onClick={() => setSelectedDurationFilter(15)}
-                          className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                          className={`py-2 px-2 rounded-lg font-black text-xs transition-all text-center cursor-pointer ${
                             selectedDurationFilter === 15
-                              ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
-                              : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                              ? 'bg-amber-500 text-slate-950 shadow-sm'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           15 يوم (نصف شهر)
@@ -966,10 +820,10 @@ export const DelegateDashboardView = memo(({
                         <button
                           type="button"
                           onClick={() => setSelectedDurationFilter(30)}
-                          className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
+                          className={`py-2 px-2 rounded-lg font-black text-xs transition-all text-center cursor-pointer ${
                             selectedDurationFilter === 30
-                              ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
-                              : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                              ? 'bg-amber-500 text-slate-950 shadow-sm'
+                              : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           30 يوم (شهر)
@@ -977,13 +831,14 @@ export const DelegateDashboardView = memo(({
                       </div>
 
                       {/* Packages List */}
-                      <div className="space-y-3">
+                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
                         {filteredPackages.map((pkg) => {
                           const info = getCleanPackageInfo(pkg);
                           const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(
                             pkg, 
                             selectedGarage.hasMonthlySubscribers || false, 
-                            subscriberFlatFee
+                            subscriberFlatFee,
+                            effectiveReferralFee
                           );
 
                           const packageName = info.displayName;
@@ -994,62 +849,38 @@ export const DelegateDashboardView = memo(({
                           return (
                             <div
                               key={pkg.id}
-                              className={`p-4 sm:p-5 rounded-3xl border-2 transition-all flex items-center justify-between gap-3 ${
+                              className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                                 info.isUnlimited
-                                  ? 'bg-slate-900 border-amber-500 text-white shadow-xl'
-                                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white shadow-sm'
+                                  ? 'bg-slate-900 border-amber-500 text-white'
+                                  : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white'
                               }`}
                             >
-                              {/* Right Side: Package Name & Capacity */}
-                              <div className="flex flex-col gap-1.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-lg sm:text-xl font-black tracking-tight ${info.isUnlimited ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                              <div className="flex flex-col gap-1 text-right">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm sm:text-base font-black">
                                     {packageName}
                                   </span>
-
                                   {isTopTier && (
-                                    <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
-                                      <Sparkles className="w-3 h-3" />
+                                    <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-md">
                                       الأكبر سعة
                                     </span>
                                   )}
                                 </div>
-
-                                <div className={`flex items-center gap-1.5 text-xs font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
-                                  <Car className="w-4 h-4 text-amber-500 shrink-0" />
-                                  <span>
-                                    {info.isUnlimited ? 'عربيات مفتوحة بدون حد أقصى' : `${info.dailyCapacity} عربية فى اليوم بس`}
-                                  </span>
-                                </div>
+                                <span className={`text-[11px] font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                                  {info.isUnlimited ? 'عربيات مفتوحة' : `${info.dailyCapacity} سيارة/يوم`}
+                                </span>
                               </div>
 
-                              {/* Left Side: Price & Action */}
-                              <div className="flex flex-col items-end text-left shrink-0 gap-2">
-                                <div>
-                                  {hasDiscount ? (
-                                    <div className="flex items-center gap-1.5 mb-0.5 justify-end">
-                                      <div className="relative overflow-hidden rounded px-2 py-0.5 flex items-center justify-center shrink-0">
-                                        <div 
-                                          className="absolute inset-[-250%] bg-[conic-gradient(from_0deg,transparent_75%,#fbbf24_100%)]" 
-                                          style={{ animation: 'spin 3.5s linear infinite' }} 
-                                        />
-                                        <div className={`absolute inset-[1.5px] rounded-[2.5px] ${info.isUnlimited ? 'bg-slate-900' : 'bg-white dark:bg-slate-900'}`} />
-                                        <div className="absolute inset-[1.5px] rounded-[2.5px] bg-emerald-500/10" />
-                                        <span className="relative z-10 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
-                                          خصم {pkg.discountType === 'percentage' ? `${pkg.discountValue}%` : `${pkg.discountValue} ج.م`}
-                                        </span>
-                                      </div>
-                                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
-                                        {displayBasePrice.toLocaleString('en-US')}
-                                      </span>
-                                    </div>
-                                  ) : null}
-                                  <div className="flex items-baseline gap-1 font-mono justify-end">
-                                    <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">
-                                      {effectivePrice.toLocaleString('en-US')}
+                              <div className="flex items-center gap-3 shrink-0">
+                                <div className="text-left font-mono">
+                                  {hasDiscount && (
+                                    <span className="text-[10px] text-slate-400 line-through block leading-none mb-0.5">
+                                      {displayBasePrice}
                                     </span>
-                                    <span className="text-xs font-black text-amber-700 dark:text-amber-400">ج.م</span>
-                                  </div>
+                                  )}
+                                  <span className="text-base font-black text-amber-500 dark:text-amber-400">
+                                    {effectivePrice} ج.م
+                                  </span>
                                 </div>
 
                                 <button
@@ -1059,9 +890,9 @@ export const DelegateDashboardView = memo(({
                                     if (isProcessing) return;
                                     setPendingPackage({ ...pkg });
                                   }}
-                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
                                 >
-                                  <span>شحن الآن</span>
+                                  شحن
                                 </button>
                               </div>
                             </div>
@@ -1069,7 +900,7 @@ export const DelegateDashboardView = memo(({
                         })}
 
                         {filteredPackages.length === 0 && (
-                          <div className="py-8 text-center text-slate-400 font-bold text-xs">
+                          <div className="py-6 text-center text-slate-400 font-bold text-xs">
                             لا توجد باقات متوفرة في هذه المدة
                           </div>
                         )}
@@ -1084,29 +915,27 @@ export const DelegateDashboardView = memo(({
           {/* Package Confirmation Overlay */}
           {pendingPackage && !success && (
             <div className="absolute inset-x-4 bottom-4 z-20" onClick={e => e.stopPropagation()}>
-              <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border-2 border-emerald-500 animate-in fade-in slide-in-from-bottom-4 transition-all duration-300">
-                <div className="text-center mb-4">
-                  <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-400/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                  </div>
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border-2 border-emerald-500 shadow-2xl animate-in fade-in slide-in-from-bottom-4 transition-all">
+                <div className="text-center mb-3">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
                     تأكيد طلب تجديد الاشتراك؟
                   </h3>
-                  <p className="text-xs font-bold text-slate-400 mt-1">
-                    أنت على وشك طلب تجديد الاشتراك لمدة {pendingPackage.vehiclesCount} يوم للجراج
+                  <p className="text-xs font-bold text-slate-400 mt-0.5">
+                    طلب تجديد الاشتراك لمدة {pendingPackage.vehiclesCount} يوم للجراج
                   </p>
                 </div>
 
                 {(() => {
-                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee);
+                  const effectiveReferralFee = (selectedGarage.referrerId || selectedGarage.createdByDelegateId) ? systemReferralFee : 0;
+                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee, effectiveReferralFee);
 
                   return (
                     <>
-                      <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6 flex justify-between items-center">
+                      <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 mb-4 flex justify-between items-center">
                         <div className="text-right">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر المطلوب</p>
+                          <p className="text-[10px] font-bold text-slate-400">المبلغ المطلوب</p>
                           <div className="flex items-baseline gap-2">
-                            <p className="text-xl font-black text-slate-900 dark:text-white">{finalPrice} ج.م</p>
+                            <p className="text-lg font-black text-slate-900 dark:text-white">{finalPrice} ج.م</p>
                             {hasDiscount && (
                               <p className="text-xs font-bold text-slate-400 line-through">{displayBasePrice} ج.م</p>
                             )}
@@ -1116,40 +945,29 @@ export const DelegateDashboardView = memo(({
                           )}
                         </div>
                         <div className="text-left">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            المدة
-                          </p>
-                          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-                            {pendingPackage.vehiclesCount} يوم
-                          </p>
+                          <p className="text-[10px] font-bold text-slate-400">المدة</p>
+                          <p className="text-lg font-black text-emerald-500">{pendingPackage.vehiclesCount} يوم</p>
                         </div>
                       </div>
 
-                      {selectedGarage.hasMonthlySubscribers && (
-                        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl p-3 mb-6 text-center">
-                          <p className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 shrink-0" />
-                            يتضمن إضافة 500 ج.م ثابتة لحساب المشتركين الشهريين
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="flex gap-3">
+                      <div className="flex gap-2.5">
                         <button
+                          type="button"
                           disabled={isProcessing || pendingRequests.some(r => r.garageId === selectedGarage.id)}
                           onClick={() => handleRechargeSubmit(undefined, pendingPackage, totalDiscount > 0 ? {
                             discountAmount: totalDiscount
                           } : undefined)}
-                          className="flex-1 bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-xl font-black text-base hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                             <span>{pendingRequests.some(r => r.garageId === selectedGarage.id) ? 'طلب معلق...' : 'تأكيد الشحن'}</span>
                           )}
                         </button>
                         <button
+                          type="button"
                           disabled={isProcessing}
                           onClick={() => { setPendingPackage(null); }}
-                          className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-4 rounded-xl font-black text-base hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                          className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
                         >
                           إلغاء
                         </button>
@@ -1165,3 +983,5 @@ export const DelegateDashboardView = memo(({
     </div>
   );
 });
+
+DelegateDashboardView.displayName = 'DelegateDashboardView';

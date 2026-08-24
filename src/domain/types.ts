@@ -46,6 +46,7 @@ export interface GarageV2 {
   createdAt: any;
   createdByDelegateId?: string;
   createdByDelegateName?: string;
+  referrerId?: string;
   hasMonthlySubscribers?: boolean;
   referredByGarageId?: string;
   referredByGarageName?: string;
@@ -72,6 +73,8 @@ export interface RechargeRequestV2 {
   revenueAmount: number;       // Final amount after discount
   originalRevenueAmount: number; // Price before discount
   discountAmount: number;
+  commission?: number;
+  referrerId?: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
   resolvedAt?: any;

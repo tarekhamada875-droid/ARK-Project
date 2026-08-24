@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateVehicleOnCreate = exports.validateRechargeRequestOnUpdate = exports.validateRechargeRequestOnCreate = exports.validateGarageOnCreate = void 0;
+exports.checkPinAvailability = exports.authenticateUser = exports.validateVehicleOnCreate = exports.validateRechargeRequestOnUpdate = exports.validateRechargeRequestOnCreate = exports.validateGarageOnCreate = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
@@ -134,5 +134,144 @@ exports.validateVehicleOnCreate = functions.firestore
     if (!data.status) {
         await snapshot.ref.update({ status: 'inside' });
     }
+});
+// ============================================
+// SECURE CALLABLE AUTHENTICATION (v159)
+// ============================================
+exports.authenticateUser = functions.https.onCall(async (data, context) => {
+    const pin = data?.pin ? String(data.pin).trim() : (data?.input ? String(data.input).trim() : '');
+    const phone = data?.phone ? String(data.phone).trim() : (data?.input ? String(data.input).trim() : '');
+    const normalizedPin = pin.replace(/\D/g, '');
+    const normalizedPhone = phone.replace(/\D/g, '');
+    if (!normalizedPin && !normalizedPhone) {
+        return { success: false, error: 'بيانات الدخول غير صحيحة' };
+    }
+    // Helper to fetch PIN from private_pins or doc
+    async function getDocPin(col, id, docData) {
+        try {
+            const pDoc = await db.collection('private_pins').doc(id).get();
+            if (pDoc.exists && pDoc.data()?.pin) {
+                return String(pDoc.data()?.pin);
+            }
+        }
+        catch (e) {
+            // fallback
+        }
+        return docData?.pin ? String(docData.pin) : null;
+    }
+    // 1. Check Admin PIN
+    if (normalizedPin) {
+        const adminPinDoc = await db.collection('admin_settings').doc('auth_pin').get();
+        const activeAdminPin = adminPinDoc.exists ? adminPinDoc.data()?.pin : '8899';
+        if (normalizedPin === String(activeAdminPin)) {
+            return { success: true, role: 'admin' };
+        }
+    }
+    // 2. Check Supervisors
+    if (normalizedPin) {
+        const supSnap = await db.collection('supervisors').get();
+        for (const doc of supSnap.docs) {
+            const d = doc.data();
+            const docPin = await getDocPin('supervisors', doc.id, d);
+            if (docPin === normalizedPin) {
+                const { pin: _, ...cleanData } = d;
+                return {
+                    success: true,
+                    role: 'supervisor',
+                    accountId: doc.id,
+                    account: { id: doc.id, ...cleanData }
+                };
+            }
+        }
+    }
+    // 4. Check Delegates
+    const delSnap = await db.collection('delegates').get();
+    for (const doc of delSnap.docs) {
+        const d = doc.data();
+        const docPin = await getDocPin('delegates', doc.id, d);
+        const docPhone = d.phone ? String(d.phone).replace(/\D/g, '') : '';
+        const pinMatch = normalizedPin && docPin === normalizedPin;
+        const phoneMatch = normalizedPhone && docPhone === normalizedPhone;
+        if (pinMatch || (phoneMatch && docPin === normalizedPin)) {
+            const { pin: _, ...cleanData } = d;
+            return {
+                success: true,
+                role: 'delegate',
+                accountId: doc.id,
+                account: { id: doc.id, ...cleanData }
+            };
+        }
+    }
+    // 5. Check Staff
+    if (normalizedPin) {
+        const staffSnap = await db.collection('staff').get();
+        for (const doc of staffSnap.docs) {
+            const d = doc.data();
+            const docPin = await getDocPin('staff', doc.id, d);
+            if (docPin === normalizedPin) {
+                const { pin: _, ...cleanData } = d;
+                return {
+                    success: true,
+                    role: 'staff',
+                    accountId: doc.id,
+                    account: { id: doc.id, ...cleanData }
+                };
+            }
+        }
+    }
+    // 6. Check Garages
+    const garageSnap = await db.collection('garages').get();
+    for (const doc of garageSnap.docs) {
+        const d = doc.data();
+        const docPin = await getDocPin('garages', doc.id, d);
+        const docPhone = d.phone ? String(d.phone).replace(/\D/g, '') : '';
+        const pinMatch = normalizedPin && docPin === normalizedPin;
+        const phoneMatch = normalizedPhone && docPhone === normalizedPhone;
+        if (pinMatch || phoneMatch) {
+            const { pin: _, ...cleanData } = d;
+            return {
+                success: true,
+                role: 'garage',
+                accountId: doc.id,
+                account: { id: doc.id, ...cleanData }
+            };
+        }
+    }
+    return { success: false, error: 'بيانات الدخول غير صحيحة' };
+});
+exports.checkPinAvailability = functions.https.onCall(async (data, context) => {
+    const pin = data?.pin ? String(data.pin).trim().replace(/\D/g, '') : '';
+    const excludeId = data?.excludeId;
+    if (!pin)
+        return { taken: false };
+    const adminPinDoc = await db.collection('admin_settings').doc('auth_pin').get();
+    const activeAdminPin = adminPinDoc.exists ? adminPinDoc.data()?.pin : '8899';
+    if (pin === String(activeAdminPin))
+        return { taken: true, role: 'رمز الإدارة' };
+    const collections = [
+        { name: 'supervisors', label: 'مشرف' },
+        { name: 'delegates', label: 'مندوب' },
+        { name: 'staff', label: 'موظف' },
+        { name: 'garages', label: 'جراج' },
+    ];
+    for (const c of collections) {
+        const snap = await db.collection(c.name).get();
+        for (const doc of snap.docs) {
+            if (excludeId && doc.id === excludeId)
+                continue;
+            const d = doc.data();
+            let docPin = d.pin ? String(d.pin) : null;
+            try {
+                const pDoc = await db.collection('private_pins').doc(doc.id).get();
+                if (pDoc.exists && pDoc.data()?.pin)
+                    docPin = String(pDoc.data()?.pin);
+            }
+            catch (e) { }
+            if (docPin === pin) {
+                return { taken: true, role: c.label, name: d.name || d.ownerName || 'مستخدم آخر' };
+            }
+        }
+    }
+    return { taken: false };
 });
 //# sourceMappingURL=index.js.map

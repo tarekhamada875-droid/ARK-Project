@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, memo } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { 
   Users, 
   Plus, 
@@ -14,7 +14,7 @@ import {
   Loader2, 
   Briefcase
 } from 'lucide-react';
-import { Delegate, Supervisor, GeneralManager } from '../../types';
+import { Delegate, Supervisor, Garage } from '../../types';
 import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
 import { generateSafePin } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
@@ -23,21 +23,28 @@ import { useAdminTranslation } from '../../utils/adminTranslations';
 interface AdminPeopleViewProps {
   delegates: Delegate[];
   supervisors: Supervisor[];
-  generalManagers: GeneralManager[];
   currentSupervisor: Supervisor | null;
+  allGarages?: Garage[];
   onSelectDelegate: (delegate: Delegate) => void;
 }
 
 export const AdminPeopleView = memo(({
   delegates,
   supervisors,
-  generalManagers,
   currentSupervisor,
+  allGarages = [],
   onSelectDelegate
 }: AdminPeopleViewProps) => {
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
-  const [subTab, setSubTab] = useState<'delegates' | 'supervisors' | 'general_managers'>('delegates');
+  const [subTab, setSubTab] = useState<'delegates' | 'supervisors'>('delegates');
+
+  // If user is a supervisor, ensure subTab can never be anything other than delegates
+  useEffect(() => {
+    if (currentSupervisor && subTab !== 'delegates') {
+      setSubTab('delegates');
+    }
+  }, [currentSupervisor, subTab]);
 
   // Delegates State
   const [delegateForm, setDelegateForm] = useState({ name: '', phone: '', pin: '', canCreateGarage: false });
@@ -49,13 +56,6 @@ export const AdminPeopleView = memo(({
   const [editingSupervisorPinId, setEditingSupervisorPinId] = useState<string | null>(null);
   const [editingSupervisorPinValue, setEditingSupervisorPinValue] = useState('');
   const [isUpdatingSupervisorPin, setIsUpdatingSupervisorPin] = useState(false);
-
-  // General Managers State
-  const [gmForm, setGmForm] = useState({ name: '', phone: '', pin: '' });
-  const [isSubmittingGm, setIsSubmittingGm] = useState(false);
-  const [editingGmPinId, setEditingGmPinId] = useState<string | null>(null);
-  const [editingGmPinValue, setEditingGmPinValue] = useState('');
-  const [isUpdatingGmPin, setIsUpdatingGmPin] = useState(false);
 
   const handleCreateDelegate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,36 +109,10 @@ export const AdminPeopleView = memo(({
     }
   };
 
-  const handleCreateGm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!gmForm.name || !gmForm.phone || !gmForm.pin) return;
-    setIsSubmittingGm(true);
-    try {
-      const pinCheck = await firestoreService.isPinTaken(gmForm.pin);
-      if (pinCheck.taken) {
-        setIsSubmittingGm(false);
-        return;
-      }
-      await firestoreService.addGeneralManager({
-        name: gmForm.name,
-        phone: gmForm.phone,
-        pin: gmForm.pin,
-        role: 'general_manager',
-        garageIds: [],
-        createdAt: new Date()
-      });
-      setGmForm({ name: '', phone: '', pin: '' });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmittingGm(false);
-    }
-  };
-
   return (
-    <div className="space-y-6 font-sans pb-16" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
-      {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-800 w-full sm:max-w-xl flex-nowrap overflow-x-auto">
+    <div className="space-y-6">
+      {/* Sub tabs */}
+      <div className="bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 max-w-md mx-auto">
         <button
           type="button"
           onClick={() => setSubTab('delegates')}
@@ -148,8 +122,8 @@ export const AdminPeopleView = memo(({
               : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-          <span className="text-mobile-wrap text-center leading-tight">{t('المندوبين')}</span>
+          <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="text-mobile-wrap text-center leading-tight">{t('المناديب')}</span>
           <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
             subTab === 'delegates'
               ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
@@ -160,47 +134,25 @@ export const AdminPeopleView = memo(({
         </button>
 
         {!currentSupervisor && (
-          <>
-            <button
-              type="button"
-              onClick={() => setSubTab('supervisors')}
-              className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl font-black text-[11px] sm:text-xs transition-all cursor-pointer ${
-                subTab === 'supervisors'
-                  ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="text-mobile-wrap text-center leading-tight">{t('المشرفين')}</span>
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
-                subTab === 'supervisors'
-                  ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-              }`}>
-                {supervisors.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSubTab('general_managers')}
-              className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl font-black text-[11px] sm:text-xs transition-all cursor-pointer ${
-                subTab === 'general_managers'
-                  ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="text-mobile-wrap text-center leading-tight">{t('المديرين العموم')}</span>
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
-                subTab === 'general_managers'
-                  ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-              }`}>
-                {generalManagers.length}
-              </span>
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setSubTab('supervisors')}
+            className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl font-black text-[11px] sm:text-xs transition-all cursor-pointer ${
+              subTab === 'supervisors'
+                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="text-mobile-wrap text-center leading-tight">{t('المشرفين')}</span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
+              subTab === 'supervisors'
+                ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+            }`}>
+              {supervisors.length}
+            </span>
+          </button>
         )}
       </div>
 
@@ -309,37 +261,77 @@ export const AdminPeopleView = memo(({
               </div>
 
               <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {delegates.map((d) => (
-                  <div 
-                    key={d.id} 
-                    onClick={() => onSelectDelegate(d)}
-                    className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-xl hover:border-emerald-500 cursor-pointer group flex flex-col justify-between h-36 transition-all shadow-xs"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center font-black text-xs shrink-0">
-                          {d.name.charAt(0)}
+                {delegates.map((d) => {
+                  if (currentSupervisor) {
+                    const assignedGaragesCount = d.garageCount ?? (allGarages || []).filter(g => g.createdByDelegateId === d.id).length;
+                    const isDelegateActive = d.isActive !== false;
+
+                    return (
+                      <div 
+                        key={d.id} 
+                        className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-xl flex flex-col justify-between h-32 transition-all shadow-xs text-right"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center font-black text-xs shrink-0">
+                            {d.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-mobile-wrap font-black text-slate-900 dark:text-white text-xs leading-snug">
+                              {d.name}
+                            </h4>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="text-mobile-wrap font-black text-slate-900 dark:text-white text-xs leading-snug group-hover:text-emerald-600 transition-colors">
-                            {d.name}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{d.phone}</span>
+                        
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-1 text-[11px]">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold">{t('الحالة:')}</span>
+                            <span className={`font-black ${isDelegateActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                              {isDelegateActive ? t('نشط') : t('غير نشط')}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold">{t('الجراجات التابعة:')}</span>
+                            <span className="font-mono font-black text-slate-800 dark:text-slate-200">
+                              {assignedGaragesCount}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-[10px]">
-                      <div className="flex items-center gap-1 font-mono">
-                        <span className="text-slate-400">{t('PIN:')}</span>
-                        <span className="font-black text-emerald-600 dark:text-emerald-400">{d.pin}</span>
+                    );
+                  }
+
+                  return (
+                    <div 
+                      key={d.id} 
+                      onClick={() => onSelectDelegate(d)}
+                      className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-xl hover:border-emerald-500 cursor-pointer group flex flex-col justify-between h-36 transition-all shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center font-black text-xs shrink-0">
+                            {d.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-mobile-wrap font-black text-slate-900 dark:text-white text-xs leading-snug group-hover:text-emerald-600 transition-colors">
+                              {d.name}
+                            </h4>
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{d.phone}</span>
+                          </div>
+                        </div>
                       </div>
-                      <span className="font-mono font-black text-slate-700 dark:text-slate-300">
-                        +{(d.totalRechargedAmount || 0).toLocaleString()} {t('ج.م')}
-                      </span>
+                      
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-[10px]">
+                        <div className="flex items-center gap-1 font-mono">
+                          <span className="text-slate-400">{t('PIN:')}</span>
+                          <span className="font-black text-emerald-600 dark:text-emerald-400">{d.pin}</span>
+                        </div>
+                        <span className="font-mono font-black text-slate-700 dark:text-slate-300">
+                          +{(d.totalRechargedAmount || 0).toLocaleString()} {t('ج.م')}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {delegates.length === 0 && (
                   <div className="col-span-full py-12 text-center text-xs font-bold text-slate-400">
@@ -524,186 +516,6 @@ export const AdminPeopleView = memo(({
                 {supervisors.length === 0 && (
                   <div className="col-span-full py-12 text-center text-xs font-bold text-slate-400">
                     {t('لا يوجد مشرفين مسجلين')}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* General Managers Section */}
-      {subTab === 'general_managers' && !currentSupervisor && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Add GM Form */}
-          <section className="lg:col-span-1">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-              <h3 className="text-base font-black text-slate-900 dark:text-white mb-5 flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-500/10 text-blue-600 rounded-xl flex items-center justify-center">
-                  <Plus className="w-4 h-4 stroke-[3]" />
-                </div>
-                <span>{t('إضافة مدير عام')}</span>
-              </h3>
-
-              <form onSubmit={handleCreateGm} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('الاسم')}</label>
-                  <input 
-                    value={gmForm.name}
-                    onChange={(e) => setGmForm({ ...gmForm, name: e.target.value })}
-                    placeholder={t('الاسم...')} 
-                    required 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all" 
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('رقم الموبايل')}</label>
-                  <input 
-                    value={gmForm.phone}
-                    onChange={(e) => setGmForm({ ...gmForm, phone: e.target.value })}
-                    placeholder="01xxxxxxxxx" 
-                    required 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500 transition-all" 
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('رمز الدخول (6 أرقام)')}</label>
-                  <div className="relative">
-                    <input 
-                      type="tel"
-                      inputMode="numeric"
-                      value={gmForm.pin}
-                      onChange={(e) => setGmForm({ ...gmForm, pin: e.target.value.replace(/\D/g, '') })}
-                      placeholder="••••••" 
-                      maxLength={6}
-                      required 
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-black text-slate-900 dark:text-white outline-none focus:border-blue-500 text-center tracking-[0.3em] transition-all px-10" 
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setGmForm({ ...gmForm, pin: generateSafePin(generalManagers.map(g => g.pin)) })}
-                      className="absolute left-2 top-2 bottom-2 aspect-square flex items-center justify-center bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                      title={t('توليد رقم سري')}
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit" 
-                  disabled={isSubmittingGm}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-                >
-                  {isSubmittingGm ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                    <>
-                      <Plus className="w-4 h-4 stroke-[3]" />
-                      <span>{t('إضافة المدير العام')}</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </section>
-
-          {/* GM Directory */}
-          <section className="lg:col-span-2">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-              <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Briefcase className="w-5 h-5 text-blue-500" />
-                  <span>{t('المديرين العموم المعتمدين')}</span>
-                </h3>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {generalManagers.length} {t('مدير')}
-                </span>
-              </div>
-
-              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {generalManagers.map((gm) => (
-                  <div 
-                    key={gm.id} 
-                    className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-xl flex flex-col justify-between h-36"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-950/40 text-blue-600 rounded-xl flex items-center justify-center font-black text-xs shrink-0">
-                          {gm.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h4 className="text-mobile-wrap font-black text-slate-900 dark:text-white text-xs leading-snug">{gm.name}</h4>
-                          <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{gm.phone}</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={async () => {
-                          if (window.confirm(adminLang === 'en' ? 'Delete this general manager?' : 'هل أنت متأكد من حذف المدير العام؟')) {
-                            await firestoreService.removeGeneralManager(gm.id);
-                          }
-                        }}
-                        className="text-slate-400 hover:text-rose-500 p-1 transition-colors"
-                        title={t('حذف')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-[10px]">
-                      <span className="text-slate-400">{t('الرمز السري:')}</span>
-                      {editingGmPinId === gm.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="tel"
-                            inputMode="numeric"
-                            value={editingGmPinValue}
-                            maxLength={6}
-                            onChange={(e) => setEditingGmPinValue(e.target.value.replace(/\D/g, ''))}
-                            className="w-14 text-center font-mono font-black text-[10px] bg-white dark:bg-slate-900 border rounded px-1"
-                            autoFocus
-                          />
-                          <button
-                            onClick={async () => {
-                              if (editingGmPinValue.length < 4) return;
-                              setIsUpdatingGmPin(true);
-                              try {
-                                await firestoreService.updateGeneralManager(gm.id, { pin: editingGmPinValue });
-                                gm.pin = editingGmPinValue;
-                                setEditingGmPinId(null);
-                              } catch (err) {
-                                console.error(err);
-                              } finally {
-                                setIsUpdatingGmPin(false);
-                              }
-                            }}
-                            className="text-emerald-600 font-bold"
-                          >
-                            {isUpdatingGmPin ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono font-black text-blue-600 dark:text-blue-400">{gm.pin}</span>
-                          <button
-                            onClick={() => {
-                              setEditingGmPinId(gm.id);
-                              setEditingGmPinValue(gm.pin || '');
-                            }}
-                            className="text-[10px] text-blue-600 hover:underline font-bold"
-                          >
-                            {t('تعديل')}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {generalManagers.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-xs font-bold text-slate-400">
-                    {t('لا يوجد مديرين عموم مسجلين')}
                   </div>
                 )}
               </div>

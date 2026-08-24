@@ -17,8 +17,12 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   const [error, setError] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [attempts, setAttempts] = useState(() => {
-    return parseInt(localStorage.getItem('logout_attempts') || '0');
+    return parseInt(localStorage.getItem('logout_attempts') || '0', 10);
   });
+
+  const normalizedCorrectPin = normalizeDigits(correctPin || '');
+  const targetLength = normalizedCorrectPin.length >= 4 ? normalizedCorrectPin.length : 4;
+  const displayLength = Math.max(targetLength, pin.length);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -28,7 +32,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   }, []);
 
   const handleKeyPress = (num: string) => {
-    if (pin.length < 4 && !isLoggingOut) {
+    if (pin.length < 10 && !isLoggingOut) {
       const newPin = pin + num;
       setPin(newPin);
       setError(false);
@@ -43,14 +47,14 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
   };
 
   const handleLogoutSubmit = async () => {
-    if (pin.length < 4 || isLoggingOut) return;
+    if (pin.length < targetLength || isLoggingOut) return;
     setIsLoggingOut(true);
     setError(false);
     
     // Simulate verification delay like the login screen to show the loader
     await new Promise((resolve) => setTimeout(resolve, 800));
     
-    if (normalizeDigits(pin) === normalizeDigits(correctPin)) {
+    if (normalizeDigits(pin) === normalizedCorrectPin) {
       localStorage.setItem('logout_attempts', '0');
       setAttempts(0);
       onConfirm();
@@ -76,6 +80,19 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
     }
   };
 
+  const getBoxSize = () => {
+    if (displayLength <= 4) return 'w-14 h-18 text-4xl';
+    if (displayLength <= 6) return 'w-11 h-15 text-3xl sm:w-12 sm:h-16';
+    if (displayLength <= 8) return 'w-9 h-13 text-2xl sm:w-10 sm:h-14';
+    return 'w-8 h-12 text-xl';
+  };
+
+  const getGapClass = () => {
+    if (displayLength <= 4) return 'gap-3';
+    if (displayLength <= 6) return 'gap-2';
+    return 'gap-1.5';
+  };
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div 
@@ -83,23 +100,23 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
         className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
       />
       <div 
-        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-8 border border-slate-150 dark:border-slate-800 shadow-xl"
+        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 sm:p-8 border border-slate-150 dark:border-slate-800 shadow-xl"
         dir="rtl"
       >
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <p className="text-slate-500 dark:text-slate-400 font-bold text-sm leading-relaxed px-4">
             <span className="text-emerald-600 dark:text-emerald-400 text-sm font-black mt-2 block select-none">
-              (متبقي لك {3 - attempts} محاولات)
+              (متبقي لك {Math.max(0, 3 - attempts)} محاولات)
             </span>
           </p>
         </div>
 
         {/* PIN Display */}
-        <div className="flex justify-center gap-3 mb-8" dir="ltr">
-          {[0, 1, 2, 3].map((i) => (
+        <div className={`flex justify-center ${getGapClass()} mb-8 items-center min-h-[4.5rem]`} dir="ltr">
+          {Array.from({ length: displayLength }).map((_, i) => (
             <div 
               key={i}
-              className={`w-14 h-18 rounded-2xl border-2 flex items-center justify-center text-4xl font-black relative overflow-hidden transition-all ${
+              className={`${getBoxSize()} rounded-2xl border-2 flex items-center justify-center font-black relative overflow-hidden transition-all shrink-0 ${
                 error 
                   ? 'border-red-500 text-red-500 bg-red-50 dark:bg-red-950/30' 
                   : (pin[i] ? 'border-emerald-500 text-white bg-emerald-600' : 'border-slate-200 dark:border-slate-800 text-transparent bg-slate-50/50 dark:bg-slate-800/50')
@@ -154,7 +171,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
           <button
             type="button"
             onClick={handleLogoutSubmit}
-            disabled={pin.length < 4 || isLoggingOut}
+            disabled={pin.length < targetLength || isLoggingOut}
             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] outline-none"
           >
             {isLoggingOut ? (

@@ -3,7 +3,7 @@ import { Package } from '../../types';
 import { getCleanPackageInfo } from '../../constants/packages';
 import { ChevronRight, Clock, Car, Sparkles, Filter } from 'lucide-react';
 import { calculateFinalPrice } from '../../utils';
-import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
+import { useSystemSubscribersFlatFee, useSystemReferralFee } from '../../hooks/useSystemSubscribersFlatFee';
 
 interface PackagesModalProps {
   packages: Package[];
@@ -13,6 +13,7 @@ interface PackagesModalProps {
   onToggleMenu?: () => void;
   subscriptionPrices?: { weekly?: number; biweekly?: number; monthly?: number };
   hasMonthlySubscribers?: boolean;
+  referrerId?: string | null;
 }
 
 export { getCleanPackageInfo };
@@ -21,10 +22,13 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
   packages, 
   onClose, 
   walletNumber = "01552411323",
-  hasMonthlySubscribers = false
+  hasMonthlySubscribers = false,
+  referrerId = null
 }) => {
   const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
   const subscriberFlatFee = useSystemSubscribersFlatFee();
+  const systemReferralFee = useSystemReferralFee();
+  const effectiveReferralFee = referrerId ? systemReferralFee : 0;
 
   const formatNumber = (num: number | string) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -49,7 +53,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
 
   const displayPackages = rawList
     .map(p => {
-      const { finalPrice } = calculateFinalPrice(p, hasMonthlySubscribers, subscriberFlatFee);
+      const { finalPrice } = calculateFinalPrice(p, hasMonthlySubscribers, subscriberFlatFee, effectiveReferralFee);
       return {
         ...p,
         _sortPrice: finalPrice
@@ -157,7 +161,7 @@ export const PackagesModal: React.FC<PackagesModalProps> = memo(({
           <div className="space-y-3">
             {filteredPackages.map((pkg) => {
               const info = getCleanPackageInfo(pkg);
-              const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(pkg, hasMonthlySubscribers, subscriberFlatFee);
+              const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(pkg, hasMonthlySubscribers, subscriberFlatFee, effectiveReferralFee);
 
               const packageName = info.displayName;
 

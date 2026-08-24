@@ -29,13 +29,15 @@ export default defineConfig(({mode}) => {
       emptyOutDir: true,
       sourcemap: false,
       minify: 'esbuild',
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['firebase/app', 'firebase/firestore', 'firebase/auth', 'react', 'react-dom', 'zustand'],
-            admin: ['./src/components/admin/AdminDashboard.tsx', './src/components/admin/AdminGarageDetailsView.tsx'],
-            garage: ['./src/components/garage/GarageDashboardView.tsx', './src/components/garage/GarageReportsView.tsx', './src/components/garage/SubscribersView.tsx'],
-            delegate: ['./src/components/delegate/DelegateDashboardView.tsx'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('firebase')) return 'firebase';
+              if (id.includes('react') || id.includes('zustand') || id.includes('lucide-react') || id.includes('motion')) return 'vendor';
+              return 'deps';
+            }
           }
         }
       }

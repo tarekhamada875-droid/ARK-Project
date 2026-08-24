@@ -26,6 +26,85 @@ interface ActivityLogExportModalProps {
 
 type ExportPeriod = 'hour' | 'today' | 'week';
 
+function formatCairoArabicDate(dateObj: any): string {
+  const d = safeDate(dateObj);
+  if (!d || isNaN(d.getTime())) return '';
+
+  const parts = new Intl.DateTimeFormat('ar-EG-u-nu-latn', {
+    timeZone: 'Africa/Cairo',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).formatToParts(d);
+
+  let weekday = '', day = '', month = '', year = '', hour = '', minute = '', dayPeriod = '';
+  for (const part of parts) {
+    if (part.type === 'weekday') weekday = part.value;
+    else if (part.type === 'day') day = part.value;
+    else if (part.type === 'month') month = part.value;
+    else if (part.type === 'year') year = part.value;
+    else if (part.type === 'hour') hour = part.value;
+    else if (part.type === 'minute') minute = part.value;
+    else if (part.type === 'dayPeriod') dayPeriod = part.value;
+  }
+
+  return `${weekday}، ${day} ${month} ${year} — ${hour}:${minute} ${dayPeriod}`;
+}
+
+function getActionLabel(action?: string): string {
+  switch (action) {
+    case 'check_in':
+      return 'تسجيل دخول سيارة';
+    case 'check_out':
+      return 'تسجيل خروج سيارة';
+    case 'recharge':
+      return 'شحن اشتراك';
+    case 'delete_refund':
+      return 'حذف سيارة مع استرداد';
+    case 'commission_payment':
+      return 'دفع عمولة';
+    default:
+      return action || '';
+  }
+}
+
+function getDetailsContent(log: any): string {
+  const action = log.actionType || log.action;
+  if (action === 'check_in' || action === 'check_out') {
+    return log.plateNumber || '';
+  }
+  if (action === 'delete_refund') {
+    const raw = log.plateNumber || (typeof log.details === 'string' ? log.details : '');
+    return raw.replace(/^مسح لوحة:\s*/, '');
+  }
+  if (action === 'recharge') {
+    if (log.details && typeof log.details === 'object' && log.details.packageName) {
+      const days = log.details.durationDays ? ` — ${log.details.durationDays} يوم` : '';
+      return `${log.details.packageName}${days}`;
+    }
+    if (typeof log.details === 'string' && log.details.trim()) {
+      return log.details;
+    }
+    return log.plateNumber || '';
+  }
+  if (typeof log.details === 'string' && log.details.trim()) {
+    return log.details.replace(/^مسح لوحة:\s*/, '');
+  }
+  return log.plateNumber || '';
+}
+
+function getAmountContent(log: any): string | number {
+  const val = typeof log.amount === 'number' ? log.amount : (typeof log.totalFee === 'number' ? log.totalFee : null);
+  if (val !== null && val !== undefined && val > 0) {
+    return val;
+  }
+  return '';
+}
+
 export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps) => {
   const { adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
@@ -69,37 +148,26 @@ export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps)
         return `"${str}"`;
       };
 
-      const formatDateTime = (dateObj: any) => {
-        const d = safeDate(dateObj);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const ss = String(d.getSeconds()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
-      };
-
-      // CSV Headers (Arabic Excel friendly)
+      // CSV Headers strictly according to v141
       const headers = [
-        t('التاريخ والوقت'),
-        t('الجراج'),
-        t('الموظف'),
-        t('نوع العملية'),
-        t('اللوحة'),
-        t('المبلغ (ج.م)')
+        'التوقيت',
+        'الجراج',
+        'بواسطة',
+        'العملية',
+        'التفاصيل',
+        'المبلغ (ج.م)'
       ];
 
       const csvRows = [headers.map(escapeCsv).join(',')];
 
       for (const log of logs) {
         const row = [
-          formatDateTime(log.timestamp),
+          formatCairoArabicDate(log.timestamp),
           log.garageName || '',
-          log.staffName || t('السيستم'),
-          log.actionType || '',
-          log.plateNumber || '',
-          log.amount !== undefined ? log.amount : ''
+          log.staffName || (log as any).operatorName || 'مدير الجراج',
+          getActionLabel(log.actionType || (log as any).action),
+          getDetailsContent(log),
+          getAmountContent(log)
         ];
         csvRows.push(row.map(escapeCsv).join(','));
       }

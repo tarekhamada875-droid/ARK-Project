@@ -171,12 +171,6 @@ export const AdminGarageDetailsView = memo(({
 
       await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
 
-      try {
-        await firestoreService.processReferralRewardForRecharge(selectedGarageForDetails.id);
-      } catch (err) {
-        console.error('Error processing referral reward on manual recharge:', err);
-      }
-
       await firestoreService.addActivityLog({
         garageId: selectedGarageForDetails.id,
         garageName: selectedGarageForDetails.name,
@@ -841,7 +835,7 @@ export const AdminGarageDetailsView = memo(({
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <Gift className="w-4 h-4 text-emerald-500" />
-                <span>{t('نظام مكافآت الإحالة (15 يوم اشتراك مجاني)')}</span>
+                <span>{t('نظام مكافآت الإحالة (يومان مجانيان عند كل تجديد)')}</span>
               </h3>
               <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
                 {t('أيام المكافآت:')} {selectedGarageForDetails.totalReferralRewardDays || 0} {t('يوم')}
@@ -900,10 +894,8 @@ export const AdminGarageDetailsView = memo(({
                   {allGarages.filter(g => g.referredByGarageId === selectedGarageForDetails.id).map(rg => (
                     <div key={rg.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white dark:bg-slate-900">
                       <span className="font-bold text-slate-800 dark:text-slate-200">{rg.name}</span>
-                      <span className={`text-[10px] font-black px-1.5 py-0.2 rounded ${
-                        rg.referralRewardClaimed ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {rg.referralRewardClaimed ? t('ممنوح 15 يوم') : t('في الانتظار')}
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                        {t('مُسجّل بالترشيح')}
                       </span>
                     </div>
                   ))}
