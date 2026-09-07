@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { firestoreServiceV2 as firestoreService } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
 
 describe('v160 — Delegate Access Scope Restriction (تقييد نطاق وصول المندوب)', () => {
   beforeEach(() => {

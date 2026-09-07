@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { getStorage } from '../utils';
 
 export function useLocalStorageState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState<T>(() => getStorage(key, defaultValue));
+  const defaultValueRef = useRef(defaultValue);
+  useEffect(() => {
+    defaultValueRef.current = defaultValue;
+  }, [defaultValue]);
+
+  const [state, setState] = useState<T>(() => getStorage(key, defaultValueRef.current));
   const isFirstRender = useRef(true);
 
   // Sync state changes to localStorage without triggering mount loops
@@ -34,7 +39,7 @@ export function useLocalStorageState<T>(key: string, defaultValue: T): [T, React
       if (e instanceof StorageEvent && e.key && e.key !== key) {
         return;
       }
-      const newValue = getStorage(key, defaultValue);
+      const newValue = getStorage(key, defaultValueRef.current);
       setState(prev => {
         if (typeof newValue === 'object' && newValue !== null) {
           if (JSON.stringify(newValue) === JSON.stringify(prev)) return prev;
@@ -52,7 +57,7 @@ export function useLocalStorageState<T>(key: string, defaultValue: T): [T, React
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('local-storage-update', handleStorageChange);
     };
-  }, [key, defaultValue]);
+  }, [key]);
 
   return [state, setState];
 }

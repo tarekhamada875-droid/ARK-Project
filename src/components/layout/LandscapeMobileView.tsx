@@ -12,64 +12,51 @@ export const LandscapeMobileView: React.FC<LandscapeMobileViewProps> = memo(({ g
       {garage ? (
         <div className="flex-1 flex flex-row w-full h-full bg-[#ffd43b] dark:bg-slate-950 transition-colors">
           
-          {/* Right Pane: Hourly Rate - Renders on the right when dir="rtl" */}
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-            <div className="relative z-10 flex flex-col items-center max-w-sm w-full">
-              <h3 className="flex flex-col items-center gap-1 select-none text-slate-950 dark:text-[#ffd43b]">
-                <span className="text-2xl md:text-3xl font-black tracking-wider uppercase leading-tight">
-                  HOURLY RATE
-                </span>
-                <span className="text-lg md:text-xl font-bold opacity-90 leading-tight">
-                  سعر الساعة
-                </span>
+          {/* Right Pane: Hourly Tariff Block */}
+          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative overflow-hidden">
+            <div className="w-full flex flex-col items-center max-w-xs">
+              <h3 className="flex flex-col items-center gap-0.5 select-none text-slate-950 dark:text-[#ffd43b]">
+                <span className="font-sans font-black tracking-wider text-sm sm:text-base md:text-lg">TARIFF PER HOUR</span>
+                <span className="font-serif font-black text-xs sm:text-sm md:text-base opacity-90">حساب الساعة</span>
               </h3>
               
-              {/* Price Display */}
-              <div className="flex flex-col items-center justify-center select-none mt-2 w-full">
-                <span className="text-[52vh] font-extrabold font-mono tracking-tighter text-slate-950 dark:text-[#ffd43b] leading-none select-none">
+              {/* Dynamic Fluid Value containment using viewport heights to lock structural clipping */}
+              <div className="flex flex-col items-center justify-center w-full mt-1">
+                <span className="font-mono font-black tracking-tighter text-slate-950 dark:text-[#ffd43b] leading-none select-none text-[38vh] sm:text-[44vh]">
                   {garage.hourlyRate}
                 </span>
-                <span className="text-xl md:text-2xl font-black font-mono uppercase tracking-widest text-slate-950 dark:text-[#ffd43b] opacity-80 mt-1">
-                  EGP
+                <span className="font-mono font-black text-xs sm:text-sm uppercase tracking-widest text-slate-950 dark:text-[#ffd43b] opacity-80 mt-1">
+                  EGP / جنيه
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Left Pane: Overnight Stay - Renders on the left when dir="rtl" with a thick and prominent divider */}
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden border-r-[6px] border-slate-950 dark:border-[#ffd43b]">
-            <div className="relative z-10 flex flex-col items-center max-w-sm w-full">
-              <h3 className="flex flex-col items-center gap-1 select-none text-slate-950 dark:text-[#ffd43b]">
-                <span className="text-2xl md:text-3xl font-black tracking-wider uppercase leading-tight">
-                  OVERNIGHT STAY
-                </span>
-                <span className="text-lg md:text-xl font-bold opacity-90 leading-tight">
-                  سعر المبيت
-                </span>
+          {/* Left Pane: Overnight Stay Container with prominent border division line */}
+          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative overflow-hidden border-r-[4px] md:border-r-[6px] border-slate-950 dark:border-[#ffd43b]">
+            <div className="w-full flex flex-col items-center max-w-xs">
+              <h3 className="flex flex-col items-center gap-0.5 select-none text-slate-950 dark:text-[#ffd43b]">
+                <span className="font-sans font-black tracking-wider text-sm sm:text-base md:text-lg">OVERNIGHT STAY</span>
+                <span className="font-serif font-black text-xs sm:text-sm md:text-base opacity-90">المبيت / اليوم</span>
               </h3>
               
-              {/* Price Display */}
-              <div className="flex flex-col items-center justify-center select-none mt-2 w-full">
-                <span className="text-[52vh] font-extrabold font-mono tracking-tighter text-slate-950 dark:text-[#ffd43b] leading-none select-none">
+              <div className="flex flex-col items-center justify-center w-full mt-1">
+                <span className="font-mono font-black tracking-tighter text-slate-950 dark:text-[#ffd43b] leading-none select-none text-[38vh] sm:text-[44vh]">
                   {garage.overnightRate}
                 </span>
-                <span className="text-xl md:text-2xl font-black font-mono uppercase tracking-widest text-slate-950 dark:text-[#ffd43b] opacity-80 mt-1">
-                  EGP
+                <span className="font-mono font-black text-xs sm:text-sm uppercase tracking-widest text-slate-950 dark:text-[#ffd43b] opacity-80 mt-1">
+                  EGP / جنيه
                 </span>
               </div>
             </div>
           </div>
+
         </div>
       ) : (
-        /* Fallback if rotated before logging in */
         <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#ffd43b] dark:bg-slate-950 text-slate-950 dark:text-[#ffd43b] text-center">
-          <Smartphone className="w-16 h-16 mb-4 animate-bounce opacity-80" />
-          <h2 className="text-2xl font-black mb-2">
-            يرجى تدوير الهاتف للوضع الرأسي
-          </h2>
-          <p className="text-sm opacity-80 max-w-xs">
-            قم بتسجيل الدخول أولاً لعرض لوحة الأسعار الكبيرة
-          </p>
+          <Smartphone className="w-12 h-12 mb-3 animate-bounce opacity-80" />
+          <h2 className="text-xl font-black mb-1 font-sans">يرجى تدوير الجهاز</h2>
+          <p className="text-xs opacity-80 max-w-xs font-serif font-bold">اقلب الهاتف للوضعية الرأسية لمتابعة تسجيل الدخول</p>
         </div>
       )}
     </div>

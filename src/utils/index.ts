@@ -1,14 +1,18 @@
+import { isSubscriptionExpired as checkExpired, isUnlimitedCapacity as checkUnlimited } from "../domain/garage/subscription";
+import { getCleanPackageInfo } from '../constants/packages';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+
+
  */
 
 import { Timestamp } from 'firebase/firestore';
 
 export const safeDate = (date: any): Date => {
   if (!date) return new Date();
-  if (date instanceof Timestamp) return date.toDate();
-  if (typeof date.toDate === 'function') return date.toDate();
+  if (typeof Timestamp === 'function' && date instanceof Timestamp) return date.toDate();
+  if (typeof date?.toDate === 'function') return date.toDate();
   
   // Handle Firestore internal object structure if passed directly
   if (typeof date === 'object' && date.seconds !== undefined) {
@@ -267,16 +271,8 @@ export const formatEntryTimeParts = (entryTime: any, referenceNow?: Date) => {
 
 export const isSessionActive = (lastActive: any, serverTimeOffset: number = 0): boolean => {
   if (!lastActive) return false;
-  let lastActiveMillis = 0;
-  if (lastActive instanceof Timestamp) {
-    lastActiveMillis = lastActive.toMillis();
-  } else if (typeof lastActive === 'object' && (lastActive as any).seconds !== undefined) {
-    lastActiveMillis = (lastActive as any).seconds * 1000;
-  } else if (typeof lastActive === 'number') {
-    lastActiveMillis = lastActive;
-  } else {
-    lastActiveMillis = new Date(lastActive).getTime();
-  }
+  const lastActiveMillis = safeDate(lastActive).getTime();
+  if (isNaN(lastActiveMillis) || lastActiveMillis === 0) return false;
   // If last activity was within 10 minutes (600000ms), session is active
   return Date.now() + serverTimeOffset - lastActiveMillis < 600000;
 };
@@ -359,6 +355,8 @@ export const isLightColor = (color: string | undefined): boolean => {
 export { 
   isSubscriptionExpired, 
   getRemainingDays, 
+  getRemainingSubscriptionInfo,
+  type RemainingSubscriptionInfo,
   isTrialActive, 
   getEffectiveDailyCapacity,
   isUnlimitedCapacity, 
@@ -385,7 +383,7 @@ export const calculateFinalPrice = (
   pkg: any, 
   hasMonthlySubscribers: boolean = false, 
   flatFee: number = 500,
-  referralFee: number = 0
+  referralFee: number | { daily?: number; weekly?: number; biweekly?: number; monthly?: number; [key: string]: number | undefined } = 0
 ): {
   basePrice: number;
   hasDiscount: boolean;
@@ -393,6 +391,7 @@ export const calculateFinalPrice = (
   finalPrice: number;
   totalDiscount: number;
   displayBasePrice: number;
+  actualReferralFee: number;
 } => {
   if (!pkg) {
     return {
@@ -402,36 +401,56 @@ export const calculateFinalPrice = (
       finalPrice: 0,
       totalDiscount: 0,
       displayBasePrice: 0,
+      actualReferralFee: 0,
     };
   }
-  const rawBasePrice = pkg.price || 0;
-  const refFee = Number(referralFee) >= 0 ? Number(referralFee) : 0;
-  const basePrice = rawBasePrice + refFee;
+  const basePrice = pkg.price || 0;
+  const durationDays = typeof pkg.durationDays === 'number' ? pkg.durationDays : (packageIdToDays(pkg.id || '', pkg.name) || 30);
+  
+  let actualReferralFee = 0;
+  if (typeof referralFee === 'object' && referralFee !== null) {
+    if (durationDays <= 1) {
+      actualReferralFee = referralFee.daily !== undefined ? Number(referralFee.daily) : 5;
+    } else if (durationDays <= 7) {
+      actualReferralFee = referralFee.weekly !== undefined ? Number(referralFee.weekly) : 15;
+    } else if (durationDays <= 15) {
+      actualReferralFee = referralFee.biweekly !== undefined ? Number(referralFee.biweekly) : 25;
+    } else {
+      actualReferralFee = referralFee.monthly !== undefined ? Number(referralFee.monthly) : 50;
+    }
+  } else if (Number(referralFee) > 0) {
+    // Number passed directly
+    if (durationDays <= 1) {
+      actualReferralFee = 5;
+    } else if (durationDays <= 7) {
+      actualReferralFee = 15;
+    } else if (durationDays <= 15) {
+      actualReferralFee = 25;
+    } else {
+      actualReferralFee = Number(referralFee) >= 0 ? Number(referralFee) : 50;
+    }
+  }
+  
+  actualReferralFee = Math.max(0, actualReferralFee);
+  
   const hasDiscount = !!(pkg.discountValue && pkg.discountValue > 0);
   const discountedPrice = hasDiscount
     ? (pkg.discountType === 'percentage'
         ? Math.round(basePrice * (1 - pkg.discountValue / 100))
         : Math.max(0, basePrice - pkg.discountValue))
     : basePrice;
-  const finalPrice = applyMonthlySubscribersFlatFee(discountedPrice, hasMonthlySubscribers, flatFee);
+  const finalPrice = applyMonthlySubscribersFlatFee(discountedPrice, hasMonthlySubscribers, flatFee) + actualReferralFee;
   const displayBasePrice = applyMonthlySubscribersFlatFee(basePrice, hasMonthlySubscribers, flatFee);
   const totalDiscount = displayBasePrice - finalPrice;
-  return { basePrice, hasDiscount, discountedPrice, finalPrice, totalDiscount, displayBasePrice };
+  return { basePrice, hasDiscount, discountedPrice, finalPrice, totalDiscount, displayBasePrice, actualReferralFee };
 };
 
 /**
  * Converts a subscription package ID to duration in days.
+ * Delegates to getCleanPackageInfo as the single source of truth.
  */
 export const packageIdToDays = (packageId: string, pkgName?: string): number => {
-  if (packageId === 'weekly_sub') return 7;
-  if (packageId === 'biweekly_sub' || packageId === '15days') return 15;
-  if (packageId === 'monthly_sub') return 30;
-  if (pkgName) {
-    if (pkgName.includes('أسبوع') || pkgName.includes('7 يوم') || pkgName.includes('7 days')) return 7;
-    if (pkgName.includes('15 يوم') || pkgName.includes('نصف شهر') || pkgName.includes('15 days')) return 15;
-    if (pkgName.includes('شهر') || pkgName.includes('30 يوم') || pkgName.includes('monthly') || pkgName.includes('30 days')) return 30;
-  }
-  return 30; // Default: 30 days (not 365+)
+  return getCleanPackageInfo({ id: packageId, name: pkgName }).durationDays || 30;
 };
 
 /**
@@ -503,4 +522,131 @@ export const createAsyncLock = () => {
   };
 };
 
+/**
+ * Throttles snapshot updates to prevent excessive re-renders and UI thrashing.
+ */
+export function throttleSnapshot<T>(callback: (data: T) => void, limitMs = 4000) {
+  let lastRan = 0;
+  let storedData: T | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  return (incomingData: T) => {
+    storedData = incomingData;
+    const now = Date.now();
+
+    if (now - lastRan >= limitMs) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      callback(storedData);
+      lastRan = now;
+    } else if (!timeoutId) {
+      timeoutId = setTimeout(() => {
+        if (storedData !== null) {
+          callback(storedData);
+        }
+        lastRan = Date.now();
+        timeoutId = null;
+      }, limitMs - (now - lastRan));
+    }
+  };
+}
+
+
+
+
+
+export const getPackageRechargeRestrictions = (garage: any, targetPackage: any) => {
+  if (!garage || !targetPackage) return { isAllowed: true, reason: '' };
+
+  const targetDays = typeof targetPackage.durationDays === 'number' ? targetPackage.durationDays : packageIdToDays(targetPackage.id, targetPackage.name);
+
+  // Business Rule: If garage has monthly subscribers service enabled, only 30-day packages are allowed
+  if (garage.hasMonthlySubscribers && targetDays !== 30) {
+    return { 
+      isAllowed: false, 
+      reason: 'خدمة المشتركين الشهريين مفعلة لهذا الجراج، لذلك يقتصر الشحن على باقات الـ 30 يوم (الشهرية) فقط.' 
+    };
+  }
+
+  const isExpired = checkExpired(garage);
+  const currentPackageName = String(garage.activePackageName || garage.packageName || garage.lastPackageName || '');
+  const currentPackageId = garage.activePackageId || garage.packageId || '';
+  
+  const currentDays = packageIdToDays(currentPackageId, currentPackageName) || 30;
+  const currentIsDaily = currentDays <= 2;
+  const currentIsUnlimited = checkUnlimited(garage);
+
+  const targetIsDaily = targetDays <= 2;
+  
+  const targetName = (targetPackage.name || '').toLowerCase();
+  const targetIsUnlimited = targetPackage.dailyCapacity === 0 || targetName.includes('مفتوح') || targetName.includes('غير محدود') || targetName.includes('بدون حد') || targetName.includes('تجريبي');
+
+  if (!isExpired && currentIsUnlimited && !targetIsUnlimited) {
+    return { isAllowed: false, reason: 'لا يمكن شحن باقة محدودة لأن الجراج يعمل حالياً بباقة غير محدودة سارية.' };
+  }
+
+  if (!isExpired && !currentIsDaily && targetIsDaily) {
+    return { isAllowed: false, reason: 'لا يمكن شحن باقة يومية لأن الجراج يمتلك باقة طويلة سارية.' };
+  }
+
+  return { isAllowed: true, reason: '' };
+};
+
+/**
+ * Business Rule: Garage rates (hourly / overnight) can only be modified once every 30 days.
+ */
+export const canChangeGarageRates = (garage: any): { allowed: boolean; daysRemaining: number; nextAllowedDate: Date | null } => {
+  if (!garage?.lastRateChangeDate) {
+    return { allowed: true, daysRemaining: 0, nextAllowedDate: null };
+  }
+
+  const lastChange = safeDate(garage.lastRateChangeDate);
+  if (isNaN(lastChange.getTime())) {
+    return { allowed: true, daysRemaining: 0, nextAllowedDate: null };
+  }
+
+  const now = Date.now();
+  const diffMs = now - lastChange.getTime();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+  if (diffMs < thirtyDaysMs) {
+    const remainingMs = thirtyDaysMs - diffMs;
+    const daysRemaining = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    const nextAllowedDate = new Date(lastChange.getTime() + thirtyDaysMs);
+    return { allowed: false, daysRemaining: Math.max(1, daysRemaining), nextAllowedDate };
+  }
+
+  return { allowed: true, daysRemaining: 0, nextAllowedDate: null };
+};
+
+/**
+ * Detects whether a PIN string is a cryptographic hash (scrypt, sha256, etc.) rather than a plain PIN.
+ */
+export const isHashedPin = (pin: string | undefined | null): boolean => {
+  if (!pin) return false;
+  const str = String(pin).trim();
+  return (
+    str.startsWith('$') ||
+    str.startsWith('!$') ||
+    str.startsWith('scrypt') ||
+    str.includes('$N=') ||
+    str.includes('$scrypt$') ||
+    (str.length === 64 && /^[0-9a-f]{64}$/i.test(str)) ||
+    str.length > 12
+  );
+};
+
+/**
+ * Formats plain text or hashed PINs for clean UI display without breaking layouts.
+ */
+export const formatDisplayPin = (pin: string | undefined | null): string => {
+  if (!pin) return '—';
+  const str = String(pin).trim();
+  if (isHashedPin(str)) {
+    return '•••••• (مشفر)';
+  }
+  return str;
+};
 

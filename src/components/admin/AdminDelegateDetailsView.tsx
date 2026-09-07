@@ -24,9 +24,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Delegate, ActivityLog, RechargeRequest } from '../../types';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
 import { Spinner } from '../ui/Spinner';
-import { safeDate } from '../../utils';
+import { safeDate, formatDisplayPin } from '../../utils';
 import { 
   calculateApprovedCommission, 
   calculateApprovedRechargeTotal, 
@@ -56,7 +56,7 @@ export const AdminDelegateDetailsView = memo(({
   const [showMenu, setShowMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isEditingPin, setIsEditingPin] = useState(false);
-  const [pinInput, setPinInput] = useState(delegate.pin || '');
+  const [pinInput, setPinInput] = useState(delegate.pin && delegate.pin.length === 64 ? '' : (delegate.pin || ''));
   const [isUpdatingPin, setIsUpdatingPin] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -388,8 +388,18 @@ export const AdminDelegateDetailsView = memo(({
                           }
                           setIsUpdatingPin(true);
                           try {
-                            await firestoreService.updateDelegate(delegate.id, { pin: pinInput });
-                            delegate.pin = pinInput;
+                            const cleanPin = pinInput.trim();
+                            const pinCheck = await firestoreService.isPinTaken(cleanPin, delegate.id);
+                            if (pinCheck.taken) {
+                              alert(adminLang === 'en' 
+                                ? `This PIN is already used by another account (${pinCheck.name} - ${pinCheck.role})`
+                                : `هذا الرمز مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`);
+                              setIsUpdatingPin(false);
+                              return;
+                            }
+
+                            await firestoreService.updateDelegate(delegate.id, { pin: cleanPin });
+                            delegate.pin = cleanPin;
                             setIsEditingPin(false);
                           } catch (err) {
                             alert(adminLang === 'en' ? 'Failed to update PIN' : 'فشل تحديث الرمز');
@@ -404,7 +414,7 @@ export const AdminDelegateDetailsView = memo(({
                       </button>
                       <button
                         onClick={() => {
-                          setPinInput(delegate.pin || '');
+                          setPinInput(delegate.pin && delegate.pin.length === 64 ? '' : (delegate.pin || ''));
                           setIsEditingPin(false);
                         }}
                         className="text-xs font-bold text-slate-400 px-1 hover:underline"
@@ -418,7 +428,7 @@ export const AdminDelegateDetailsView = memo(({
                       className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-2xl text-blue-600 dark:text-blue-400 text-sm font-black transition-all hover:bg-blue-100 dark:hover:bg-blue-900/40 cursor-pointer"
                     >
                       <Lock className="w-4 h-4" />
-                      <span>{t('الرمز:')} {delegate.pin}</span>
+                      <span>{t('الرمز:')} {formatDisplayPin(delegate.pin)}</span>
                       <span className="text-[10px] text-blue-400 dark:text-blue-500 font-bold underline mr-1 hover:text-blue-600">{t('تعديل')}</span>
                     </button>
                   )}
@@ -441,14 +451,9 @@ export const AdminDelegateDetailsView = memo(({
           <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors">
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-              <div>
-                <h3 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <span>{t('تجميع إحصائيات الشحن والعمولات شهرياً (تلقائي)')}</span>
-                </h3>
-                <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                  {t('يتم احتساب المبيعات والعمولة تلقائياً لكل شهر ميلادي بدون الحاجة لإعادة التعيين')}
-                </p>
-              </div>
+              <h3 className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span>{t('تجميع إحصائيات الشحن والعمولات شهرياً')}</span>
+              </h3>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -474,98 +479,124 @@ export const AdminDelegateDetailsView = memo(({
           </div>
 
           {/* Commission & Stats Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Total Stats */}
-            <div className="bg-slate-900 dark:bg-slate-900 rounded-2xl p-8 text-white space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 1. Gross Sales Card */}
+            <div className="bg-slate-900 dark:bg-slate-900 rounded-2xl p-6 text-white space-y-4 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                    <Wallet className="w-5 h-5 text-emerald-400" />
+                    <Wallet className="w-5 h-5 text-blue-400" />
                   </div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">
-                    {selectedMonthKey === 'all' ? t('إجمالي المبيعات الكلي') : `${t('مبيعات')} ${formatMonthName(activeMonthKey)}`}
-                  </h3>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-baseline gap-2" dir="ltr">
-                    <span className="text-4xl font-black font-sans tracking-tight">
-                      {formatCurrency(totalRecharged)}
-                    </span>
-                    <span className="text-lg font-bold text-slate-400">{t('ج.م')}</span>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-300">
+                      {t('إجمالي مبيعات المندوب')}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
+                    </p>
                   </div>
-                  <p className="text-slate-500 text-[10px] font-bold mt-2 uppercase tracking-[0.2em]">
-                    {selectedMonthKey === 'all' ? 'ALL TIME RECHARGE VOLUME' : `${formatMonthName(activeMonthKey).toUpperCase()} VOLUME`}
-                  </p>
                 </div>
-              </div>
-              
-              <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 block">
-                    {t('إجمالي التاريخ الكلي:')} {formatCurrency(allTimeTotal)} {t('ج.م')} ({t('العمولات:')} {formatCurrency(allTimeCommission)} {t('ج.م')})
-                  </span>
-                  {delegate.lastSettledAt && (
-                    <span className="text-[10px] font-bold text-slate-400 block">
-                      {t('آخر تسوية يدويّة:')} {adminLang === 'en' ? safeDate(delegate.lastSettledAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : safeDate(delegate.lastSettledAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })} ({t('حجم غير مسوى:')} {formatCurrency(unsettledCycleTotal)} {t('ج.م')})
-                    </span>
-                  )}
-                </div>
-                
-                <button
-                  onClick={handleSettleAccount}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-amber-400 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all outline-none leading-none select-none h-9 mt-1 sm:mt-0 border border-slate-700 cursor-pointer"
-                  title={t('تسوية وتصفية الحساب يدويًا')}
-                >
-                  <RotateCw className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>{t('تصفية يدويّة')}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Commission Stats */}
-            <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-8 space-y-6 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/20 text-amber-500 rounded-xl flex items-center justify-center">
-                    <Percent className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">
-                    {selectedMonthKey === 'all' ? t('إجمالي العمولات المستحقة') : `${t('عمولة')} ${formatMonthName(activeMonthKey)}`}
-                  </h3>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
-                </span>
               </div>
 
               <div>
                 <div className="flex items-baseline gap-2" dir="ltr">
-                  <span className="text-4xl font-black font-sans tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(commissionValue)}
+                  <span className="text-3xl font-black font-sans tracking-tight text-white">
+                    {formatCurrency(totalRecharged)}
                   </span>
-                  <span className="text-lg font-bold text-slate-400">{t('ج.م')}</span>
+                  <span className="text-sm font-bold text-slate-400">{t('ج.م')}</span>
                 </div>
-                <p className="text-slate-500 text-[10px] font-bold mt-2 uppercase tracking-[0.2em]">
-                  {selectedMonthKey === 'all' ? 'TOTAL EARNED COMMISSION' : `${formatMonthName(activeMonthKey).toUpperCase()} COMMISSION`}
-                </p>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 text-xs font-bold">
-                  <span>{t('إجمالي العمولات التاريخية:')}</span>
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className="text-base font-black text-slate-900 dark:text-white font-sans">
-                      {formatCurrency(allTimeCommission)}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400">{t('ج.م')}</span>
+              <div className="pt-3 border-t border-white/10 text-[11px] text-slate-400">
+                <span>{t('إجمالي التاريخ الكلي:')} </span>
+                <strong className="text-white font-mono">{formatCurrency(allTimeTotal)} {t('ج.م')}</strong>
+              </div>
+            </div>
+
+            {/* 2. Delegate Commission Card */}
+            <div className="bg-slate-900 dark:bg-slate-900 rounded-2xl p-6 text-white space-y-4 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-amber-500/10 to-transparent pointer-events-none" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                    <Percent className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-amber-400">
+                      {t('عمولة المندوب المستحقة')}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
+                    </p>
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-2" dir="ltr">
+                  <span className="text-3xl font-black font-sans tracking-tight text-amber-400">
+                    {formatCurrency(commissionValue)}
+                  </span>
+                  <span className="text-sm font-bold text-slate-400">{t('ج.م')}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-white/10 text-[11px] text-slate-400">
+                <span>{t('العمولات التاريخية:')} </span>
+                <strong className="text-amber-400 font-mono">{formatCurrency(allTimeCommission)} {t('ج.م')}</strong>
+              </div>
+            </div>
+
+            {/* 3. Company Net Revenue Card */}
+            <div className="bg-slate-900 dark:bg-slate-900 rounded-2xl p-6 text-white space-y-4 relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                      {t('صافي دخل الشركة')}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      {selectedMonthKey === 'current' ? t('الشهر الحالي') : formatMonthName(activeMonthKey)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-2" dir="ltr">
+                  <span className="text-3xl font-black font-sans tracking-tight text-emerald-400">
+                    {formatCurrency(Math.max(0, totalRecharged - commissionValue))}
+                  </span>
+                  <span className="text-sm font-bold text-slate-400">{t('ج.م')}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-white/10 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <div className="text-slate-400">
+                    <span>{t('الصافي التاريخي:')} </span>
+                    <strong className="text-emerald-400 font-mono">{formatCurrency(Math.max(0, allTimeTotal - allTimeCommission))} {t('ج.م')}</strong>
+                  </div>
+
+                  <button
+                    onClick={handleSettleAccount}
+                    className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 active:scale-[0.98] text-amber-400 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all outline-none leading-none border border-amber-500/30 cursor-pointer"
+                    title={t('صرف عمولة المندوب وتسوية حسابه')}
+                  >
+                    <RotateCw className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>{t('صرف / تسوية العمولة')}</span>
+                  </button>
+                </div>
+                {delegate.lastSettledAt && (
+                  <p className="text-[10px] text-slate-400">
+                    {t('عمولة غير مسبوق صرفها:')} <strong className="text-amber-400 font-mono">{formatCurrency(unsettledCycleTotal)} {t('ج.م')}</strong>
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -647,9 +678,9 @@ export const AdminDelegateDetailsView = memo(({
 
       {/* Custom Confirmation Dialog */}
       {confirmDialog.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-in fade-in duration-200" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps" dir={adminLang === 'en' ? 'ltr' : 'rtl'}>
           <div 
-            className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-popup-30fps"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-8 text-center">

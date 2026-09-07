@@ -15,7 +15,7 @@ import {
   AlertCircle,
   FileSpreadsheet
 } from 'lucide-react';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
 import { safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -192,7 +192,7 @@ export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps)
       }, 1500);
     } catch (err) {
       console.error('CSV Export Error:', err);
-      setErrorMessage(t('فشل تصدير سجل النشاط'));
+      setErrorMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setIsExporting(false);
     }
@@ -200,10 +200,10 @@ export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps)
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs font-sans animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 font-sans animate-overlay-30fps"
       dir={adminLang === 'en' ? 'ltr' : 'rtl'}
     >
-      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl transition-all">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl transition-all animate-popup-30fps">
         {/* Header */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -223,9 +223,9 @@ export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps)
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center transition-colors cursor-pointer active:scale-95"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -320,7 +320,7 @@ export const ActivityLogExportModal = ({ onClose }: ActivityLogExportModalProps)
             type="button"
             onClick={handleExport}
             disabled={isExporting}
-            className="w-full bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 text-white py-3.5 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            className="w-full h-14 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98] cursor-pointer"
           >
             {isExporting ? (
               <>

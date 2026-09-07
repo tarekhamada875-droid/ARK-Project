@@ -15,18 +15,18 @@ import {
   BarChart3,
   Calendar,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
 import { Garage, Delegate, Package, RechargeRequest } from '../../types';
-import { getCleanPackageInfo } from '../../constants/packages';
+import { getCleanPackageInfo, getDefaultDurationFilter, filterPackagesForGarage, BALANCE_PRESET_AMOUNTS } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
-import { generateSafePin, safeDate, getRemainingDays, calculateFinalPrice } from '../../utils';
+import { generateSafePin, safeDate, getRemainingDays, normalizeArabicSearch, normalizeDigits } from '../../utils';
 import { 
   calculateApprovedCommission, 
-  calculateApprovedRechargeTotal, 
   getAvailableRequestMonths 
 } from '../../utils/delegateCommissionCalculations';
-import { useSystemSubscribersFlatFee, useSystemReferralFee } from '../../hooks/useSystemSubscribersFlatFee';
 import { useSystemConfig } from '../../hooks/useSystemConfig';
 import { FitText } from '../ui/FitText';
 
@@ -40,6 +40,7 @@ interface DelegateDashboardViewProps {
     pkg?: Package, 
     discountInfo?: { discountAmount?: number }
   ) => Promise<void>;
+  onRechargeBalance?: (garageId: string, amount: number) => Promise<void>;
   onCreateGarage: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   isLoading: boolean;
   packages: Package[];
@@ -54,6 +55,7 @@ export const DelegateDashboardView = memo(({
   allGarages, 
   onLogout,
   onRecharge,
+  onRechargeBalance,
   onCreateGarage,
   isLoading,
   packages,
@@ -62,15 +64,14 @@ export const DelegateDashboardView = memo(({
   showToast,
   subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 }
 }: DelegateDashboardViewProps) => {
-  const subscriberFlatFee = useSystemSubscribersFlatFee();
-  const systemReferralFee = useSystemReferralFee();
   const config = useSystemConfig();
   const warningDaysThreshold = typeof config?.warningDaysThreshold === 'number' ? config.warningDaysThreshold : 3;
-  const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
+  const trialDays = typeof config?.defaultTrialDays === 'number' && config.defaultTrialDays > 0 ? config.defaultTrialDays : 15;
+  const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(() => getDefaultDurationFilter(packages));
   const [activeTab, setActiveTab] = useState<'garages' | 'performance'>('garages');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGarage, setSelectedGarage] = useState<Garage | null>(null);
-  const [pendingPackage, setPendingPackage] = useState<Package | null>(null);
+  const [selectedTopupAmount, setSelectedTopupAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showAddGarage, setShowAddGarage] = useState(false);
@@ -80,6 +81,16 @@ export const DelegateDashboardView = memo(({
   const [showMenu, setShowMenu] = useState(false);
   const [showAllOperations, setShowAllOperations] = useState(false);
   const { theme, toggleTheme } = useTheme();
+
+  React.useEffect(() => {
+    if (packages && packages.length > 0) {
+      const validPackages = filterPackagesForGarage(packages, !!selectedGarage?.hasMonthlySubscribers);
+      const validDurations = validPackages.map(p => getCleanPackageInfo(p).durationDays);
+      if (!validDurations.includes(selectedDurationFilter)) {
+        setSelectedDurationFilter(getDefaultDurationFilter(packages, !!selectedGarage?.hasMonthlySubscribers));
+      }
+    }
+  }, [packages, selectedDurationFilter, selectedGarage?.hasMonthlySubscribers]);
 
   const menuRef = React.useRef<HTMLDivElement>(null);
 
@@ -104,24 +115,36 @@ export const DelegateDashboardView = memo(({
     };
   }, [showAddGarage, selectedGarage]);
 
-  const filteredGarages = allGarages.filter(g => 
-    g.name.includes(searchTerm) || (g.phone || '').includes(searchTerm)
-  );
+  const filteredGarages = React.useMemo(() => {
+    const rawSearch = searchTerm.trim();
+    if (!rawSearch) return allGarages;
+    const normSearch = normalizeArabicSearch(rawSearch);
+    const digitSearch = normalizeDigits(rawSearch);
 
-  const handleRechargeSubmit = async (customAmount?: number, pkg?: Package, discountInfo?: { discountAmount?: number }) => {
-    if (!selectedGarage) return;
-    
-    let amount = customAmount || 0;
-    if (isNaN(amount) || (amount <= 0 && !pkg)) return;
+    return allGarages.filter(g => {
+      const normName = normalizeArabicSearch(g.name || '');
+      const nameMatch = normName.includes(normSearch);
+      const rawPhone = g.phone || '';
+      const normPhone = normalizeDigits(rawPhone);
+      const phoneMatch = rawPhone.includes(rawSearch) || (digitSearch ? normPhone.includes(digitSearch) : false);
+      return nameMatch || phoneMatch;
+    });
+  }, [allGarages, searchTerm]);
 
+  const handleTopupSubmit = async () => {
+    if (!selectedGarage || !selectedTopupAmount || selectedTopupAmount <= 0) return;
     setIsProcessing(true);
     try {
-      await onRecharge(selectedGarage.id, amount, pkg, discountInfo);
+      if (onRechargeBalance) {
+        await onRechargeBalance(selectedGarage.id, selectedTopupAmount);
+      } else {
+        await onRecharge(selectedGarage.id, selectedTopupAmount);
+      }
       setSuccess(true);
-      setPendingPackage(null);
       setTimeout(() => {
         setSuccess(false);
         setSelectedGarage(null);
+        setSelectedTopupAmount(null);
       }, 2000);
     } catch (error) {
       console.error(error);
@@ -129,6 +152,11 @@ export const DelegateDashboardView = memo(({
       setIsProcessing(false);
     }
   };
+
+  // Approved garages count (excluding pending or rejected review garages)
+  const approvedGarages = React.useMemo(() => {
+    return (allGarages || []).filter(g => g.status !== 'pending' && g.status !== 'rejected');
+  }, [allGarages]);
 
   // Performance and statistics calculations
   const now = new Date();
@@ -152,22 +180,6 @@ export const DelegateDashboardView = memo(({
 
   const activePerfMonthKey = selectedPerformanceMonth === 'current' ? currentMonthKey : selectedPerformanceMonth;
 
-  const currentMonthRechargedSum = React.useMemo(() => {
-    return calculateApprovedRechargeTotal(delegateRequests, currentMonthKey);
-  }, [delegateRequests, currentMonthKey]);
-
-  const activeMonthRechargedSum = React.useMemo(() => {
-    if (activePerfMonthKey === 'all') {
-      const requestsSum = calculateApprovedRechargeTotal(delegateRequests, 'all');
-      return Math.max(requestsSum, delegate.totalRechargedAmount || 0);
-    }
-    return calculateApprovedRechargeTotal(delegateRequests, activePerfMonthKey);
-  }, [delegateRequests, activePerfMonthKey, delegate.totalRechargedAmount]);
-
-  const totalRechargedAmount = activePerfMonthKey === currentMonthKey 
-    ? (currentMonthRechargedSum > 0 ? currentMonthRechargedSum : (delegate.totalRechargedAmount || 0))
-    : activeMonthRechargedSum;
-
   const currentMonthCommissionValue = React.useMemo(() => {
     return calculateApprovedCommission(delegateRequests, currentMonthKey);
   }, [delegateRequests, currentMonthKey]);
@@ -184,13 +196,7 @@ export const DelegateDashboardView = memo(({
 
   const sortedRequests = React.useMemo(() => {
     return [...delegateRequests].sort((a, b) => {
-      const timeA = a.createdAt?.seconds 
-        ? a.createdAt.seconds * 1000 
-        : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-      const timeB = b.createdAt?.seconds 
-        ? b.createdAt.seconds * 1000 
-        : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-      return timeB - timeA;
+      return safeDate(b.createdAt).getTime() - safeDate(a.createdAt).getTime();
     });
   }, [delegateRequests]);
 
@@ -219,7 +225,7 @@ export const DelegateDashboardView = memo(({
   const displayedRequests = showAllOperations ? sortedRequests : recentRequests;
 
   return (
-    <div className={`h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors overflow-x-hidden ${showAddGarage || selectedGarage ? 'overflow-hidden' : 'overflow-y-auto'}`} dir="rtl">
+    <div className={`h-screen h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors overflow-x-hidden ${showAddGarage || selectedGarage ? 'overflow-hidden' : 'overflow-y-auto'}`} dir="rtl">
       {/* 2) Header */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3 sticky top-0 z-40 transition-colors">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
@@ -339,7 +345,7 @@ export const DelegateDashboardView = memo(({
               <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center shadow-sm">
                 <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 block mb-1">جراجاتي</span>
                 <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono leading-none">
-                  {allGarages.length}
+                  {approvedGarages.length}
                 </span>
               </div>
 
@@ -457,9 +463,14 @@ export const DelegateDashboardView = memo(({
                         </span>
                       )}
 
-                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                        {g.hourlyRate} ج.ساعة / {g.overnightRate} ج.مبيت
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-mono">
+                          الرصيد: {g.balance || 0} ج.م
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                          {g.hourlyRate} ج.ساعة
+                        </span>
+                      </div>
                     </div>
                   </button>
                 );
@@ -501,33 +512,21 @@ export const DelegateDashboardView = memo(({
               </select>
             </div>
 
-            {/* 5.b) Compact Summary Card */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-slate-100 dark:divide-slate-800">
-                {/* Metric 1: Recharges */}
-                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
-                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">مبيعات الشحن</span>
-                  <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-mono leading-none flex items-baseline gap-1">
-                    <span>{totalRechargedAmount.toLocaleString('en-US')}</span>
-                    <span className="text-xs font-bold text-slate-400">ج.م</span>
-                  </div>
-                </div>
-
-                {/* Metric 2: Commission */}
-                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
-                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">العمولة المستحقة</span>
-                  <div className="text-lg sm:text-xl font-black text-amber-500 dark:text-amber-400 font-mono leading-none flex items-baseline gap-1">
+            {/* 5.b) Focused Performance Summary Card */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-right">
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 block mb-1">
+                    {activePerfMonthKey === 'all' ? 'إجمالي العمولة المكتسبة (التاريخ الكلي)' : 'العمولة المكتسبة في هذه الفترة'}
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-amber-500 dark:text-amber-400 font-mono leading-none flex items-baseline gap-1.5">
                     <span>{commissionValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
-                    <span className="text-xs font-bold text-slate-400">ج.م</span>
+                    <span className="text-sm font-bold text-slate-400">ج.م</span>
                   </div>
                 </div>
 
-                {/* Metric 3: Garages */}
-                <div className="py-2.5 sm:py-1 px-3 text-right flex flex-col justify-center">
-                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">عدد الجراجات</span>
-                  <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-mono leading-none">
-                    <span>{allGarages.length}</span>
-                  </div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+                  <TrendingUp className="w-6 h-6" />
                 </div>
               </div>
             </div>
@@ -610,21 +609,23 @@ export const DelegateDashboardView = memo(({
       {/* 6) Add Garage Modal */}
       {showAddGarage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 overflow-y-auto" onClick={() => setShowAddGarage(false)}>
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 sm:p-8 relative my-auto border border-slate-200 dark:border-slate-800 transition-colors" onClick={e => e.stopPropagation()}>
+          <div 
+            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 sm:p-8 relative my-auto border border-slate-200 dark:border-slate-800 transition-colors" 
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-500/15 border border-amber-500/30 text-amber-500 dark:text-amber-400 rounded-xl flex items-center justify-center">
                   <PlusCircle className="w-5 h-5" />
                 </div>
-                <div>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">إضافة جراج جديد</h2>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">تسجيل جراج جديد وتحديد التعريفة</p>
-                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">إضافة جراج جديد</h2>
               </div>
               <button 
                 type="button"
                 onClick={() => setShowAddGarage(false)}
-                className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none"
+                className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -646,14 +647,32 @@ export const DelegateDashboardView = memo(({
                 <div className="space-y-1.5 text-center">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">سعر الساعة</label>
                   <div className="relative">
-                    <input name="hourlyRate" type="text" inputMode="numeric" placeholder="10" required className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" dir="ltr" />
+                    <input 
+                      name="hourlyRate" 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*"
+                      placeholder="10" 
+                      required 
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" 
+                      dir="ltr" 
+                    />
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">ج.م</span>
                   </div>
                 </div>
                 <div className="space-y-1.5 text-center">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">سعر المبيت</label>
                   <div className="relative">
-                    <input name="overnightRate" type="text" inputMode="numeric" placeholder="50" required className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" dir="ltr" />
+                    <input 
+                      name="overnightRate" 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*"
+                      placeholder="50" 
+                      required 
+                      className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-center outline-none focus:border-amber-500 font-mono text-lg" 
+                      dir="ltr" 
+                    />
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">ج.م</span>
                   </div>
                 </div>
@@ -664,8 +683,8 @@ export const DelegateDashboardView = memo(({
               {/* Free Trial Toggle */}
               <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl flex items-center justify-between">
                 <div className="space-y-0.5 text-right">
-                  <label className="text-xs font-black text-slate-900 dark:text-emerald-300 block">تفعيل فترة تجريبية مجانية (15 يوم)</label>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">صلاحية مجانية لمدة 15 يوماً للجراج الجديد</span>
+                  <label className="text-xs font-black text-slate-900 dark:text-emerald-300 block">تفعيل فترة تجريبية مجانية ({trialDays} يوم)</label>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">صلاحية مجانية لمدة {trialDays} يوماً للجراج الجديد</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input 
@@ -676,13 +695,21 @@ export const DelegateDashboardView = memo(({
                     className="sr-only peer" 
                   />
                   <input type="hidden" name="isTrial_hidden" value={isTrial ? 'true' : 'false'} />
+                  <input type="hidden" name="trialDays" value={trialDays} />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
                 </label>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1">رقم الموبايل (اختياري)</label>
-                <input name="phone" placeholder="01xxxxxxxxx" className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono outline-none focus:border-amber-500 transition-all placeholder:text-slate-400" dir="ltr" />
+                <input 
+                  name="phone" 
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="01xxxxxxxxx" 
+                  className="w-full p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold font-mono outline-none focus:border-amber-500 transition-all placeholder:text-slate-400" 
+                  dir="ltr" 
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -731,253 +758,173 @@ export const DelegateDashboardView = memo(({
         </div>
       )}
 
-      {/* 6) Recharge Modal */}
+      {/* 6) Wallet Balance Top-Up Modal */}
       {selectedGarage && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80"
-          onClick={() => !isProcessing && setSelectedGarage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps"
+          onClick={() => {
+            if (!isProcessing) {
+              setSelectedGarage(null);
+              setSelectedTopupAmount(null);
+            }
+          }}
         >
           <div 
-            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 sm:p-8 relative overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors"
+            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors animate-popup-30fps"
             onClick={e => e.stopPropagation()}
           >
             {success ? (
               <div className="flex flex-col items-center py-8 text-center">
-                <div className="w-20 h-20 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-4">
-                  <CheckCircle2 className="w-10 h-10" />
+                <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-3 shadow-lg shadow-emerald-600/20">
+                  <CheckCircle2 className="w-9 h-9" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 dark:text-white">تم إرسال الطلب!</h2>
-                <p className="text-slate-500 dark:text-slate-400 font-bold text-xs mt-1">سيتم تجديد اشتراك {selectedGarage.name} فور موافقة المدير</p>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">تم إرسال طلب الشحن!</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-bold text-xs mt-1">سيتم إضافة الرصيد إلى محفظة {selectedGarage.name} فور اعتماد المدير</p>
               </div>
             ) : (
               <>
-                <div className="flex justify-between items-start mb-5">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white">تجديد اشتراك الجراج</h2>
-                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-0.5">{selectedGarage.name}</p>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900 dark:text-white">شحن رصيد المحفظة</h2>
+                      <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-0.5">{selectedGarage.name}</p>
+                    </div>
                   </div>
                   <button 
                     type="button"
-                    onClick={() => setSelectedGarage(null)}
-                    className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none"
+                    onClick={() => {
+                      if (!isProcessing) {
+                        setSelectedGarage(null);
+                        setSelectedTopupAmount(null);
+                      }
+                    }}
+                    className="w-9 h-9 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl flex shrink-0 items-center justify-center transition-colors outline-none cursor-pointer"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Garage Info */}
-                <div className="bg-slate-50 dark:bg-slate-950/60 rounded-xl p-4 mb-5 border border-slate-100 dark:border-slate-800 flex flex-col items-center text-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    الاشتراك المتبقي للجراج
-                  </span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl sm:text-4xl font-black text-slate-950 dark:text-white font-mono">
-                      {getRemainingDays(selectedGarage)}
-                    </span>
-                    <span className="text-xs font-bold text-slate-400">
-                      يوم
-                    </span>
+                {/* Garage Wallet & Subscription Status */}
+                <div className="grid grid-cols-2 gap-2.5 mb-4">
+                  <div className="bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 block mb-0.5">رصيد المحفظة الحالي</span>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                        {selectedGarage.balance || 0}
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-600/70">ج.م</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-center">
+                    <span className="text-[10px] font-bold text-slate-400 block mb-0.5">الاشتراك الحالي</span>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                        {getRemainingDays(selectedGarage)}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">يوم متبقي</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Unified Packages Section */}
-                {(() => {
-                  const effectiveReferralFee = (selectedGarage.referrerId || selectedGarage.createdByDelegateId) ? systemReferralFee : 0;
-                  const rawList = packages || [];
-                  const displayPackages = rawList
-                    .map(p => {
-                      const { finalPrice } = calculateFinalPrice(p, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee, effectiveReferralFee);
-                      return {
-                        ...p,
-                        _sortPrice: finalPrice
-                      };
-                    })
-                    .sort((a, b) => (a as any)._sortPrice - (b as any)._sortPrice);
+                {/* Preset Balance Amounts (No custom input allowed) */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      اختر فئة الشحن المطلوبة:
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      فئات ثابتة
+                    </span>
+                  </div>
 
-                  const filteredPackages = displayPackages.filter(pkg => {
-                    const info = getCleanPackageInfo(pkg);
-                    return info.durationDays === selectedDurationFilter;
-                  });
-
-                  const hasUnlimitedInFiltered = filteredPackages.some(p => getCleanPackageInfo(p).isUnlimited);
-                  const maxCapInFiltered = Math.max(...filteredPackages.map(p => getCleanPackageInfo(p).dailyCapacity || 0));
-
-                  return (
-                    <div className="space-y-3 pb-2">
-                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {BALANCE_PRESET_AMOUNTS.map((amt) => {
+                      const isSelected = selectedTopupAmount === amt;
+                      return (
                         <button
+                          key={amt}
                           type="button"
-                          onClick={() => setSelectedDurationFilter(15)}
-                          className={`py-2 px-2 rounded-lg font-black text-xs transition-all text-center cursor-pointer ${
-                            selectedDurationFilter === 15
-                              ? 'bg-amber-500 text-slate-950 shadow-sm'
-                              : 'text-slate-600 dark:text-slate-400'
+                          disabled={isProcessing}
+                          onClick={() => setSelectedTopupAmount(amt)}
+                          className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer active:scale-95 ${
+                            isSelected
+                              ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-md ring-2 ring-amber-500/30'
+                              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-800 dark:text-slate-200 hover:border-amber-400/50'
                           }`}
                         >
-                          15 يوم (نصف شهر)
+                          <span className="text-lg sm:text-xl font-black font-mono leading-tight">{amt}</span>
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">ج.م رصيد</span>
                         </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDurationFilter(30)}
-                          className={`py-2 px-2 rounded-lg font-black text-xs transition-all text-center cursor-pointer ${
-                            selectedDurationFilter === 30
-                              ? 'bg-amber-500 text-slate-950 shadow-sm'
-                              : 'text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          30 يوم (شهر)
-                        </button>
-                      </div>
-
-                      {/* Packages List */}
-                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                        {filteredPackages.map((pkg) => {
-                          const info = getCleanPackageInfo(pkg);
-                          const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(
-                            pkg, 
-                            selectedGarage.hasMonthlySubscribers || false, 
-                            subscriberFlatFee,
-                            effectiveReferralFee
-                          );
-
-                          const packageName = info.displayName;
-                          const isTopTier = filteredPackages.length > 1 && (
-                            info.isUnlimited || (!hasUnlimitedInFiltered && info.dailyCapacity !== null && info.dailyCapacity === maxCapInFiltered && maxCapInFiltered > 0)
-                          );
-
-                          return (
-                            <div
-                              key={pkg.id}
-                              className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                                info.isUnlimited
-                                  ? 'bg-slate-900 border-amber-500 text-white'
-                                  : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white'
-                              }`}
-                            >
-                              <div className="flex flex-col gap-1 text-right">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm sm:text-base font-black">
-                                    {packageName}
-                                  </span>
-                                  {isTopTier && (
-                                    <span className="bg-amber-500 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-md">
-                                      الأكبر سعة
-                                    </span>
-                                  )}
-                                </div>
-                                <span className={`text-[11px] font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
-                                  {info.isUnlimited ? 'عربيات مفتوحة' : `${info.dailyCapacity} سيارة/يوم`}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-3 shrink-0">
-                                <div className="text-left font-mono">
-                                  {hasDiscount && (
-                                    <span className="text-[10px] text-slate-400 line-through block leading-none mb-0.5">
-                                      {displayBasePrice}
-                                    </span>
-                                  )}
-                                  <span className="text-base font-black text-amber-500 dark:text-amber-400">
-                                    {effectivePrice} ج.م
-                                  </span>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  disabled={isProcessing}
-                                  onClick={() => {
-                                    if (isProcessing) return;
-                                    setPendingPackage({ ...pkg });
-                                  }}
-                                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
-                                >
-                                  شحن
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {filteredPackages.length === 0 && (
-                          <div className="py-6 text-center text-slate-400 font-bold text-xs">
-                            لا توجد باقات متوفرة في هذه المدة
-                          </div>
-                        )}
-                      </div>
+                {/* Selection Summary */}
+                {selectedTopupAmount ? (
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 mb-4 border border-slate-200 dark:border-slate-700">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 dark:text-slate-400 font-bold">المبلغ المطلوب شحنه:</span>
+                      <span className="font-black text-slate-900 dark:text-white font-mono">{selectedTopupAmount} ج.م</span>
                     </div>
-                  );
-                })()}
+                    <div className="flex justify-between items-center text-xs mt-1 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                      <span className="text-slate-500 dark:text-slate-400 font-bold">الرصيد بعد الاعتماد:</span>
+                      <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        {(selectedGarage.balance || 0) + selectedTopupAmount} ج.م
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={isProcessing || pendingRequests.some(r => r.garageId === selectedGarage.id) || !selectedTopupAmount}
+                    onClick={handleTopupSubmit}
+                    className="w-full min-h-[48px] px-4 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 py-3.5 rounded-xl font-black text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20 whitespace-nowrap"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                        <span>جاري إرسال الطلب...</span>
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                        {pendingRequests.some(r => r.garageId === selectedGarage.id) ? (
+                          'يوجد طلب شحن معلق قيد المراجعة...'
+                        ) : selectedTopupAmount ? (
+                          <>
+                            <span>إرسال طلب شحن</span>
+                            <span className="opacity-50">•</span>
+                            <span className="font-mono">{selectedTopupAmount}</span>
+                            <span>ج.م للمدير</span>
+                          </>
+                        ) : (
+                          'يرجى اختيار مبلغ الشحن'
+                        )}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => {
+                      setSelectedGarage(null);
+                      setSelectedTopupAmount(null);
+                    }}
+                    className="w-full py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                </div>
               </>
             )}
           </div>
-
-          {/* Package Confirmation Overlay */}
-          {pendingPackage && !success && (
-            <div className="absolute inset-x-4 bottom-4 z-20" onClick={e => e.stopPropagation()}>
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border-2 border-emerald-500 shadow-2xl animate-in fade-in slide-in-from-bottom-4 transition-all">
-                <div className="text-center mb-3">
-                  <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    تأكيد طلب تجديد الاشتراك؟
-                  </h3>
-                  <p className="text-xs font-bold text-slate-400 mt-0.5">
-                    طلب تجديد الاشتراك لمدة {pendingPackage.vehiclesCount} يوم للجراج
-                  </p>
-                </div>
-
-                {(() => {
-                  const effectiveReferralFee = (selectedGarage.referrerId || selectedGarage.createdByDelegateId) ? systemReferralFee : 0;
-                  const { displayBasePrice, finalPrice, hasDiscount, totalDiscount } = calculateFinalPrice(pendingPackage, selectedGarage.hasMonthlySubscribers || false, subscriberFlatFee, effectiveReferralFee);
-
-                  return (
-                    <>
-                      <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 mb-4 flex justify-between items-center">
-                        <div className="text-right">
-                          <p className="text-[10px] font-bold text-slate-400">المبلغ المطلوب</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-lg font-black text-slate-900 dark:text-white">{finalPrice} ج.م</p>
-                            {hasDiscount && (
-                              <p className="text-xs font-bold text-slate-400 line-through">{displayBasePrice} ج.م</p>
-                            )}
-                          </div>
-                          {totalDiscount > 0 && (
-                            <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">إجمالي الخصم: {totalDiscount} ج.م</p>
-                          )}
-                        </div>
-                        <div className="text-left">
-                          <p className="text-[10px] font-bold text-slate-400">المدة</p>
-                          <p className="text-lg font-black text-emerald-500">{pendingPackage.vehiclesCount} يوم</p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2.5">
-                        <button
-                          type="button"
-                          disabled={isProcessing || pendingRequests.some(r => r.garageId === selectedGarage.id)}
-                          onClick={() => handleRechargeSubmit(undefined, pendingPackage, totalDiscount > 0 ? {
-                            discountAmount: totalDiscount
-                          } : undefined)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                            <span>{pendingRequests.some(r => r.garageId === selectedGarage.id) ? 'طلب معلق...' : 'تأكيد الشحن'}</span>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={() => { setPendingPackage(null); }}
-                          className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
-                        >
-                          إلغاء
-                        </button>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

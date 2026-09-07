@@ -13,15 +13,25 @@ export function useServerTime() {
   const fetchServerTimeOffset = useCallback(async () => {
     try {
       const start = Date.now();
-      const res = await fetch('/', { method: 'GET', cache: 'no-store' });
+      // Lightweight HEAD request to fetch only HTTP headers (0-byte payload), saving bandwidth and CPU
+      let res: Response;
+      try {
+        res = await fetch('/', { method: 'HEAD', cache: 'no-store' });
+      } catch {
+        res = await fetch('/', { method: 'GET', cache: 'no-store' });
+      }
       const dateHeader = res.headers.get('date');
       if (dateHeader) {
         const serverTime = new Date(dateHeader).getTime();
-        const rtt = Date.now() - start;
-        const correctedServerTime = serverTime + (rtt / 2);
-        const offset = correctedServerTime - Date.now();
-        setServerTimeOffset(offset);
-        return offset;
+        if (!isNaN(serverTime) && serverTime > 0) {
+          const rtt = Date.now() - start;
+          const correctedServerTime = serverTime + (rtt / 2);
+          const offset = correctedServerTime - Date.now();
+          if (!isNaN(offset)) {
+            setServerTimeOffset(offset);
+            return offset;
+          }
+        }
       }
     } catch {
       // Fallback to local lock if server time offset fetch fails

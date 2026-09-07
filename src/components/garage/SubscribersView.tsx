@@ -1,17 +1,22 @@
 import React, { useState, useEffect, memo } from 'react';
-import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, ChevronRight } from 'lucide-react';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { Users, Plus, X, Search, Clock, Save, Edit, Trash2, CalendarDays, Phone, User, Delete, RefreshCw, ChevronRight, AlertTriangle } from 'lucide-react';
+import { firestoreService } from '../../services';
 import { auth } from '../../firebase';
 import { Subscriber, Garage } from '../../types';
-import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersFlatFee } from '../../utils';
+import { getCleanPlate, getRawPlate, formatPlateNumber, normalizeArabicSearch, isSubscriptionExpired as checkSubscriptionExpired, applyMonthlySubscribersFlatFee, safeDate } from '../../utils';
 import { useSystemSubscribersFlatFee } from '../../hooks/useSystemSubscribersFlatFee';
 import { EgyptianPlate } from '../ui/EgyptianPlate';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
 import { getCairoDateKey } from '../../domain/garage/businessDay';
 
-const parseDateKey = (dateKey: string): Date => {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(year, month - 1, day);
+const parseDateKey = (dateKey: string | any): Date => {
+  if (!dateKey) return new Date();
+  if (typeof dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const parsed = new Date(year, month - 1, day);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return safeDate(dateKey);
 };
 
 const formatDateKey = (date: Date): string => {
@@ -177,9 +182,34 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
     const diffTime = end.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays < 0) return { label: 'منتهي', color: 'bg-red-50 text-red-600 border-red-200', isAlert: true };
-    if (diffDays <= 3) return { label: `ينتهي بعد ${diffDays} أيام`, color: 'bg-orange-50 text-orange-600 border-orange-200', isAlert: true };
-    return { label: 'ساري', color: 'bg-green-50 text-green-600 border-green-200', isAlert: false };
+    if (diffDays < 0) return { 
+      label: 'منتهي الصلاحية', 
+      color: 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900', 
+      isAlert: true, 
+      isExpired: true,
+      alertMessage: 'تنبيه: انتهى موعد الاشتراك الشهري لهذا المشترك. يرجى تجديد الاشتراك أو حذف البيانات نهائياً.' 
+    };
+    if (diffDays === 0) return { 
+      label: 'ينتهي اليوم', 
+      color: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900', 
+      isAlert: true, 
+      isExpired: false,
+      alertMessage: 'تنبيه: ينتهي هذا الاشتراك الشهري اليوم.' 
+    };
+    if (diffDays <= 3) return { 
+      label: `ينتهي بعد ${diffDays} أيام`, 
+      color: 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-900', 
+      isAlert: true, 
+      isExpired: false,
+      alertMessage: `تنبيه: متبقي ${diffDays} أيام فقط على انتهاء الاشتراك الشهري.` 
+    };
+    return { 
+      label: 'ساري', 
+      color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900', 
+      isAlert: false, 
+      isExpired: false,
+      alertMessage: '' 
+    };
   };
 
   const handleOpenAdd = () => {
@@ -447,60 +477,82 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                 >
                   {status.isAlert && (
                     <div 
-                      className="absolute top-0 left-0 right-0 h-2 z-10"
+                      className="absolute top-0 left-0 right-0 h-1.5 z-10"
                       style={{
-                        backgroundImage: 'repeating-linear-gradient(-45deg, #ef4444, #ef4444 8px, #1e293b 8px, #1e293b 16px)'
+                        backgroundImage: status.isExpired 
+                          ? 'repeating-linear-gradient(-45deg, #ef4444, #ef4444 8px, #1e293b 8px, #1e293b 16px)'
+                          : 'repeating-linear-gradient(-45deg, #f59e0b, #f59e0b 8px, #1e293b 8px, #1e293b 16px)'
                       }}
                     />
                   )}
                   
-                  <div className="flex items-center gap-4">
-                    <div className="w-[110px] shrink-0">
-                      <EgyptianPlate plateNumber={subscriber.plateNumber} size="sm" className="!w-full" />
-                    </div>
-                    
-                    <div className="space-y-2">
-                       <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                         <User className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                         <span>{subscriber.ownerName}</span>
-                       </div>
-                       <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                         <Phone className="w-3.5 h-3.5" />
-                         <span dir="ltr">{subscriber.phone}</span>
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex flex-col gap-1 items-start md:items-end p-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                        <CalendarDays className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                        <span>اشترك من: <span className="font-black text-slate-900 dark:text-slate-100">{subscriber.startDate}</span></span>
+                  {status.isAlert && status.alertMessage && (
+                    <div className="w-full pb-2 mb-2 border-b border-red-200/60 dark:border-red-900/60 flex items-center justify-between gap-2 text-xs font-bold text-red-600 dark:text-red-400">
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <span>{status.alertMessage}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                         <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                         <span>ينتهي في: <span className="font-black text-slate-900 dark:text-slate-100">{subscriber.endDate}</span></span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+                    <div className="flex items-center gap-4">
+                      <div className="w-[110px] shrink-0">
+                        <EgyptianPlate plateNumber={subscriber.plateNumber} size="sm" className="!w-full" />
+                      </div>
+                      
+                      <div className="space-y-2">
+                         <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                           <User className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                           <span>{subscriber.ownerName}</span>
+                         </div>
+                         <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                           <Phone className="w-3.5 h-3.5" />
+                           <span dir="ltr">{subscriber.phone}</span>
+                         </div>
                       </div>
                     </div>
 
-                    <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold ${status.color}`}>
-                      {status.label}
-                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex flex-col gap-1 items-start md:items-end p-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                          <CalendarDays className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <span>اشترك من: <span className="font-black text-slate-900 dark:text-slate-100">{subscriber.startDate}</span></span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                           <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                           <span>ينتهي في: <span className="font-black text-slate-900 dark:text-slate-100">{subscriber.endDate}</span></span>
+                        </div>
+                      </div>
 
-                    <div className="flex items-center gap-2">
-                       <button 
-                         onClick={() => handleOpenRenew(subscriber)} 
-                         className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all outline-none h-8 shadow-sm active:scale-95"
-                       >
-                         <RefreshCw className="w-3.5 h-3.5 stroke-[2.5]" />
-                         <span>تجديد</span>
-                       </button>
-                       <button onClick={() => handleOpenEdit(subscriber)} className="p-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-colors outline-none">
-                          <Edit className="w-4 h-4" />
-                       </button>
-                       <button onClick={() => handleDelete(subscriber.id)} className="p-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-colors outline-none">
-                          <Trash2 className="w-4 h-4" />
-                       </button>
+                      <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold ${status.color}`}>
+                        {status.label}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                         <button 
+                           onClick={() => handleOpenRenew(subscriber)} 
+                           className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all outline-none h-8 shadow-sm active:scale-95"
+                         >
+                           <RefreshCw className="w-3.5 h-3.5 stroke-[2.5]" />
+                           <span>تجديد الاشتراك</span>
+                         </button>
+                         <button 
+                           onClick={() => handleOpenEdit(subscriber)} 
+                           title="تعديل البيانات"
+                           className="p-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-colors outline-none h-8 w-8 justify-center"
+                         >
+                            <Edit className="w-4 h-4" />
+                         </button>
+                         <button 
+                           onClick={() => handleDelete(subscriber.id)} 
+                           title="حذف نهائياً"
+                           className="px-2.5 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors outline-none h-8"
+                         >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">حذف نهائياً</span>
+                         </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -513,8 +565,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
       {/* Add/Edit Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60" onClick={() => setShowAddModal(false)} />
-          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl max-h-[90dvh] overflow-y-auto custom-scrollbar-slate">
+          <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 animate-overlay-30fps" onClick={() => setShowAddModal(false)} />
+          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl max-h-[90dvh] overflow-y-auto custom-scrollbar-slate animate-popup-30fps">
             
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
@@ -612,7 +664,7 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                   <input
                     type="text"
                     value={ownerName}
-                    onChange={(e) => setOwnerName(e.target.value)}
+                    onChange={(e) => setOwnerName(e.target.value.replace(/[0-9]/g, ''))}
                     onFocus={() => setIsPlateFocused(false)}
                     className="w-full pl-4 pr-12 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:border-slate-400 dark:focus:border-slate-500 text-sm font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
                     placeholder="الاسم"
@@ -627,8 +679,9 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
                   <Phone className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input
                     type="tel"
+                    inputMode="numeric"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                     onFocus={() => setIsPlateFocused(false)}
                     className="w-full pl-4 pr-12 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:border-slate-400 dark:focus:border-slate-500 text-sm font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 text-left hover:text-right transition-all"
                     placeholder="رقم الهاتف"
@@ -708,8 +761,8 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
 
       {/* Delete Subscriber Confirmation Modal */}
       {subscriberToDelete && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80">
-          <div className="bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps">
+          <div className="bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 animate-popup-30fps">
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="w-8 h-8" />
@@ -739,9 +792,9 @@ export const SubscribersView = memo(({ garage, onClose, showToast }: Subscribers
 
       {/* Renewal Options Modal */}
       {showRenewModal && activeSubscriberForRenew && (
-        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 animate-fadeIn">
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 animate-overlay-30fps">
           <div className="absolute inset-0" onClick={() => { setShowRenewModal(false); setActiveSubscriberForRenew(null); }} />
-          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl animate-slideUp" dir="rtl">
+          <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-md rounded-[2rem] sm:rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-2xl animate-popup-30fps" dir="rtl">
             
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">

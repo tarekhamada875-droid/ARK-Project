@@ -38,7 +38,14 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
 
   const [confirmingSide, setConfirmingSide] = React.useState<'left' | 'right' | null>(null);
   const [showLargeButton, setShowLargeButton] = React.useState(false);
+  const [isConfirming, setIsConfirming] = React.useState(false);
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const handleGuardedConfirm = () => {
+    if (isLoading || isConfirming) return;
+    setIsConfirming(true);
+    onConfirm();
+  };
 
   const [isGenerating, setIsGenerating] = React.useState(true);
   const [generationProgress, setGenerationProgress] = React.useState(0);
@@ -226,11 +233,11 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
                   className="snake-border-wrapper w-60 h-28 sm:w-96 sm:h-52 rounded-2xl sm:rounded-2xl p-[6px] pointer-events-auto shadow-xl"
                 >
                   <button 
-                    onClick={() => onConfirm()}
-                    disabled={isLoading}
-                    className="relative w-full h-full rounded-[2.1rem] sm:rounded-[2.4rem] bg-slate-950 dark:bg-red-500 flex flex-col items-center justify-center z-10 outline-none transition-transform"
+                    onClick={handleGuardedConfirm}
+                    disabled={isLoading || isConfirming}
+                    className="relative w-full h-full rounded-[2.1rem] sm:rounded-[2.4rem] bg-slate-950 dark:bg-red-500 flex flex-col items-center justify-center z-10 outline-none transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loadingType === 'checkout' ? (
+                    {loadingType === 'checkout' || isConfirming ? (
                       <Spinner />
                     ) : (
                       <LogOut className="w-12 h-12 sm:w-24 sm:h-24 -rotate-90 stroke-[4] text-white" />
@@ -251,7 +258,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
                 opacity: 0, 
                 transition: { duration: 0 }
               }}
-              className="flex-1 flex flex-col items-center overflow-y-auto scrollbar-hide max-h-[calc(92dvh-90px)] w-full px-1"
+              className="flex-1 flex flex-col items-center overflow-y-auto scrollbar-hide max-h-[calc(92vh-90px)] max-h-[calc(92dvh-90px)] w-full px-1"
             >
               {isGenerating ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 w-full">
@@ -446,7 +453,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = memo(({
                 <button 
                   onClick={onDelete}
                   disabled={isLoading}
-                  className="w-full py-5 sm:py-6 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-[1.5rem] sm:rounded-[2rem] font-black text-sm sm:text-lg uppercase tracking-widest flex items-center justify-center gap-2 border-2 border-red-100 dark:border-red-900/20 border-dashed shrink-0 disabled:opacity-50"
+                  className="w-full h-14 sm:h-16 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 border-2 border-red-100 dark:border-red-900/20 border-dashed shrink-0 disabled:opacity-50 active:scale-95 transition-all duration-150 cursor-pointer shadow-sm"
                 >
                   {isLoading && loadingType === 'delete' ? (
                     <Spinner className="!text-red-500" />

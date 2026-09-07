@@ -6,7 +6,6 @@
 import { useState, useMemo, memo } from 'react';
 import { 
   DollarSign, 
-  Users, 
   Car, 
   AlertTriangle,
   Plus,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Garage, Delegate } from '../../types';
 import { getRemainingDays } from '../../utils';
+import { getCairoDateKey } from '../../domain/garage/businessDay';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 import { useSystemConfig } from '../../hooks/useSystemConfig';
@@ -56,7 +56,7 @@ export const AdminOverviewView = memo(({
       return sum + activeCarsCount;
     }, 0);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCairoDateKey();
     const totalExitsCount = allGarages.reduce((sum, g) => sum + (g.totalVehiclesOut || 0), 0);
     const todayExitsCount = allGarages.reduce((sum, g) => {
       const isToday = g.lastTransactionDate === today;
@@ -205,16 +205,9 @@ export const AdminOverviewView = memo(({
               <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                 <ShieldAlert className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-base font-black text-rose-900 dark:text-rose-200">
-                  {t('جراجات تقترب من انتهاء الاشتراك')} ({expiringGarages.length})
-                </h3>
-                <p className="text-xs text-rose-600/80 dark:text-rose-400/80 font-bold">
-                  {adminLang === 'en' 
-                    ? `Garages with ${warningDaysThreshold} or fewer subscription days remaining, requiring follow-up or renewal`
-                    : `جراجات متبقي في اشتراكها ${warningDaysThreshold} ${warningDaysThreshold === 1 ? 'يوم' : warningDaysThreshold === 2 ? 'يومان' : warningDaysThreshold >= 3 && warningDaysThreshold <= 10 ? 'أيام' : 'يوماً'} أو أقل وتتطلب المتابعة أو التجديد`}
-                </p>
-              </div>
+              <h3 className="text-base font-black text-rose-900 dark:text-rose-200">
+                {t('جراجات تقترب من انتهاء الاشتراك')} ({expiringGarages.length})
+              </h3>
             </div>
           </div>
 
@@ -243,56 +236,6 @@ export const AdminOverviewView = memo(({
           </div>
         </section>
       )}
-
-      {/* Full Width Delegate Performance List */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-colors">
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Users className="w-5 h-5 text-emerald-500" />
-            <span>{t('مبيعات وأداء المندوبين')}</span>
-          </h3>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
-            {delegates.length} {t('مندوب')}
-          </span>
-        </div>
-
-        <div className="p-5 max-h-[380px] overflow-y-auto custom-scrollbar-slate space-y-3">
-          {delegates.map((d) => {
-            const delegatedSum = d.totalRechargedAmount || 0;
-            
-            return (
-              <div key={d.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center font-black text-sm shrink-0">
-                    {d.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-mobile-wrap text-xs font-black text-slate-900 dark:text-white block leading-snug">{d.name}</span>
-                    <span className="text-[10px] font-bold text-slate-400 font-mono block mt-0.5">{d.phone}</span>
-                  </div>
-                </div>
-
-                <div className={`font-mono shrink-0 ${adminLang === 'en' ? 'text-right' : 'text-left'}`}>
-                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block">
-                    +{delegatedSum.toLocaleString(adminLang === 'en' ? 'en-US' : 'ar-EG')} <span className="text-[10px] font-bold font-sans text-slate-400">{t('ج.م')}</span>
-                  </span>
-                  {d.canCreateGarage && (
-                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mt-0.5">
-                      {t('صلاحية إنشاء جراج')}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {delegates.length === 0 && (
-            <div className="text-center py-10 text-slate-400 dark:text-slate-600 font-bold text-xs">
-              {t('لا يوجد مندوبين مسجلين')}
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* Plate Lookup Modal - Admin/Owner only */}
       {!isSupervisor && showPlateLookupModal && (

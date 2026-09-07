@@ -15,8 +15,8 @@ import {
   Briefcase
 } from 'lucide-react';
 import { Delegate, Supervisor, Garage } from '../../types';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
-import { generateSafePin } from '../../utils';
+import { firestoreService } from '../../services';
+import { generateSafePin, normalizeDigits, formatDisplayPin } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
 
@@ -48,10 +48,12 @@ export const AdminPeopleView = memo(({
 
   // Delegates State
   const [delegateForm, setDelegateForm] = useState({ name: '', phone: '', pin: '', canCreateGarage: false });
+  const [delegatePinError, setDelegatePinError] = useState('');
   const [isSubmittingDelegate, setIsSubmittingDelegate] = useState(false);
 
   // Supervisors State
   const [supervisorForm, setSupervisorForm] = useState({ name: '', phone: '', pin: '' });
+  const [supervisorPinError, setSupervisorPinError] = useState('');
   const [isSubmittingSupervisor, setIsSubmittingSupervisor] = useState(false);
   const [editingSupervisorPinId, setEditingSupervisorPinId] = useState<string | null>(null);
   const [editingSupervisorPinValue, setEditingSupervisorPinValue] = useState('');
@@ -59,24 +61,32 @@ export const AdminPeopleView = memo(({
 
   const handleCreateDelegate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!delegateForm.name || !delegateForm.phone || !delegateForm.pin) return;
+    if (isSubmittingDelegate) return;
+    setDelegatePinError('');
+    const cleanName = (delegateForm.name || '').trim();
+    const cleanPhone = normalizeDigits(delegateForm.phone || '').trim();
+    const cleanPin = normalizeDigits(delegateForm.pin || '').replace(/\D/g, '');
+    if (!cleanName || !cleanPhone || !cleanPin) return;
+
     setIsSubmittingDelegate(true);
     try {
-      const pinCheck = await firestoreService.isPinTaken(delegateForm.pin);
+      const pinCheck = await firestoreService.isPinTaken(cleanPin);
       if (pinCheck.taken) {
+        setDelegatePinError(`هذا الرمز السري مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`);
         setIsSubmittingDelegate(false);
         return;
       }
       await firestoreService.addDelegate({
-        name: delegateForm.name,
-        phone: delegateForm.phone,
-        pin: delegateForm.pin,
+        name: cleanName,
+        phone: cleanPhone,
+        pin: cleanPin,
         canCreateGarage: delegateForm.canCreateGarage,
         totalRechargedAmount: 0,
         role: 'delegate',
         createdAt: new Date()
       });
       setDelegateForm({ name: '', phone: '', pin: '', canCreateGarage: false });
+      setDelegatePinError('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -86,22 +96,30 @@ export const AdminPeopleView = memo(({
 
   const handleCreateSupervisor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supervisorForm.name || !supervisorForm.phone || !supervisorForm.pin) return;
+    if (isSubmittingSupervisor) return;
+    setSupervisorPinError('');
+    const cleanName = (supervisorForm.name || '').trim();
+    const cleanPhone = normalizeDigits(supervisorForm.phone || '').trim();
+    const cleanPin = normalizeDigits(supervisorForm.pin || '').replace(/\D/g, '');
+    if (!cleanName || !cleanPhone || !cleanPin) return;
+
     setIsSubmittingSupervisor(true);
     try {
-      const pinCheck = await firestoreService.isPinTaken(supervisorForm.pin);
+      const pinCheck = await firestoreService.isPinTaken(cleanPin);
       if (pinCheck.taken) {
+        setSupervisorPinError(`هذا الرمز السري مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`);
         setIsSubmittingSupervisor(false);
         return;
       }
       await firestoreService.addSupervisor({
-        name: supervisorForm.name,
-        phone: supervisorForm.phone,
-        pin: supervisorForm.pin,
+        name: cleanName,
+        phone: cleanPhone,
+        pin: cleanPin,
         role: 'supervisor',
         createdAt: new Date()
       });
       setSupervisorForm({ name: '', phone: '', pin: '' });
+      setSupervisorPinError('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -112,28 +130,28 @@ export const AdminPeopleView = memo(({
   return (
     <div className="space-y-6">
       {/* Sub tabs */}
-      <div className="bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 max-w-md mx-auto">
-        <button
-          type="button"
-          onClick={() => setSubTab('delegates')}
-          className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl font-black text-[11px] sm:text-xs transition-all cursor-pointer ${
-            subTab === 'delegates'
-              ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-          <span className="text-mobile-wrap text-center leading-tight">{t('المناديب')}</span>
-          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
-            subTab === 'delegates'
-              ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
-              : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-          }`}>
-            {delegates.length}
-          </span>
-        </button>
+      {!currentSupervisor && (
+        <div className="bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 max-w-md mx-auto mb-6">
+          <button
+            type="button"
+            onClick={() => setSubTab('delegates')}
+            className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl font-black text-[11px] sm:text-xs transition-all cursor-pointer ${
+              subTab === 'delegates'
+                ? 'bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="text-mobile-wrap text-center leading-tight">{t('المناديب')}</span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 ${
+              subTab === 'delegates'
+                ? 'bg-amber-400 text-slate-900 dark:bg-slate-950 dark:text-amber-400'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+            }`}>
+              {delegates.length}
+            </span>
+          </button>
 
-        {!currentSupervisor && (
           <button
             type="button"
             onClick={() => setSubTab('supervisors')}
@@ -153,8 +171,8 @@ export const AdminPeopleView = memo(({
               {supervisors.length}
             </span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Delegates Section */}
       {subTab === 'delegates' && (
@@ -174,7 +192,7 @@ export const AdminPeopleView = memo(({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('اسم المندوب')}</label>
                   <input 
                     value={delegateForm.name}
-                    onChange={(e) => setDelegateForm({ ...delegateForm, name: e.target.value })}
+                    onChange={(e) => setDelegateForm({ ...delegateForm, name: e.target.value.replace(/[0-9]/g, '') })}
                     placeholder={t('الاسم الثلاثي...')} 
                     required 
                     className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all" 
@@ -185,7 +203,7 @@ export const AdminPeopleView = memo(({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('رقم الموبايل')}</label>
                   <input 
                     value={delegateForm.phone}
-                    onChange={(e) => setDelegateForm({ ...delegateForm, phone: e.target.value })}
+                    onChange={(e) => setDelegateForm({ ...delegateForm, phone: e.target.value.replace(/\D/g, '') })}
                     placeholder="01xxxxxxxxx" 
                     required 
                     className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 transition-all" 
@@ -214,6 +232,9 @@ export const AdminPeopleView = memo(({
                       <RefreshCw className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  {delegatePinError && (
+                    <p className="text-[11px] font-bold text-rose-500 dark:text-rose-400 mt-1">{delegatePinError}</p>
+                  )}
                 </div>
 
                 <button
@@ -323,7 +344,7 @@ export const AdminPeopleView = memo(({
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between text-[10px]">
                         <div className="flex items-center gap-1 font-mono">
                           <span className="text-slate-400">{t('PIN:')}</span>
-                          <span className="font-black text-emerald-600 dark:text-emerald-400">{d.pin}</span>
+                          <span className="font-black text-emerald-600 dark:text-emerald-400">{formatDisplayPin(d.pin)}</span>
                         </div>
                         <span className="font-mono font-black text-slate-700 dark:text-slate-300">
                           +{(d.totalRechargedAmount || 0).toLocaleString()} {t('ج.م')}
@@ -362,7 +383,7 @@ export const AdminPeopleView = memo(({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('اسم المشرف')}</label>
                   <input 
                     value={supervisorForm.name}
-                    onChange={(e) => setSupervisorForm({ ...supervisorForm, name: e.target.value })}
+                    onChange={(e) => setSupervisorForm({ ...supervisorForm, name: e.target.value.replace(/[0-9]/g, '') })}
                     placeholder={t('الاسم...')} 
                     required 
                     className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-purple-500 transition-all" 
@@ -373,7 +394,7 @@ export const AdminPeopleView = memo(({
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">{t('رقم الموبايل')}</label>
                   <input 
                     value={supervisorForm.phone}
-                    onChange={(e) => setSupervisorForm({ ...supervisorForm, phone: e.target.value })}
+                    onChange={(e) => setSupervisorForm({ ...supervisorForm, phone: e.target.value.replace(/\D/g, '') })}
                     placeholder="01xxxxxxxxx" 
                     required 
                     className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:border-purple-500 transition-all" 
@@ -402,6 +423,9 @@ export const AdminPeopleView = memo(({
                       <RefreshCw className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  {supervisorPinError && (
+                    <p className="text-[11px] font-bold text-rose-500 dark:text-rose-400 mt-1">{supervisorPinError}</p>
+                  )}
                 </div>
 
                 <button 
@@ -481,8 +505,18 @@ export const AdminPeopleView = memo(({
                               if (editingSupervisorPinValue.length < 4) return;
                               setIsUpdatingSupervisorPin(true);
                               try {
-                                await firestoreService.updateSupervisor(s.id, { pin: editingSupervisorPinValue });
-                                s.pin = editingSupervisorPinValue;
+                                const cleanPin = editingSupervisorPinValue.trim();
+                                const pinCheck = await firestoreService.isPinTaken(cleanPin, s.id);
+                                if (pinCheck.taken) {
+                                  alert(adminLang === 'en'
+                                    ? `This PIN is already used by another account (${pinCheck.name} - ${pinCheck.role})`
+                                    : `هذا الرمز مستخدم بالفعل في حساب آخر: (${pinCheck.name} - ${pinCheck.role})`);
+                                  setIsUpdatingSupervisorPin(false);
+                                  return;
+                                }
+
+                                await firestoreService.updateSupervisor(s.id, { pin: cleanPin });
+                                s.pin = cleanPin;
                                 setEditingSupervisorPinId(null);
                               } catch (err) {
                                 console.error(err);
@@ -497,11 +531,11 @@ export const AdminPeopleView = memo(({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <span className="font-mono font-black text-purple-600 dark:text-purple-400">{s.pin}</span>
+                          <span className="font-mono font-black text-purple-600 dark:text-purple-400">{formatDisplayPin(s.pin)}</span>
                           <button
                             onClick={() => {
                               setEditingSupervisorPinId(s.id);
-                              setEditingSupervisorPinValue(s.pin || '');
+                              setEditingSupervisorPinValue(s.pin && s.pin.length === 64 ? '' : (s.pin || ''));
                             }}
                             className="text-[10px] text-purple-600 hover:underline font-bold"
                           >

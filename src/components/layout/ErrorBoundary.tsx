@@ -8,19 +8,42 @@ interface Props {
 interface State {
   hasError: boolean;
   error?: Error;
+  isReloading?: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
+    isReloading: false
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    const isChunkError =
+      error?.message?.includes('dynamically imported module') ||
+      error?.message?.includes('Failed to fetch') ||
+      error?.message?.includes('Loading chunk') ||
+      error?.message?.includes('Importing a module script failed');
+
+    return { hasError: true, error, isReloading: isChunkError };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
+
+    const isChunkError =
+      error?.message?.includes('dynamically imported module') ||
+      error?.message?.includes('Failed to fetch') ||
+      error?.message?.includes('Loading chunk') ||
+      error?.message?.includes('Importing a module script failed');
+
+    if (isChunkError) {
+      const lastReload = Number(sessionStorage.getItem('last_chunk_reload') || '0');
+      const now = Date.now();
+      if (now - lastReload > 15000) {
+        sessionStorage.setItem('last_chunk_reload', String(now));
+        window.location.reload();
+      }
+    }
   }
 
   private handleReset = () => {
@@ -30,6 +53,22 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      if (this.state.isReloading) {
+        return (
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center" dir="rtl">
+            <div className="max-w-sm w-full bg-slate-800 rounded-xl p-8 border border-slate-700">
+              <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <RefreshCw className="w-8 h-8 text-amber-400 animate-spin" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2 font-sans">جاري تحديث النظام تلقائياً...</h2>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                تم توفير إصدار جديد، يتم الآن تنشيط الصفحة لتطبيق التحديثات فوراً.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center" dir="rtl">
           <div className="max-w-sm w-full bg-slate-800 rounded-xl p-8 border border-slate-700">

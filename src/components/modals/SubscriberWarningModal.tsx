@@ -22,14 +22,14 @@ export const SubscriberWarningModal: React.FC<SubscriberWarningModalProps> = mem
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div 
         onClick={onConfirm}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps"
       />
-      <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-2xl p-8 text-center border border-transparent dark:border-slate-800" dir="rtl">
-        <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-400/10 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white dark:border-slate-800">
-          <AlertCircle className="w-10 h-10 text-emerald-500 dark:text-emerald-400 animate-pulse" />
+      <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 sm:p-8 text-center border border-slate-200/80 dark:border-slate-800 shadow-2xl animate-popup-30fps" dir="rtl">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-50 dark:bg-emerald-400/10 rounded-2xl flex items-center justify-center mx-auto mb-5 border-2 border-emerald-100 dark:border-emerald-900/30">
+          <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 dark:text-emerald-400 animate-pulse" />
         </div>
         
-        <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2 tracking-tighter transition-colors">تنبيه: مشترك شهري</h3>
+        <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mb-2 transition-colors">تنبيه: مشترك شهري</h3>
         
         <p className="text-slate-500 dark:text-slate-400 font-bold mb-6 text-sm sm:text-base leading-relaxed transition-colors">
           رقم اللوحة ينتمي إلى مشترك شهري فعال ونشط حالياً.
@@ -48,7 +48,7 @@ export const SubscriberWarningModal: React.FC<SubscriberWarningModalProps> = mem
         <div className="flex flex-col gap-3">
           <button 
             onClick={onConfirm}
-            className="w-full bg-slate-900 dark:bg-emerald-600 text-white dark:text-white py-4 rounded-2xl font-black text-lg hover:bg-slate-800 dark:hover:bg-emerald-700 transition-all outline-none active:scale-[0.98]"
+            className="w-full h-14 bg-slate-900 dark:bg-emerald-600 text-white rounded-2xl font-black text-sm sm:text-base hover:bg-slate-800 dark:hover:bg-emerald-700 active:scale-95 transition-all duration-150 outline-none cursor-pointer shadow-sm flex items-center justify-center"
           >
             حسنًا، فهمت
           </button>

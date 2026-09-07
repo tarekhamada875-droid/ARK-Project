@@ -1,7 +1,6 @@
 /// <reference types="vitest" />
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import legacy from '@vitejs/plugin-legacy';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
@@ -11,10 +10,6 @@ export default defineConfig(({mode}) => {
     plugins: [
       react(), 
       tailwindcss(),
-      legacy({
-        targets: ['chrome >= 55', 'safari >= 11', 'ios >= 11', 'edge >= 79', 'firefox >= 55', 'not IE 11'],
-        additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
-      }),
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),

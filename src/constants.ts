@@ -69,4 +69,3 @@ export const APP_TEXT = {
   }
 };
 
-export const ADMIN_PIN = "8899";

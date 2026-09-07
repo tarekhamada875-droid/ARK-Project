@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LogoutConfirmModal } from '../components/modals/LogoutConfirmModal';
-import { firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
 import * as functionsModule from 'firebase/functions';
 import { getDoc } from 'firebase/firestore';
 
@@ -31,6 +31,27 @@ describe('v165 — Logout Admin PIN Verification & Modal Isolation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+
+    global.fetch = vi.fn(async (url: any, options: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/api/auth/verify-admin-pin')) {
+        const body = JSON.parse(options?.body || '{}');
+        if (body.pin === '8899' || body.pin === '987654') {
+          return {
+            ok: true,
+            json: async () => ({ valid: true })
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({ valid: false })
+        } as any;
+      }
+      return {
+        ok: false,
+        json: async () => ({})
+      } as any;
+    });
   });
 
   it('1. Calls backend verification and allows logout when correct PIN is entered (without reading admin_settings/auth_pin from client)', async () => {
@@ -46,14 +67,14 @@ describe('v165 — Logout Admin PIN Verification & Modal Isolation', () => {
 
     vi.spyOn(functionsModule, 'httpsCallable').mockReturnValue(callableFn as any);
 
-    const isVerifiedDirectly = await firestoreServiceV2.verifyAdminPinForLogout('8899');
+    const isVerifiedDirectly = await firestoreService.verifyAdminPinForLogout('8899');
     expect(isVerifiedDirectly).toBe(true);
 
     render(
       <LogoutConfirmModal
         onConfirm={onConfirmMock}
         onCancel={onCancelMock}
-        onVerifyPin={firestoreServiceV2.verifyAdminPinForLogout}
+        onVerifyPin={firestoreService.verifyAdminPinForLogout}
       />
     );
 
@@ -81,14 +102,14 @@ describe('v165 — Logout Admin PIN Verification & Modal Isolation', () => {
     const callableFn = vi.fn().mockResolvedValue({ data: { valid: false } });
     vi.spyOn(functionsModule, 'httpsCallable').mockReturnValue(callableFn as any);
 
-    const isVerifiedDirectly = await firestoreServiceV2.verifyAdminPinForLogout('1234');
+    const isVerifiedDirectly = await firestoreService.verifyAdminPinForLogout('1234');
     expect(isVerifiedDirectly).toBe(false);
 
     render(
       <LogoutConfirmModal
         onConfirm={onConfirmMock}
         onCancel={onCancelMock}
-        onVerifyPin={firestoreServiceV2.verifyAdminPinForLogout}
+        onVerifyPin={firestoreService.verifyAdminPinForLogout}
       />
     );
 
@@ -170,10 +191,10 @@ describe('v165 — Logout Admin PIN Verification & Modal Isolation', () => {
       data: () => ({ pin: '987654' })
     } as any);
 
-    const isMatch = await firestoreServiceV2.verifyAdminPinForLogout('987654');
+    const isMatch = await firestoreService.verifyAdminPinForLogout('987654');
     expect(isMatch).toBe(true);
 
-    const isMismatch = await firestoreServiceV2.verifyAdminPinForLogout('111111');
+    const isMismatch = await firestoreService.verifyAdminPinForLogout('111111');
     expect(isMismatch).toBe(false);
   });
 });

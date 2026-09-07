@@ -79,7 +79,7 @@ export const EgyptianPlate: React.FC<EgyptianPlateProps> = memo(({
       <div className="flex-1 flex items-center justify-between bg-[#fcfcfc] dark:bg-slate-200 overflow-hidden">
         {/* Numbers Section (Left side) */}
         <div className="flex-1 h-full min-w-0 flex justify-center items-center px-1">
-          <FitText minFontSize={size === 'sm' ? 7 : size === 'md' ? 14 : 24} className="font-black text-slate-900 tracking-tighter text-center">
+          <FitText minFontSize={size === 'sm' ? 7 : size === 'md' ? 14 : 24} className="font-mono font-black text-slate-900 tracking-tighter text-center">
             {numbers}
           </FitText>
         </div>

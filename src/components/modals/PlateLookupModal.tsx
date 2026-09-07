@@ -24,7 +24,7 @@ import {
   safeDate, 
   getDuration
 } from '../../utils';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
 
 interface PlateLookupModalProps {
   allGarages: Garage[];
@@ -89,27 +89,16 @@ export const PlateLookupModal: React.FC<PlateLookupModalProps> = memo(({
       // Search in parallel across all garages
       const garagePromises = allGarages.map(async (garage) => {
         try {
-          // Fetch inside vehicles
-          const insideCars = await firestoreService.getVehiclesInsideOnce(garage.id);
-          const matchedInside = insideCars.filter(v => {
-            const vRaw = getRawPlate(v.plateNumberRaw || v.plateNumber);
-            return vRaw === targetRaw || vRaw.includes(targetRaw);
-          });
+          // Query matching vehicles for this plate directly
+          const matchedVehicles = await firestoreService.getVehiclesByPlateOnce(garage.id, targetRaw);
 
-          matchedInside.forEach(v => {
-            const cost = calculateCost(v, garage, now);
-            foundActive.push({ vehicle: v, garage, accruedCost: cost });
-          });
-
-          // Fetch recent transactions (past visits)
-          const historyCars = await firestoreService.getTodayTransactionsOnce(garage.id);
-          const matchedHistory = historyCars.filter(v => {
-            const vRaw = getRawPlate(v.plateNumberRaw || v.plateNumber);
-            return vRaw === targetRaw || vRaw.includes(targetRaw);
-          });
-
-          matchedHistory.forEach(v => {
-            foundHistory.push({ vehicle: v, garageName: garage.name });
+          matchedVehicles.forEach(v => {
+            if (v.status === 'inside') {
+              const cost = calculateCost(v, garage, now);
+              foundActive.push({ vehicle: v, garage, accruedCost: cost });
+            } else {
+              foundHistory.push({ vehicle: v, garageName: garage.name });
+            }
           });
 
           // Fetch subscriber info if any

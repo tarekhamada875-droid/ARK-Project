@@ -95,10 +95,10 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <div 
         onClick={onCancel}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps"
       />
       <div 
-        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 sm:p-8 border border-slate-150 dark:border-slate-800 shadow-xl"
+        className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-2xl animate-popup-30fps"
         dir="rtl"
       >
         <div className="text-center mb-6">
@@ -170,7 +170,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = memo(({
             type="button"
             onClick={handleLogoutSubmit}
             disabled={pin.length < 4 || isLoggingOut}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] outline-none"
+            className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-black text-base rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] outline-none cursor-pointer"
           >
             {isLoggingOut ? (
               <Loader2 className="w-5 h-5 animate-spin" />

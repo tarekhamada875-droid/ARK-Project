@@ -11,7 +11,7 @@ import {
   Loader2 
 } from 'lucide-react';
 import { Announcement, Garage } from '../../types';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
 import { safeDate } from '../../utils';
 import { useTheme } from '../../utils/ThemeContext';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -29,6 +29,7 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [formFeedback, setFormFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form State
@@ -100,18 +101,26 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
   };
 
   const handleDeleteAnnouncement = async (id: string) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(`delete-${id}`);
     try {
       await firestoreService.deleteAnnouncement(id);
     } catch (err) {
       console.error('Failed to delete announcement:', err);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
   const handleToggleActive = async (ann: Announcement) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(`toggle-${ann.id}`);
     try {
       await firestoreService.toggleAnnouncementActive(ann.id, !ann.isActive);
     } catch (err) {
       console.error('Failed to toggle announcement active state:', err);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -223,7 +232,10 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50 mt-4 cursor-pointer"
               >
                 {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>{t('جاري النشر...')}</span>
+                  </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
@@ -312,20 +324,32 @@ export const AdminAnnouncementsView: React.FC<AdminAnnouncementsViewProps> = ({
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
+                            disabled={!!actionLoadingId}
                             onClick={() => handleToggleActive(ann)}
                             title={ann.isActive ? t('إخفاء') : t('تفعيل')}
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
                           >
-                            {ann.isActive ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {actionLoadingId === `toggle-${ann.id}` ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                            ) : ann.isActive ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
 
                           <button
                             type="button"
+                            disabled={!!actionLoadingId}
                             onClick={() => handleDeleteAnnouncement(ann.id)}
                             title={t('حذف')}
-                            className="p-2 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors"
+                            className="p-2 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 disabled:opacity-50 transition-colors"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {actionLoadingId === `delete-${ann.id}` ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>

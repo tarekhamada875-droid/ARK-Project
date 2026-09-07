@@ -13,7 +13,12 @@ import {
   getDuration,
   generateSafePin,
 } from './index';
-import { filterLogsByMonth, sumLogs, calculateCommission, RechargeLog } from './delegateMonthlyCalculations';
+import {
+  calculateApprovedCommission,
+  calculateApprovedRechargeTotal,
+  filterRequestsByMonth,
+  CommissionRequestLike
+} from './delegateCommissionCalculations';
 import { useAdminTranslation } from './adminTranslations';
 
 describe('High-Load & Stress Testing Suite (اختبار الإجهاد)', () => {
@@ -71,24 +76,27 @@ describe('High-Load & Stress Testing Suite (اختبار الإجهاد)', () =>
   });
 
   it('Stress Test 3: Large Dataset Filtering & Revenue Calculations (50,000 Recharge Logs)', () => {
-    const logs: RechargeLog[] = [];
+    const logs: CommissionRequestLike[] = [];
     const baseTimestamp = new Date('2026-01-01T00:00:00Z').getTime();
 
     // Generate 50,000 logs distributed over 12 months
     for (let i = 0; i < 50000; i++) {
       const randomOffset = (i * 600000) % (365 * 24 * 3600 * 1000); // spread across year
       logs.push({
+        id: `req-${i}`,
+        status: 'approved',
         amount: 100 + (i % 500),
         revenueAmount: 100 + (i % 500),
-        timestamp: new Date(baseTimestamp + randomOffset).toISOString(),
+        commission: 30,
+        createdAt: new Date(baseTimestamp + randomOffset).toISOString(),
       });
     }
 
     const startTime = performance.now();
 
-    const augustLogs = filterLogsByMonth(logs, '2026-08');
-    const totalAugust = sumLogs(augustLogs);
-    const commission = calculateCommission(totalAugust, 12.5);
+    const augustLogs = filterRequestsByMonth(logs, '2026-08');
+    const totalAugust = calculateApprovedRechargeTotal(logs, '2026-08');
+    const commission = calculateApprovedCommission(logs, '2026-08');
 
     const duration = performance.now() - startTime;
 

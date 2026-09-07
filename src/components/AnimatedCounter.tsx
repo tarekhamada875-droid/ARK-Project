@@ -34,6 +34,11 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = memo(({
       return;
     }
 
+    if (disableColorChange) {
+      prevValueRef.current = value;
+      return;
+    }
+
     const startValue = prevValueRef.current;
     const endValue = value;
 
@@ -54,7 +59,7 @@ export const AnimatedCounter: React.FC<AnimatedCounterProps> = memo(({
         }, 3000);
       }
     }
-  }, [value]);
+  }, [value, disableColorChange]);
 
   useEffect(() => {
     const startValue = prevValueRef.current;

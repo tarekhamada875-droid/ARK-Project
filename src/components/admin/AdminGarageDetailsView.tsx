@@ -26,14 +26,15 @@ import {
   Calendar,
   Lock,
   Unlock,
-  Sparkles,
-  Filter
+  Clock,
+  Wallet
 } from 'lucide-react';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
-import { serverTimestamp, Timestamp } from 'firebase/firestore';
-import { normalizeDigits, safeDate, getRemainingDays, calculateFinalPrice } from '../../utils';
+import { firestoreService } from '../../services';
+import { Timestamp } from 'firebase/firestore';
+import { normalizeDigits, safeDate, getRemainingDays, canChangeGarageRates, formatDisplayPin, isHashedPin } from '../../utils';
+import { getCairoDateKey } from '../../domain/garage/businessDay';
 import { Garage, Staff, Package } from '../../types';
-import { getCleanPackageInfo } from '../../constants/packages';
+import { BALANCE_PRESET_AMOUNTS } from '../../constants/packages';
 import { useTheme } from '../../utils/ThemeContext';
 import { useSystemConfig } from '../../hooks/useSystemConfig';
 import { useAdminTranslation } from '../../utils/adminTranslations';
@@ -47,8 +48,8 @@ interface AdminGarageDetailsViewProps {
   staffList: Staff[];
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  packages: Package[];
-  subscriptionPrices?: { weekly: number; biweekly?: number; monthly: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
+  packages?: Package[];
+  subscriptionPrices?: { weekly?: number; biweekly?: number; monthly?: number; referralFee?: number; weeklyDiscount?: number; biweeklyDiscount?: number; monthlyDiscount?: number };
   allGarages?: Garage[];
 }
 
@@ -61,15 +62,17 @@ export const AdminGarageDetailsView = memo(({
   staffList,
   isLoading,
   setIsLoading,
-  packages,
-  subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000 },
+  packages: _packages,
+  subscriptionPrices: _subscriptionPrices = { weekly: 800, biweekly: 1500, monthly: 3000, referralFee: 50 },
   allGarages = []
 }: AdminGarageDetailsViewProps) => {
   const [showClearBalanceConfirm, setShowClearBalanceConfirm] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
   const [staffForm, setStaffForm] = useState({ name: '', pin: '' });
-  const [pendingPackage, setPendingPackage] = useState<Package | null>(null);
+  const [selectedTopupAmount, setSelectedTopupAmount] = useState<number | null>(500);
+  const [showTopupModal, setShowTopupModal] = useState(false);
+  const [isTopupSuccess, setIsTopupSuccess] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const { theme, toggleTheme, adminLang } = useTheme();
   const t = useAdminTranslation(adminLang);
@@ -88,7 +91,7 @@ export const AdminGarageDetailsView = memo(({
   const [hourlyRateInput, setHourlyRateInput] = useState<string>(String(selectedGarageForDetails.hourlyRate || 0));
   const [overnightRateInput, setOvernightRateInput] = useState<string>(String(selectedGarageForDetails.overnightRate || 0));
   const [isSavingRates, setIsSavingRates] = useState(false);
-  const [selectedDurationFilter, setSelectedDurationFilter] = useState<number>(15);
+  const [isUpdatingLock, setIsUpdatingLock] = useState(false);
   const config = useSystemConfig();
   const subscriberFlatFee = Number(config?.monthlySubscribersFlatFee) || 500;
 
@@ -105,7 +108,13 @@ export const AdminGarageDetailsView = memo(({
     hourlyRateInput !== String(selectedGarageForDetails.hourlyRate || 0) ||
     overnightRateInput !== String(selectedGarageForDetails.overnightRate || 0);
 
+  const rateCheck = canChangeGarageRates(selectedGarageForDetails);
+
   const handleSaveRates = async () => {
+    if (!rateCheck.allowed) {
+      return;
+    }
+
     const hourly = Number(normalizeDigits(hourlyRateInput));
     const overnight = Number(normalizeDigits(overnightRateInput));
 
@@ -115,12 +124,15 @@ export const AdminGarageDetailsView = memo(({
 
     setIsSavingRates(true);
     try {
+      const now = new Date();
       await firestoreService.updateGarage(selectedGarageForDetails.id, {
         hourlyRate: hourly,
         overnightRate: overnight,
+        lastRateChangeDate: now,
       });
       selectedGarageForDetails.hourlyRate = hourly;
       selectedGarageForDetails.overnightRate = overnight;
+      selectedGarageForDetails.lastRateChangeDate = now;
     } catch (e) {
       console.error(e);
     } finally {
@@ -140,51 +152,34 @@ export const AdminGarageDetailsView = memo(({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleRechargeSubmit = async (pkg: Package) => {
+  const handleTopupSubmit = async () => {
+    if (!selectedTopupAmount || selectedTopupAmount <= 0) return;
     setIsLoading(true);
     try {
-      const cleanPkg = getCleanPackageInfo(pkg);
-      const updateData: any = {
-        totalAdminRevenue: Number(((selectedGarageForDetails.totalAdminRevenue || 0) + pkg.price).toFixed(2)),
-        isLocked: false,
-        isTrial: false,
-        dailyCapacity: cleanPkg.isUnlimited ? 0 : (cleanPkg.dailyCapacity || 40),
-        activePackageName: pkg.name,
-        packageName: pkg.name,
-        lastRechargeDate: serverTimestamp()
-      };
-
-      let baseDate = new Date();
-      const currentExpiry = selectedGarageForDetails.balanceExpiry;
-      if (currentExpiry) {
-        const currentExpiryDate = safeDate(currentExpiry);
-        if (currentExpiryDate > baseDate) {
-          baseDate = currentExpiryDate;
+      await firestoreService.adminTopupGarageBalance(
+        selectedGarageForDetails.id,
+        selectedTopupAmount
+      );
+      setIsTopupSuccess(true);
+      
+      // Refresh garage details in state if updater is provided
+      if (typeof setSelectedGarageForDetails === 'function') {
+        const updated = await firestoreService.getGarageById(selectedGarageForDetails.id);
+        if (updated) {
+          setSelectedGarageForDetails(updated);
         }
       }
-      let days = cleanPkg.durationDays || 30;
-
-      baseDate.setDate(baseDate.getDate() + days);
-      
-      updateData.balanceExpiry = Timestamp.fromDate(baseDate);
-      updateData.billingModel = 'subscription';
-
-      await firestoreService.updateGarage(selectedGarageForDetails.id, updateData);
-
-      await firestoreService.addActivityLog({
-        garageId: selectedGarageForDetails.id,
-        garageName: selectedGarageForDetails.name,
-        staffId: 'admin',
-        staffName: t('مدير النظام (Admin)'),
-        actionType: 'recharge',
-        plateNumber: adminLang === 'en' ? `Recharge Subscription: ${pkg.name} (${pkg.vehiclesCount} Days) - ${pkg.price} EGP` : `تجديد اشتراك: ${pkg.name} (${pkg.vehiclesCount} يوم) - ${pkg.price} ج`,
-        timestamp: serverTimestamp() as any,
-        amount: pkg.price,
-        packageId: pkg.id
-      });
-      setPendingPackage(null);
-    } catch (e) { 
-      console.error(e);
+      setTimeout(() => {
+        setShowTopupModal(false);
+        setIsTopupSuccess(false);
+      }, 1400);
+    } catch (e: any) { 
+      console.error('Balance top-up failed:', e);
+      alert(
+        adminLang === 'en'
+          ? `Top-up failed: ${e?.message || 'Unknown error'}`
+          : `فشل شحن الرصيد: ${e?.message || 'خطأ غير معروف'}`
+      );
     } finally { 
       setIsLoading(false); 
     }
@@ -221,7 +216,7 @@ export const AdminGarageDetailsView = memo(({
     };
   }, [showAddStaffModal, staffToDelete]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getCairoDateKey();
   const isTodayValid = selectedGarageForDetails.lastTransactionDate === today;
   
   const dailyCount = isTodayValid ? (selectedGarageForDetails.todayCount || 0) : 0;
@@ -450,12 +445,13 @@ export const AdminGarageDetailsView = memo(({
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
-                            {selectedGarageForDetails.pin || selectedGarageForDetails.ownerPin || '—'}
+                            {formatDisplayPin(selectedGarageForDetails.pin || selectedGarageForDetails.ownerPin)}
                           </span>
                           <button
                             onClick={() => {
                               setIsEditingGaragePin(true);
-                              setGaragePinInput(selectedGarageForDetails.pin || selectedGarageForDetails.ownerPin || '');
+                              const p = selectedGarageForDetails.pin || selectedGarageForDetails.ownerPin || '';
+                              setGaragePinInput(isHashedPin(p) ? '' : p);
                             }}
                             className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
                           >
@@ -471,18 +467,39 @@ export const AdminGarageDetailsView = memo(({
               {/* Lock / Unlock Toggle Action */}
               <div className="flex items-center gap-2 self-stretch sm:self-auto">
                 <button
+                  disabled={isUpdatingLock}
                   onClick={async () => {
-                    const newLocked = !selectedGarageForDetails.isLocked;
-                    await firestoreService.updateGarage(selectedGarageForDetails.id, { isLocked: newLocked });
-                    setSelectedGarageForDetails({ ...selectedGarageForDetails, isLocked: newLocked });
+                    if (isUpdatingLock) return;
+                    setIsUpdatingLock(true);
+                    try {
+                      const newLocked = !selectedGarageForDetails.isLocked;
+                      await firestoreService.updateGarage(selectedGarageForDetails.id, { 
+                        isLocked: newLocked,
+                        isSuspended: newLocked 
+                      });
+                      setSelectedGarageForDetails({ 
+                        ...selectedGarageForDetails, 
+                        isLocked: newLocked,
+                        isSuspended: newLocked
+                      });
+                    } catch (err) {
+                      console.error('Failed to toggle garage lock:', err);
+                    } finally {
+                      setIsUpdatingLock(false);
+                    }
                   }}
-                  className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-60 cursor-pointer ${
                     selectedGarageForDetails.isLocked
                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                       : 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm'
                   }`}
                 >
-                  {selectedGarageForDetails.isLocked ? (
+                  {isUpdatingLock ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{t('جاري المعالجة...')}</span>
+                    </>
+                  ) : selectedGarageForDetails.isLocked ? (
                     <>
                       <Unlock className="w-4 h-4" />
                       <span>{t('تفعيل الجراج الآن')}</span>
@@ -503,7 +520,7 @@ export const AdminGarageDetailsView = memo(({
             {/* Metric 1: Today */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 text-center relative group shadow-sm">
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('اليوم')}</span>
+                <span className="text-[11px] font-black text-slate-400">{t('اليوم')}</span>
                 {(dailyCount > 0 || dailyRevenue > 0) && (
                   <button
                     type="button"
@@ -523,7 +540,7 @@ export const AdminGarageDetailsView = memo(({
 
             {/* Metric 2: Cumulative */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{t('تراكمي')}</span>
+              <span className="text-[11px] font-black text-slate-400 block mb-1">{t('تراكمي')}</span>
               <div className="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none">{totalCount}</div>
               <p className="text-[11px] font-black text-slate-600 dark:text-slate-300 font-mono mt-1.5">
                 {Number(totalRevenue).toFixed(0)} {t('ج.م')}
@@ -532,7 +549,7 @@ export const AdminGarageDetailsView = memo(({
 
             {/* Metric 3: Total Recharged Units */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 text-center shadow-sm">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{t('إجمالي الوحدات')}</span>
+              <span className="text-[11px] font-black text-slate-400 block mb-1">{t('إجمالي الوحدات')}</span>
               <div className="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none">
                 {selectedGarageForDetails.totalRechargedCars || 0}
               </div>
@@ -545,7 +562,7 @@ export const AdminGarageDetailsView = memo(({
                 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40' 
                 : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
             }`}>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{t('المرتجع اليومي')}</span>
+              <span className="text-[11px] font-black text-slate-400 block mb-1">{t('المرتجع اليومي')}</span>
               <div className={`text-2xl font-black font-mono leading-none ${
                 (selectedGarageForDetails.lastRefundDate === today ? selectedGarageForDetails.dailyRefundCount || 0 : 0) >= 5 
                   ? 'text-rose-600 dark:text-rose-400' 
@@ -560,68 +577,99 @@ export const AdminGarageDetailsView = memo(({
 
         {/* ================= ZONE 2: SUBSCRIPTION, FINANCIALS & RECHARGE ================= */}
         <section className="space-y-6">
-          {/* Subscription Remaining Hero Card */}
-          <div className="bg-slate-900 dark:bg-slate-900/90 text-white rounded-2xl border border-slate-800 p-6 sm:p-8 relative overflow-hidden shadow-md">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="text-center md:text-right">
-                <span className="text-slate-400 text-xs font-black uppercase tracking-widest block mb-2">
-                  {t('الاشتراك المتبقي للجراج')}
-                </span>
-                <div className="flex items-baseline gap-3 justify-center md:justify-start">
-                  <span className={`text-6xl sm:text-7xl font-black font-mono tracking-tighter ${
-                    remainingDays <= 0 ? 'text-rose-400' : remainingDays <= 3 ? 'text-amber-400' : 'text-emerald-400'
-                  }`}>
-                    {remainingDays}
-                  </span>
-                  <span className="text-xl font-bold text-slate-400">{t('يوم')}</span>
-                </div>
-
-                <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-400 justify-center md:justify-start">
-                  <Calendar className="w-4 h-4 text-slate-500" />
-                  <span>
-                    {t('تاريخ انتهاء الاشتراك:')} {(() => {
-                      const expiry = selectedGarageForDetails.balanceExpiry;
-                      if (!expiry) return '-';
-                      const expiryDate = safeDate(expiry);
-                      return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-                    })()}
-                  </span>
+          {/* Subscription & Wallet Hero Card */}
+          <div className="bg-slate-900 dark:bg-slate-900/90 text-white rounded-3xl border border-slate-800 p-6 sm:p-8 relative overflow-hidden shadow-md">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+              {/* Wallet Balance Hero */}
+              <div className="lg:col-span-6 bg-slate-800/50 border border-slate-700/60 rounded-2xl p-5 flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <span className="text-slate-300 text-xs font-black uppercase tracking-wider">
+                      {t('رصيد المحفظة الحالي')}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-amber-400">
+                      {(selectedGarageForDetails.balance || 0).toLocaleString('en-US')}
+                    </span>
+                    <span className="text-base font-bold text-amber-300/80">{t('ج.م')}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Zero Balance / Clear Wallet Action */}
-              <div className="w-full md:w-auto shrink-0 flex flex-col items-center md:items-end gap-2">
-                {!showClearBalanceConfirm ? (
-                  <button 
-                    onClick={() => setShowClearBalanceConfirm(true)}
-                    className="w-full md:w-auto px-6 py-3 bg-white/10 hover:bg-white/15 text-slate-300 hover:text-white rounded-xl font-bold text-xs border border-white/10 transition-all cursor-pointer"
-                  >
-                    {t('تصفير المحفظة وإنهاء الاشتراك')}
-                  </button>
-                ) : (
-                  <div className="flex gap-2 p-1.5 bg-slate-800/80 rounded-xl border border-slate-700">
-                    <button 
-                      onClick={async () => {
-                        setIsLoading(true);
-                        try { 
-                          const updateFields: any = { balance: 0, isLocked: true, balanceExpiry: Timestamp.fromDate(new Date()) };
-                          await firestoreService.updateGarage(selectedGarageForDetails.id, updateFields); 
-                          setShowClearBalanceConfirm(false); 
-                        } 
-                        catch (error) { console.error(error); } finally { setIsLoading(false); }
-                      }}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-black text-xs transition-all"
-                    >
-                      {t('تأكيد التصفير')}
-                    </button>
-                    <button 
-                      onClick={() => setShowClearBalanceConfirm(false)} 
-                      className="px-4 py-2 text-slate-400 hover:text-white font-bold text-xs"
-                    >
-                      {t('إلغاء')}
-                    </button>
+              {/* Subscription Remaining */}
+              <div className="lg:col-span-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-800/30 border border-slate-800 rounded-2xl p-5">
+                <div>
+                  <span className="text-slate-400 text-xs font-black uppercase tracking-wider block mb-1">
+                    {t('الاشتراك المتبقي للجراج')}
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-4xl sm:text-5xl font-black font-mono tracking-tight ${
+                      remainingDays <= 0 ? 'text-rose-400' : remainingDays <= 3 ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      {remainingDays}
+                    </span>
+                    <span className="text-base font-bold text-slate-400">{t('يوم')}</span>
                   </div>
-                )}
+
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <span>
+                      {t('تاريخ انتهاء الاشتراك:')} {(() => {
+                        const expiry = selectedGarageForDetails.balanceExpiry;
+                        if (!expiry) return '-';
+                        const expiryDate = safeDate(expiry);
+                        return expiryDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                      })()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Zero Balance / Clear Wallet Action */}
+                <div className="shrink-0 w-full sm:w-auto">
+                  {!showClearBalanceConfirm ? (
+                    <button 
+                      onClick={() => setShowClearBalanceConfirm(true)}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-xl font-bold text-xs border border-rose-500/20 transition-all cursor-pointer"
+                    >
+                      {t('تصفير المحفظة وإنهاء الاشتراك')}
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 p-1.5 bg-slate-800/90 rounded-xl border border-slate-700">
+                      <button 
+                        disabled={isLoading}
+                        onClick={async () => {
+                          if (isLoading) return;
+                          setIsLoading(true);
+                          try { 
+                            const updateFields: any = { balance: 0, isLocked: true, balanceExpiry: Timestamp.fromDate(new Date()) };
+                            await firestoreService.updateGarage(selectedGarageForDetails.id, updateFields); 
+                            setShowClearBalanceConfirm(false); 
+                            if (typeof setSelectedGarageForDetails === 'function') {
+                              const updated = await firestoreService.getGarageById(selectedGarageForDetails.id);
+                              if (updated) setSelectedGarageForDetails(updated);
+                            }
+                          } 
+                          catch (error) { console.error(error); } finally { setIsLoading(false); }
+                        }}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        <span>{isLoading ? t('جاري التصفير...') : t('تأكيد')}</span>
+                      </button>
+                      <button 
+                        disabled={isLoading}
+                        onClick={() => setShowClearBalanceConfirm(false)} 
+                        className="px-3 py-1.5 text-slate-400 hover:text-white font-bold text-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {t('إلغاء')}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -634,7 +682,7 @@ export const AdminGarageDetailsView = memo(({
                 <span>{t('خدمة المشتركين الشهريين / الإيواء')}</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
-                {t('عند تفعيل هذا الخيار تضاف 500 ج.م ثابتة تلقائياً على قيمة أية باقة أو اشتراك بالجراج.')}
+                {t('عند تفعيل هذا الخيار تضاف')} {subscriberFlatFee} {t('ج.م ثابتة تلقائياً على قيمة أية باقة أو اشتراك بالجراج.')}
               </p>
             </div>
             <button 
@@ -648,7 +696,7 @@ export const AdminGarageDetailsView = memo(({
                   console.error(e);
                 }
               }}
-              className={`w-14 h-8 rounded-full p-1 transition-all duration-300 relative shrink-0 ${
+              className={`w-14 h-8 rounded-full p-1 transition-all duration-300 relative shrink-0 cursor-pointer ${
                 selectedGarageForDetails.hasMonthlySubscribers ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-800'
               }`}
             >
@@ -658,176 +706,93 @@ export const AdminGarageDetailsView = memo(({
             </button>
           </div>
 
-          {/* Quick Recharge Package Grid */}
+          {/* Direct Wallet Balance Top-Up Panel */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black text-slate-900 dark:text-white text-base flex items-center gap-2">
-                <Shield className="w-5 h-5 text-amber-500" />
-                <span>{t('باقات شحن الاشتراك الفوري')}</span>
-              </h3>
-              <span className="text-xs font-bold text-slate-400">
-                {packages.length} {t('باقة متوفرة')}
-              </span>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <h3 className="font-black text-slate-900 dark:text-white text-base">
+                  {t('شحن رصيد المحفظة')}
+                </h3>
+              </div>
             </div>
 
-            {/* Duration Filter Tabs */}
-            {(() => {
-              const rawList = packages || [];
-              const displayPackages = rawList
-                .map(p => {
-                  const { finalPrice } = calculateFinalPrice(p, !!selectedGarageForDetails.hasMonthlySubscribers, subscriberFlatFee);
-                  return {
-                    ...p,
-                    _sortPrice: finalPrice
-                  };
-                })
-                .sort((a, b) => (a as any)._sortPrice - (b as any)._sortPrice);
-
-              const filteredPackages = displayPackages.filter(pkg => {
-                const info = getCleanPackageInfo(pkg);
-                return info.durationDays === selectedDurationFilter;
-              });
-
-              const hasUnlimitedInFiltered = filteredPackages.some(p => getCleanPackageInfo(p).isUnlimited);
-              const maxCapInFiltered = Math.max(...filteredPackages.map(p => getCleanPackageInfo(p).dailyCapacity || 0));
-
-              return (
-                <div className="space-y-4">
-                  {/* Duration Filter Switcher */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black text-sm">
-                      <Filter className="w-4 h-4 text-amber-500" />
-                      <span>{t('اختار مدة الاشتراك:')}</span>
-                    </div>
-                    <span className="text-xs font-bold text-slate-500">
-                      ({filteredPackages.length} {t('باقات')})
+            {/* Presets Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {BALANCE_PRESET_AMOUNTS.map((amt) => {
+                const isSelected = selectedTopupAmount === amt;
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setSelectedTopupAmount(amt)}
+                    className={`py-3.5 px-3 rounded-2xl font-black transition-all flex flex-col items-center justify-center gap-1 border-2 cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md scale-[1.03]'
+                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700/60 hover:border-amber-400 dark:hover:border-amber-500/60'
+                    }`}
+                  >
+                    <span className="text-xl font-mono leading-none">
+                      {amt.toLocaleString('en-US')}
                     </span>
-                  </div>
+                    <span className={`text-[10px] font-bold ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {t('ج.م')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-                  <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/70 rounded-2xl">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDurationFilter(15)}
-                      className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
-                        selectedDurationFilter === 15
-                          ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
-                      }`}
-                    >
-                      15 {t('يوم (نصف شهر)')}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDurationFilter(30)}
-                      className={`py-2.5 px-2 rounded-xl font-black text-xs sm:text-sm transition-all text-center cursor-pointer ${
-                        selectedDurationFilter === 30
-                          ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
-                      }`}
-                    >
-                      30 {t('يوم (شهر)')}
-                    </button>
-                  </div>
-
-                  {/* Packages List */}
-                  <div className="space-y-3">
-                    {filteredPackages.map((pkg) => {
-                      const info = getCleanPackageInfo(pkg);
-                      const { finalPrice: effectivePrice, displayBasePrice, hasDiscount } = calculateFinalPrice(
-                        pkg, 
-                        !!selectedGarageForDetails.hasMonthlySubscribers, 
-                        subscriberFlatFee
-                      );
-
-                      const packageName = info.displayName;
-                      const isTopTier = filteredPackages.length > 1 && (
-                        info.isUnlimited || (!hasUnlimitedInFiltered && info.dailyCapacity !== null && info.dailyCapacity === maxCapInFiltered && maxCapInFiltered > 0)
-                      );
-
-                      return (
-                        <div
-                          key={pkg.id}
-                          className={`p-4 sm:p-5 rounded-3xl border-2 transition-all flex items-center justify-between gap-3 ${
-                            info.isUnlimited
-                              ? 'bg-slate-900 border-amber-500 text-white shadow-xl'
-                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white shadow-sm'
-                          }`}
-                        >
-                          {/* Right Side: Package Name & Capacity */}
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-lg sm:text-xl font-black tracking-tight ${info.isUnlimited ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
-                                {packageName}
-                              </span>
-
-                              {isTopTier && (
-                                <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
-                                  <Sparkles className="w-3 h-3" />
-                                  {t('الأكبر سعة')}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className={`flex items-center gap-1.5 text-xs font-bold ${info.isUnlimited ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
-                              <Car className="w-4 h-4 text-amber-500 shrink-0" />
-                              <span>
-                                {info.isUnlimited ? t('عربيات مفتوحة بدون حد أقصى') : `${info.dailyCapacity} ${t('عربية فى اليوم بس')}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Left Side: Direct Total Price & Recharge Button */}
-                          <div className="flex flex-col items-end text-left shrink-0 gap-2">
-                            <div>
-                              {hasDiscount ? (
-                                <div className="flex items-center gap-1.5 mb-0.5 justify-end">
-                                  <div className="relative overflow-hidden rounded px-2 py-0.5 flex items-center justify-center shrink-0">
-                                    <div 
-                                      className="absolute inset-[-250%] bg-[conic-gradient(from_0deg,transparent_75%,#fbbf24_100%)]" 
-                                      style={{ animation: 'spin 3.5s linear infinite' }} 
-                                    />
-                                    <div className={`absolute inset-[1.5px] rounded-[2.5px] ${info.isUnlimited ? 'bg-slate-900' : 'bg-white dark:bg-slate-900'}`} />
-                                    <div className="absolute inset-[1.5px] rounded-[2.5px] bg-emerald-500/10" />
-                                    <span className="relative z-10 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
-                                      {t('خصم')} {pkg.discountType === 'percentage' ? `${pkg.discountValue}%` : `${pkg.discountValue} ${t('ج.م')}`}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500 line-through">
-                                    {displayBasePrice.toLocaleString('en-US')}
-                                  </span>
-                                </div>
-                              ) : null}
-                              <div className="flex items-baseline gap-1 font-mono justify-end">
-                                <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">
-                                  {effectivePrice.toLocaleString('en-US')}
-                                </span>
-                                <span className="text-xs font-black text-amber-700 dark:text-amber-400">{t('ج.م')}</span>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => setPendingPackage({ ...pkg, price: effectivePrice })}
-                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
-                            >
-                              <Shield className="w-3.5 h-3.5" />
-                              <span>{t('شحن الآن')}</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {filteredPackages.length === 0 && (
-                      <div className="py-8 text-center text-slate-400 font-bold text-xs">
-                        {t('لا توجد باقات متوفرة في هذه المدة')}
-                      </div>
-                    )}
-                  </div>
+            {/* Summary & Submit Action */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-bold text-slate-600 dark:text-slate-300">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">{t('الرصيد الحالي')}:</span>
+                  <span className="font-mono text-sm font-black text-slate-900 dark:text-white">
+                    {(selectedGarageForDetails.balance || 0).toLocaleString('en-US')} {t('ج.م')}
+                  </span>
                 </div>
-              );
-            })()}
+                {selectedTopupAmount ? (
+                  <>
+                    <span className="text-slate-400 font-black">+</span>
+                    <div>
+                      <span className="text-amber-600 dark:text-amber-400 block text-[10px]">{t('المبلغ المضاف')}:</span>
+                      <span className="font-mono text-sm font-black text-amber-600 dark:text-amber-400">
+                        {selectedTopupAmount.toLocaleString('en-US')} {t('ج.م')}
+                      </span>
+                    </div>
+                    <span className="text-slate-400 font-black">=</span>
+                    <div>
+                      <span className="text-emerald-600 dark:text-emerald-400 block text-[10px]">{t('الرصيد الجديد')}:</span>
+                      <span className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
+                        {((selectedGarageForDetails.balance || 0) + selectedTopupAmount).toLocaleString('en-US')} {t('ج.م')}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                disabled={!selectedTopupAmount || isLoading}
+                onClick={() => setShowTopupModal(true)}
+                className="w-full sm:w-auto min-h-[48px] px-5 sm:px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+              >
+                <Shield className="w-4 h-4 shrink-0" />
+                {selectedTopupAmount ? (
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span>{t('شحن الرصيد الآن')}</span>
+                    <span className="opacity-40">•</span>
+                    <span className="font-mono">{selectedTopupAmount.toLocaleString('en-US')}</span>
+                    <span>{t('ج.م')}</span>
+                  </span>
+                ) : (
+                  <span className="whitespace-nowrap">{t('اختر مبلغ الشحن')}</span>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Referral System Box */}
@@ -835,7 +800,7 @@ export const AdminGarageDetailsView = memo(({
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <Gift className="w-4 h-4 text-emerald-500" />
-                <span>{t('نظام مكافآت الإحالة (يومان مجانيان عند كل تجديد)')}</span>
+                <span>{t('نظام مكافآت الإحالة')}</span>
               </h3>
               <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
                 {t('أيام المكافآت:')} {selectedGarageForDetails.totalReferralRewardDays || 0} {t('يوم')}
@@ -919,14 +884,9 @@ export const AdminGarageDetailsView = memo(({
               <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center font-black">
                 <Settings className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white">
-                  {t('الإعدادات والتعريفة وطاقم العمل')}
-                </h3>
-                <p className="text-xs text-slate-400 font-bold">
-                  {t('تعديل تسعيرة الساعة والمبيت وإدارة حسابات الموظفين')}
-                </p>
-              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                {t('الإعدادات والتعريفة وطاقم العمل')}
+              </h3>
             </div>
 
             <div className="flex items-center gap-2">
@@ -955,9 +915,14 @@ export const AdminGarageDetailsView = memo(({
                     <input 
                       type="text" 
                       inputMode="numeric"
+                      disabled={!rateCheck.allowed}
                       value={hourlyRateInput}
                       onChange={(e) => setHourlyRateInput(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-black text-slate-900 dark:text-white focus:border-emerald-500 text-center transition-all outline-none font-mono"
+                      className={`w-full bg-white dark:bg-slate-800 border-2 rounded-xl px-4 py-3 text-lg font-black text-slate-900 dark:text-white text-center transition-all outline-none font-mono ${
+                        !rateCheck.allowed 
+                          ? 'opacity-60 cursor-not-allowed border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900' 
+                          : 'border-slate-200 dark:border-slate-700 focus:border-emerald-500'
+                      }`}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -967,19 +932,37 @@ export const AdminGarageDetailsView = memo(({
                     <input 
                       type="text" 
                       inputMode="numeric"
+                      disabled={!rateCheck.allowed}
                       value={overnightRateInput}
                       onChange={(e) => setOvernightRateInput(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-black text-slate-900 dark:text-white focus:border-emerald-500 text-center transition-all outline-none font-mono"
+                      className={`w-full bg-white dark:bg-slate-800 border-2 rounded-xl px-4 py-3 text-lg font-black text-slate-900 dark:text-white text-center transition-all outline-none font-mono ${
+                        !rateCheck.allowed 
+                          ? 'opacity-60 cursor-not-allowed border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900' 
+                          : 'border-slate-200 dark:border-slate-700 focus:border-emerald-500'
+                      }`}
                     />
                   </div>
                 </div>
 
+                {!rateCheck.allowed ? (
+                  <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-center gap-2.5 text-amber-800 dark:text-amber-300 text-xs font-bold">
+                    <Clock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      {t('تعديل التعريفة مقفل: مسموح بتعديل السعر مرة واحدة كل 30 يوماً. متبقي')} <strong className="font-mono text-amber-900 dark:text-amber-100 px-1">{rateCheck.daysRemaining}</strong> {t('يوم للإتاحة القادمة.')}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 text-center">
+                    {t('ملاحظة: السعر الجديد يُطبق على جميع العمليات فوراً، وتُقفل إمكانية التعديل لمدة 30 يوماً.')}
+                  </p>
+                )}
+
                 <button 
                   type="button"
-                  disabled={!hasRateChanges || isSavingRates}
+                  disabled={!rateCheck.allowed || !hasRateChanges || isSavingRates}
                   onClick={handleSaveRates}
                   className={`w-full py-3.5 text-center rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all ${
-                    hasRateChanges 
+                    rateCheck.allowed && hasRateChanges 
                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-98 cursor-pointer' 
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
                   }`}
@@ -1074,12 +1057,12 @@ export const AdminGarageDetailsView = memo(({
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[10px] text-slate-400">{t('الرمز:')}</span>
                               <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-mono font-black">
-                                {s.pin}
+                                {formatDisplayPin(s.pin)}
                               </span>
                               <button 
                                 onClick={() => {
                                   setEditingStaffPinId(s.id);
-                                  setEditingStaffPinValue(s.pin || '');
+                                  setEditingStaffPinValue(s.pin && s.pin.length === 64 ? '' : (s.pin || ''));
                                 }}
                                 className="text-[10px] text-emerald-600 hover:underline font-bold"
                               >
@@ -1114,8 +1097,8 @@ export const AdminGarageDetailsView = memo(({
 
       {/* Add Staff Modal */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl p-6 animate-popup-30fps">
             <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">{t('إضافة موظف جديد')}</h3>
             <p className="text-xs text-slate-400 font-bold mb-5">{t('أدخل اسم الموظف وسيتم استخدام الرمز الظاهر لتسجيل الدخول.')}</p>
             
@@ -1151,7 +1134,7 @@ export const AdminGarageDetailsView = memo(({
                   placeholder={t('مثال: أحمد محمد')} 
                   value={staffForm.name}
                   autoFocus
-                  onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value.replace(/[0-9]/g, '') }))}
                   className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold text-slate-900 dark:text-white outline-none focus:border-emerald-500 text-center transition-all" 
                 />
               </div>
@@ -1167,14 +1150,22 @@ export const AdminGarageDetailsView = memo(({
                 <button 
                   type="submit" 
                   disabled={isLoading || !staffForm.name} 
-                  className="flex-1 py-3.5 bg-emerald-600 text-white rounded-xl font-black text-sm hover:bg-emerald-700 disabled:opacity-50 transition-all cursor-pointer"
+                  className="flex-1 py-3.5 bg-emerald-600 text-white rounded-xl font-black text-sm hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t('تأكيد الإضافة')}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      <span>{t('جاري الإضافة...')}</span>
+                    </>
+                  ) : (
+                    <span>{t('تأكيد الإضافة')}</span>
+                  )}
                 </button>
                 <button 
                   type="button" 
+                  disabled={isLoading}
                   onClick={() => setShowAddStaffModal(false)}
-                  className="px-5 py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-black text-sm hover:bg-slate-200 transition-all cursor-pointer"
+                  className="px-5 py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-black text-sm hover:bg-slate-200 disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {t('إلغاء')}
                 </button>
@@ -1184,63 +1175,97 @@ export const AdminGarageDetailsView = memo(({
         </div>
       )}
 
-      {/* Package Confirmation Overlay */}
-      {pendingPackage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm border-2 border-emerald-500 shadow-2xl animate-in fade-in">
-            <div className="text-center mb-5">
-              <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-              </div>
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">
-                {t('تأكيد تجديد الاشتراك؟')}
-              </h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">
-                {`${t('أنت على وشك تجديد الاشتراك لمدة')} ${pendingPackage.vehiclesCount || pendingPackage.durationDays || 30} ${t('يوم للجراج')}`}
-              </p>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 mb-5 flex justify-between items-center">
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('السعر المطلوب')}</p>
-                <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{pendingPackage.price} {t('ج.م')}</p>
-              </div>
-              <div className="text-left">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('المدة')}</p>
-                <p className="text-xl font-black text-slate-900 dark:text-white font-mono">
-                  {pendingPackage.vehiclesCount || pendingPackage.durationDays || 30} {t('يوم')}
+      {/* Top-up Balance Confirmation Modal */}
+      {showTopupModal && selectedTopupAmount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl p-6 sm:p-8 animate-popup-30fps">
+            {isTopupSuccess ? (
+              <div className="flex flex-col items-center py-4 text-center">
+                <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center text-white mb-3 shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 className="w-9 h-9" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  {t('تم شحن الرصيد بنجاح')}
+                </h3>
+                <p className="text-xs font-bold text-slate-400 mt-1">
+                  {selectedGarageForDetails.name}
                 </p>
+                <div className="mt-4 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-mono font-black text-base">
+                  + {selectedTopupAmount.toLocaleString('en-US')} {t('ج.م')}
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="text-center mb-5">
+                  <div className="w-14 h-14 bg-amber-50 dark:bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-500">
+                    <Wallet className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                    {t('تأكيد شحن الرصيد للجراج؟')}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1">
+                    {t('أنت على وشك إضافة رصيد بمقدار')} <span className="text-slate-900 dark:text-white font-black">{selectedTopupAmount.toLocaleString('en-US')} {t('ج.م')}</span> {t('لمحفظة الجراج')}
+                  </p>
+                </div>
 
-            <div className="flex gap-3">
-              <button
-                disabled={isLoading}
-                onClick={() => handleRechargeSubmit(pendingPackage)}
-                className="flex-1 bg-emerald-600 text-white py-3.5 rounded-xl font-black text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{t('تأكيد التجديد')}</span>}
-              </button>
-              <button
-                disabled={isLoading}
-                onClick={() => setPendingPackage(null)}
-                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-3.5 rounded-xl font-black text-sm hover:bg-slate-200 transition-all cursor-pointer"
-              >
-                {t('إلغاء')}
-              </button>
-            </div>
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 mb-5 space-y-2 border border-slate-100 dark:border-slate-800/80 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-500">{t('الرصيد الحالي')}:</span>
+                    <span className="font-black font-mono text-slate-900 dark:text-white">
+                      {(selectedGarageForDetails.balance || 0).toLocaleString('en-US')} {t('ج.م')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-amber-600 dark:text-amber-400">
+                    <span className="font-bold">{t('المبلغ المضاف')}:</span>
+                    <span className="font-black font-mono">
+                      + {selectedTopupAmount.toLocaleString('en-US')} {t('ج.م')}
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between items-center text-emerald-600 dark:text-emerald-400">
+                    <span className="font-black">{t('الرصيد بعد الشحن')}:</span>
+                    <span className="font-black font-mono text-sm">
+                      {((selectedGarageForDetails.balance || 0) + selectedTopupAmount).toLocaleString('en-US')} {t('ج.م')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    disabled={isLoading}
+                    onClick={handleTopupSubmit}
+                    className="flex-1 h-14 bg-emerald-600 text-white rounded-2xl font-black text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] whitespace-nowrap"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        <span>{t('جاري شحن الرصيد...')}</span>
+                      </>
+                    ) : (
+                      <span>{t('تأكيد الشحن')}</span>
+                    )}
+                  </button>
+                  <button
+                    disabled={isLoading}
+                    onClick={() => setShowTopupModal(false)}
+                    className="flex-1 h-14 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-sm hover:bg-slate-200 disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center whitespace-nowrap"
+                  >
+                    {t('إلغاء')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* Staff Delete Confirmation Modal */}
       {staffToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl p-6 sm:p-8 text-center animate-popup-30fps">
             <div className="w-14 h-14 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-7 h-7" />
             </div>
-            <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">{t('حذف الموظف؟')}</h3>
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mb-2">{t('حذف الموظف؟')}</h3>
             <p className="text-xs text-slate-400 font-bold mb-6">
               {t('هل أنت متأكد من حذف الموظف')} <span className="text-slate-900 dark:text-white font-black">"{staffToDelete.name}"</span>؟
             </p>
@@ -1248,6 +1273,7 @@ export const AdminGarageDetailsView = memo(({
             <div className="flex gap-3">
               <button 
                 onClick={async () => {
+                  if (isLoading) return;
                   setIsLoading(true);
                   try {
                     await firestoreService.removeStaff(staffToDelete.id);
@@ -1259,13 +1285,21 @@ export const AdminGarageDetailsView = memo(({
                   }
                 }}
                 disabled={isLoading}
-                className="flex-1 py-3.5 bg-rose-600 text-white rounded-xl font-black text-sm hover:bg-rose-700 disabled:opacity-50 transition-all cursor-pointer"
+                className="flex-1 h-14 bg-rose-600 text-white rounded-2xl font-black text-sm hover:bg-rose-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
               >
-                {t('تأكيد الحذف')}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    <span>{t('جاري الحذف...')}</span>
+                  </>
+                ) : (
+                  <span>{t('تأكيد الحذف')}</span>
+                )}
               </button>
               <button 
+                disabled={isLoading}
                 onClick={() => setStaffToDelete(null)}
-                className="flex-1 py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-black text-sm hover:bg-slate-200 transition-all cursor-pointer"
+                className="flex-1 h-14 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-sm hover:bg-slate-200 disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center"
               >
                 {t('إلغاء')}
               </button>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
 import { runTransaction } from 'firebase/firestore';
 
 // Mock dependencies
@@ -60,7 +60,7 @@ describe('approveRechargeRequest central pricing logic', () => {
       return callback(mockTransaction);
     });
 
-    await firestoreServiceV2.approveRechargeRequest(requestPayload);
+    await firestoreService.approveRechargeRequest(requestPayload);
     return mockTransaction;
   };
 
@@ -84,12 +84,12 @@ describe('approveRechargeRequest central pricing logic', () => {
     expect(garageUpdate.totalAdminRevenue).toEqual({ type: 'increment', value: 300 });
   });
 
-  it('باقة أصلها 300، جراج مُحال، الإعداد 30: السعر النهائي 330 والعمولة 30', async () => {
+  it('باقة أصلها 300، جراج مُحال، الإعداد 30: السعر النهائي 330 والعمولة 30 إذا تم ضبط العمولة 30', async () => {
     const t = await runMockTransaction({
       request: { status: 'pending' },
       garage: { id: 'g1', referrerId: 'del1' },
-      package: { price: 300 },
-      systemConfig: { referralFeePerRenewal: 30 },
+      package: { price: 300, durationDays: 30 },
+      systemConfig: { referralFeePerRenewal: 30, delegatePackageCommissions: { monthly: 30 } },
       delegate: { id: 'del1' }
     }, { id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300, delegateId: 'del1' });
 
@@ -106,8 +106,8 @@ describe('approveRechargeRequest central pricing logic', () => {
     const t = await runMockTransaction({
       request: { status: 'pending' },
       garage: { id: 'g1', referrerId: 'del1' },
-      package: { price: 300 },
-      systemConfig: { referralFeePerRenewal: 50 },
+      package: { price: 300, durationDays: 30 },
+      systemConfig: { referralFeePerRenewal: 50, delegatePackageCommissions: { monthly: 50 } },
       delegate: { id: 'del1' }
     }, { id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300, delegateId: 'del1' });
 
@@ -129,24 +129,23 @@ describe('approveRechargeRequest central pricing logic', () => {
   });
 
   it('الخصم ورسم المشتركين يُطبقان بنفس الترتيب', async () => {
-    // 300 (base) + 30 (referred) = 330.
-    // Discount 130 -> 200.
-    // Flat fee 500 (has subscribers) -> 700.
+    // 300 (base) + 50 (referred, monthly) = 350.
+    // Discount 130 -> (300 - 130) + 500 + 50 = 720.
     const t = await runMockTransaction({
       request: { status: 'pending' },
       garage: { id: 'g1', referrerId: 'del1', hasMonthlySubscribers: true },
-      package: { price: 300 },
-      systemConfig: { referralFeePerRenewal: 30, subscriberFlatFee: 500 },
+      package: { price: 300, durationDays: 30 },
+      systemConfig: { referralFeePerRenewal: 50, subscriberFlatFee: 500, delegatePackageCommissions: { monthly: 50 } },
       delegate: { id: 'del1' }
     }, { id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300, discountAmount: 130 });
 
     const reqUpdate = t.update.mock.calls.find(c => c[0].includes('recharge_requests'))[1];
-    expect(reqUpdate.amount).toBe(700);
-    expect(reqUpdate.commission).toBe(30);
+    expect(reqUpdate.amount).toBe(720);
+    expect(reqUpdate.commission).toBe(50);
   });
 
   it('الطلب approved أو rejected لا يُعتمد مرة ثانية', async () => {
-    await firestoreServiceV2.approveRechargeRequest({ id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300 });
+    await firestoreService.approveRechargeRequest({ id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300 });
     // It should fail in validation if not mocked, but we mocked runTransaction.
     // Let's call runMockTransaction and inspect the return value.
     const mockTransaction = {
@@ -164,7 +163,7 @@ describe('approveRechargeRequest central pricing logic', () => {
       return callback(mockTransaction);
     });
 
-    const res = await firestoreServiceV2.approveRechargeRequest({ id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300 });
+    const res = await firestoreService.approveRechargeRequest({ id: 'req1', garageId: 'g1', packageId: 'pkg1', amount: 300 });
     expect(res.success).toBe(false);
     expect(res.error).toBe('الطلب تم معالجته مسبقاً');
   });

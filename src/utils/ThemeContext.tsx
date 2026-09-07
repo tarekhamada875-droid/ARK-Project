@@ -14,19 +14,31 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light' || saved === 'dark') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
   });
 
   const [adminLang, setAdminLangState] = useState<AdminLang>(() => {
-    const saved = localStorage.getItem('admin_lang');
-    return (saved === 'ar' || saved === 'en') ? saved : 'ar';
+    try {
+      const saved = localStorage.getItem('admin_lang');
+      return (saved === 'ar' || saved === 'en') ? saved : 'ar';
+    } catch {
+      return 'ar';
+    }
   });
 
   const setAdminLang = (lang: AdminLang) => {
     setAdminLangState(lang);
-    localStorage.setItem('admin_lang', lang);
+    try {
+      localStorage.setItem('admin_lang', lang);
+    } catch (e) {
+      console.warn('Failed to save admin_lang to localStorage', e);
+    }
   };
 
   useEffect(() => {

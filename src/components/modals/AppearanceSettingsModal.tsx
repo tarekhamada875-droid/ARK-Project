@@ -2,7 +2,7 @@ import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronRight, Sun, Moon, Palette, Check, Sparkles } from 'lucide-react';
 import { useTheme } from '../../utils/ThemeContext';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
 import { soundManager } from '../../utils/sounds';
 import { Garage, Staff } from '../../types';
 import { isLightColor, resolveShimmerColor } from '../../utils';
@@ -14,7 +14,7 @@ interface AppearanceSettingsModalProps {
   showToast?: (msg: string, type: 'success' | 'error') => void;
   onToggleMenu?: () => void;
   adminColor?: string;
-  onUpdateAdminColor?: (color: string) => void;
+  onUpdateAdminColor?: (color: string) => Promise<void> | void;
 }
 
 const SHIMMER_COLORS = [
@@ -50,7 +50,7 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
     setIsSaving(true);
     try {
       if (onUpdateAdminColor) {
-        onUpdateAdminColor(colorVal);
+        await onUpdateAdminColor(colorVal);
       }
       if (garage) {
         await firestoreService.updateGarage(garage.id, { shimmerColor: colorVal });
@@ -69,18 +69,18 @@ export const AppearanceSettingsModal: React.FC<AppearanceSettingsModalProps> = m
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors duration-300" dir="rtl">
       {/* Header */}
-      <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-900 flex items-center gap-4 bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
+      <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
         <button 
           type="button"
           onClick={onClose}
-          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0"
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0 active:scale-95"
           aria-label="الرجوع"
           title="رجوع"
         >
           <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
         </button>
         <div>
-          <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none mb-1 transition-colors">إعدادات المظهر</h3>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none mb-1 transition-colors">إعدادات المظهر</h3>
         </div>
       </div>
 

@@ -9,7 +9,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { Garage, Vehicle, Staff } from '../../types';
-import { firestoreServiceV2 as firestoreService } from '../../services/domain/firestoreServiceV2';
+import { firestoreService } from '../../services';
+import { getCairoDateKey } from '../../domain/garage/businessDay';
 
 interface GarageReportsViewProps {
   garage: Garage;
@@ -87,7 +88,7 @@ export const GarageReportsView = memo(({
     const overnightExited = localTodayExitedVehicles.filter(v => v.type === 'overnight').length;
 
     // Financial calculations
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCairoDateKey();
     const isTodayValid = localGarage.lastTransactionDate === today;
     const actualCalculatedTodayRevenue = localTodayExitedVehicles.reduce((sum, v) => sum + (typeof v.totalCost === 'number' ? v.totalCost : 0), 0);
     const todayRevenue = localTodayExitedVehicles.length > 0 

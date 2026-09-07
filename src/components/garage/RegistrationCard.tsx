@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Delete } from 'lucide-react';
+import { Delete, Loader2 } from 'lucide-react';
 import { getCleanPlate, getRawPlate, getPlateParts, isPlateValid, resolveShimmerColor } from '../../utils';
 import { Garage, Vehicle } from '../../types';
 import { LicensePlateKeyboard } from './LicensePlateKeyboard';
@@ -20,6 +20,7 @@ interface RegistrationCardProps {
   closeKeyboard: () => void;
   inputRef: React.RefObject<HTMLDivElement>;
   shimmerActive?: boolean;
+  isLoading?: boolean;
 }
 
 export const RegistrationCard = memo(({
@@ -34,10 +35,29 @@ export const RegistrationCard = memo(({
   onCheckOut,
   closeKeyboard,
   inputRef,
-  shimmerActive = false
+  shimmerActive = false,
+  isLoading = false
 }: RegistrationCardProps) => {
   const { theme } = useTheme();
   const activeShimmerColor = resolveShimmerColor(garage?.shimmerColor, theme);
+  const [isDebouncing, setIsDebouncing] = React.useState(false);
+
+  const handleGuardedCheckIn = (type: 'hourly' | 'overnight') => {
+    if (isDebouncing || isLoading) return;
+    setIsDebouncing(true);
+    setTimeout(() => setIsDebouncing(false), 1200);
+    closeKeyboard();
+    handleCheckIn(type);
+  };
+
+  const handleGuardedCheckOut = (vehicle: Vehicle) => {
+    if (isDebouncing || isLoading) return;
+    setIsDebouncing(true);
+    setTimeout(() => setIsDebouncing(false), 1200);
+    closeKeyboard();
+    setNewPlateNumber('');
+    onCheckOut(vehicle);
+  };
 
   // Force input value to stay in sync with state
   // even when getCleanPlate results in no state change (e.g. typing a space)
@@ -97,7 +117,7 @@ export const RegistrationCard = memo(({
                   setNewPlateNumber(newPlateNumber.slice(0, -1));
                   plateInputRef.current?.focus();
                 }}
-                className="absolute bg-red-500 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-colors outline-none -top-3 -left-3 w-10 h-10 md:w-16 md:h-16 md:-top-6 md:-left-6 z-50 shadow-md"
+                className="absolute bg-red-500 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-colors outline-none -top-3 -left-3 w-11 h-11 min-w-[44px] min-h-[44px] md:w-16 md:h-16 md:-top-6 md:-left-6 z-50 shadow-md cursor-pointer active:scale-95"
               >
                 <Delete className="w-6 h-6 md:w-8 md:h-8" />
               </button>
@@ -151,7 +171,7 @@ export const RegistrationCard = memo(({
                   <div className="flex-1 h-full min-w-0 flex justify-center items-center px-2">
                     <FitText
                       minFontSize={12}
-                      className={`font-black text-slate-900 tracking-tighter text-center ${
+                      className={`font-mono font-black text-slate-900 tracking-tighter text-center ${
                         newPlateNumber 
                           ? (getPlateParts(newPlateNumber).numbers.length >= 4
                               ? 'text-3xl sm:text-6xl md:text-7xl lg:text-8xl'
@@ -211,14 +231,13 @@ export const RegistrationCard = memo(({
                 return (
                   <div className="overflow-hidden mt-2">
                     <button 
-                      onClick={() => {
-                        closeKeyboard();
-                        setNewPlateNumber('');
-                        onCheckOut(existing);
-                      }}
-                      className="w-full py-4 md:py-8 bg-red-500 text-white rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 transition-all outline-none md:scale-[1.01] hover:bg-red-600 active:scale-[0.99] shadow-sm"
+                      disabled={isLoading || isDebouncing}
+                      onClick={() => handleGuardedCheckOut(existing)}
+                      className="w-full py-4 md:py-8 bg-red-500 text-white rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 transition-all outline-none md:scale-[1.01] hover:bg-red-600 active:scale-[0.99] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <div className="text-lg md:text-2xl font-black tracking-tight">إصدار فاتورة خروج</div>
+                      <div className="text-lg md:text-2xl font-black tracking-tight flex items-center justify-center gap-2">
+                        {(isLoading || isDebouncing) ? <Loader2 className="w-5 h-5 md:w-6 md:h-6 text-white animate-spin" /> : 'إصدار فاتورة خروج'}
+                      </div>
                       <span className="text-[10px] md:text-sm opacity-90 font-bold uppercase tracking-widest">السيارة موجودة حالياً بالداخل</span>
                     </button>
                   </div>
@@ -231,38 +250,40 @@ export const RegistrationCard = memo(({
                   <div className="overflow-hidden">
                     <div className="flex gap-4 mt-1">
                       <button 
-                        disabled={!isValid}
-                        onClick={() => {
-                          closeKeyboard();
-                          handleCheckIn('hourly');
-                        }}
+                        disabled={!isValid || isLoading || isDebouncing}
+                        onClick={() => handleGuardedCheckIn('hourly')}
                         className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
-                          isValid 
+                          isValid && !isLoading && !isDebouncing
                             ? 'bg-white dark:bg-slate-900 border-2 md:border-3 border-slate-900 dark:border-slate-100 text-slate-900 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-[0.98]' 
                             : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
                         }`}
                       >
-                        <div className="text-base md:text-2xl uppercase tracking-tight font-black">ساعة</div>
-                        <span className={`text-[10px] md:text-xs font-black tracking-widest ${
+                        <div className="text-base md:text-2xl uppercase tracking-tight font-black flex items-center justify-center gap-2">
+                          {(isLoading || isDebouncing) ? <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" /> : 'ساعة'}
+                        </div>
+                        <span className={`text-[10px] md:text-xs font-black tracking-widest whitespace-nowrap ${
                           isValid ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400/70 dark:text-slate-700'
-                        }`}>{garage.hourlyRate} ج.م / ساعة</span>
+                        }`}>
+                          <span className="font-mono">{garage.hourlyRate}</span> ج.م / ساعة
+                        </span>
                       </button>
                       <button 
-                        disabled={!isValid}
-                        onClick={() => {
-                          closeKeyboard();
-                          handleCheckIn('overnight');
-                        }}
+                        disabled={!isValid || isLoading || isDebouncing}
+                        onClick={() => handleGuardedCheckIn('overnight')}
                         className={`flex-1 py-4 md:py-8 rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-1 md:gap-2 outline-none transition-all duration-150 ${
-                          isValid 
+                          isValid && !isLoading && !isDebouncing
                             ? 'bg-emerald-600 dark:bg-emerald-600 border-2 md:border-3 border-emerald-700 dark:border-emerald-500 text-white font-black hover:bg-emerald-700 dark:hover:bg-emerald-600/90 active:scale-[0.98]' 
                             : 'bg-slate-100 dark:bg-slate-800/40 border-2 border-slate-200 dark:border-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
                         }`}
                       >
-                        <div className="text-base md:text-2xl uppercase tracking-tight font-black">مبيت</div>
-                        <span className={`text-[10px] md:text-xs font-black tracking-widest ${
+                        <div className="text-base md:text-2xl uppercase tracking-tight font-black flex items-center justify-center gap-2">
+                          {(isLoading || isDebouncing) ? <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" /> : 'مبيت'}
+                        </div>
+                        <span className={`text-[10px] md:text-xs font-black tracking-widest whitespace-nowrap ${
                           isValid ? 'text-slate-950/80 dark:text-slate-950/85' : 'text-slate-400/70 dark:text-slate-700'
-                        }`}> {garage.overnightRate} ج.م مبيت</span>
+                        }`}>
+                          <span className="font-mono">{garage.overnightRate}</span> ج.م مبيت
+                        </span>
                       </button>
                     </div>
 

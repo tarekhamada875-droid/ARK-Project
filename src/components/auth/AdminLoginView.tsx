@@ -15,7 +15,8 @@ interface AdminLoginViewProps {
   setView: (view: any) => void;
   showToast: (message: string, type: 'success' | 'error') => void;
   closeKeyboard: () => void;
-  correctAdminPin: string;
+  correctAdminPin?: string;
+  onLogin?: (pin: string) => Promise<void>;
 }
 
 export const AdminLoginView: React.FC<AdminLoginViewProps> = memo(({
@@ -24,7 +25,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = memo(({
   setView,
   showToast,
   closeKeyboard,
-  correctAdminPin
+  onLogin
 }) => {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -40,17 +41,43 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = memo(({
     setAdminPin(adminPin.slice(0, -1));
   };
 
-  const handleLogin = () => {
-    if (normalizeDigits(adminPin) === correctAdminPin) {
-      setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        setView('admin_dashboard');
-      }, 1500); // Premium bootstrapping duration
-    } else {
+  const handleLogin = async () => {
+    const entered = normalizeDigits(adminPin).replace(/\D/g, '');
+    if (!entered) {
       showToast('الرقم السري خطأ', 'error');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      if (onLogin) {
+        await onLogin(entered);
+      }
+    } catch (e: any) {
+      showToast(e?.message || 'حدث خطأ أثناء الدخول', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  // Support physical keyboard / numpad
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isLoading) return;
+      if (e.key >= '0' && e.key <= '9') {
+        if (adminPin.length < 10) {
+          setAdminPin(adminPin + e.key);
+        }
+      } else if (e.key === 'Backspace') {
+        setAdminPin(adminPin.slice(0, -1));
+      } else if (e.key === 'Enter' && adminPin.length > 0) {
+        handleLogin();
+      } else if (e.key === 'Escape') {
+        setView('login');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoading, adminPin, setAdminPin, handleLogin, setView]);
 
   // Calculate dynamic size based on length
   const getBoxSize = () => {

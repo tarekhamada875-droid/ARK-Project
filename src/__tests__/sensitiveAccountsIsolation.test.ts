@@ -1,9 +1,76 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { firestoreServiceV2 as firestoreService } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
+
+vi.mock('firebase/functions', async () => {
+  const actual = await vi.importActual('firebase/functions');
+  return {
+    ...actual as any,
+    httpsCallable: vi.fn((_, name) => {
+      return async (data: any) => {
+        if (name === 'authenticateUser') {
+          if (data.input === '8899') {
+            return { data: { success: true, role: 'admin' } };
+          }
+          if (data.phone === '01000000000' && data.pin === '1234') {
+            return { data: { success: true, role: 'delegate', accountId: '123', account: { id: '123' } } };
+          }
+          return { data: { success: false, error: 'بيانات الدخول غير صحيحة' } };
+        }
+        if (name === 'checkPinAvailability') {
+           if (data.pin === '8899') return { data: { taken: true, role: 'مسؤول النظام (الآدمن الرئيسي)' } };
+           return { data: { taken: false } };
+        }
+        return { data: {} };
+      };
+    })
+  };
+});
 
 describe('v159 — Sensitive Accounts Isolation & Credentials Security', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+
+    global.fetch = vi.fn(async (url: any, options: any) => {
+      const urlStr = String(url);
+      const body = JSON.parse(options?.body || '{}');
+
+      if (urlStr.includes('/api/auth/verify-pin')) {
+        if (body.input === '8899') {
+          return {
+            ok: true,
+            json: async () => ({ success: true, role: 'admin' })
+          } as any;
+        }
+        if (body.phone === '01000000000' && body.pin === '1234') {
+          return {
+            ok: true,
+            json: async () => ({ success: true, role: 'delegate', accountId: '123', account: { id: '123' } })
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({ success: false, error: 'بيانات الدخول غير صحيحة' })
+        } as any;
+      }
+
+      if (urlStr.includes('/api/auth/check-pin-availability')) {
+        if (body.pin === '8899') {
+          return {
+            ok: true,
+            json: async () => ({ taken: true, role: 'مسؤول النظام (الآدمن الرئيسي)' })
+          } as any;
+        }
+        return {
+          ok: true,
+          json: async () => ({ taken: false })
+        } as any;
+      }
+
+      return {
+        ok: false,
+        json: async () => ({})
+      } as any;
+    });
   });
 
   test('Mandatory 1: Login failure does NOT disclose account existence (generic error message)', async () => {

@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { firestoreServiceV2 } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
+import { _resetRecentClaimsForTesting } from '../services/authSessionService';
 import { runTransaction } from 'firebase/firestore';
 
 vi.mock('firebase/firestore', async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    doc: vi.fn((_db, path, id) => `${path}/${id || 'unknown'}`),
+    doc: vi.fn((_db, ...paths) => paths.join('/')),
     collection: vi.fn((_db, path) => path),
     serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
     runTransaction: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
 });
 
 vi.mock('../firebase', () => ({
+  auth: { currentUser: { uid: 'del-1' } },
   db: {},
   handleFirestoreError: vi.fn(),
   OperationType: { UPDATE: 'UPDATE' }
@@ -24,12 +26,19 @@ describe('claimDelegateSession atomic locking', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetRecentClaimsForTesting();
     delegateDocStore = {
       'delegates/del-1': {
         name: 'Delegate 1',
         pin: '1234',
         currentSessionId: null,
         lastActive: null,
+      },
+      'delegate_sessions/del-1': {
+        uid: 'del-1',
+        role: 'delegate',
+        entityId: 'del-1',
+        sessionId: null,
       }
     };
 
@@ -54,6 +63,13 @@ describe('claimDelegateSession atomic locking', () => {
               };
             }
           }),
+          set: vi.fn((ref: string, data: any) => {
+            delegateDocStore[ref] = {
+              ...(delegateDocStore[ref] || {}),
+              ...data,
+              lastActive: data.lastActive === 'SERVER_TIMESTAMP' ? Date.now() : data.lastActive,
+            };
+          }),
         };
         return callback(mockTransaction);
       });
@@ -63,8 +79,8 @@ describe('claimDelegateSession atomic locking', () => {
   });
 
   it('allows only one concurrent delegate session claim', async () => {
-    const promise1 = firestoreServiceV2.claimDelegateSession('del-1', 'session-A');
-    const promise2 = firestoreServiceV2.claimDelegateSession('del-1', 'session-B');
+    const promise1 = firestoreService.claimDelegateSession('del-1', 'session-A');
+    const promise2 = firestoreService.claimDelegateSession('del-1', 'session-B');
 
     const results = await Promise.allSettled([promise1, promise2]);
 
@@ -77,19 +93,19 @@ describe('claimDelegateSession atomic locking', () => {
   });
 
   it('does not replace the winning session', async () => {
-    await firestoreServiceV2.claimDelegateSession('del-1', 'session-A');
+    await firestoreService.claimDelegateSession('del-1', 'session-A');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
 
-    await expect(firestoreServiceV2.claimDelegateSession('del-1', 'session-B')).rejects.toThrow('DELEGATE_SESSION_OCCUPIED');
+    await expect(firestoreService.claimDelegateSession('del-1', 'session-B')).rejects.toThrow('DELEGATE_SESSION_OCCUPIED');
 
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
   });
 
   it('allows the same session to refresh', async () => {
-    await firestoreServiceV2.claimDelegateSession('del-1', 'session-A');
+    await firestoreService.claimDelegateSession('del-1', 'session-A');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
 
-    const refreshed = await firestoreServiceV2.claimDelegateSession('del-1', 'session-A');
+    const refreshed = await firestoreService.claimDelegateSession('del-1', 'session-A');
     expect(refreshed.currentSessionId).toBe('session-A');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
   });
@@ -102,21 +118,21 @@ describe('claimDelegateSession atomic locking', () => {
       lastActive: Date.now() - 15 * 60 * 1000,
     };
 
-    const newClaim = await firestoreServiceV2.claimDelegateSession('del-1', 'session-NEW');
+    const newClaim = await firestoreService.claimDelegateSession('del-1', 'session-NEW');
     expect(newClaim.currentSessionId).toBe('session-NEW');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-NEW');
   });
 
   it('releases session only if the caller owns currentSessionId', async () => {
-    await firestoreServiceV2.claimDelegateSession('del-1', 'session-A');
+    await firestoreService.claimDelegateSession('del-1', 'session-A');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
 
     // Attempt release by another session ID (e.g. old tab)
-    await firestoreServiceV2.releaseDelegateSession('del-1', 'session-OTHER');
+    await firestoreService.releaseDelegateSession('del-1', 'session-OTHER');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe('session-A');
 
     // Attempt release by the actual session owner
-    await firestoreServiceV2.releaseDelegateSession('del-1', 'session-A');
+    await firestoreService.releaseDelegateSession('del-1', 'session-A');
     expect(delegateDocStore['delegates/del-1'].currentSessionId).toBe(null);
   });
 });

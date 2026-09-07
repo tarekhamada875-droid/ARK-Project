@@ -1,16 +1,43 @@
 import { useState, useEffect } from 'react';
-import { firestoreServiceV2 as firestoreService } from '../services/domain/firestoreServiceV2';
+import { firestoreService } from '../services';
 import type { SystemConfig } from '../types';
 
+let cachedConfig: SystemConfig | null = null;
+const listeners = new Set<(config: SystemConfig | null) => void>();
+let unsubSingleton: (() => void) | null = null;
+
+function subscribeSingleton() {
+  if (unsubSingleton) return;
+  unsubSingleton = firestoreService.subscribeToSystemConfig((c) => {
+    cachedConfig = c;
+    listeners.forEach((l) => l(c));
+  });
+}
+
+function unsubscribeSingletonIfEmpty() {
+  if (listeners.size === 0 && unsubSingleton) {
+    unsubSingleton();
+    unsubSingleton = null;
+  }
+}
+
 export const useSystemConfig = () => {
-  const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [config, setConfig] = useState<SystemConfig | null>(cachedConfig);
 
   useEffect(() => {
-    const unsub = firestoreService.subscribeToSystemConfig((c) => {
-      if (c) setConfig(c);
-    });
-    return () => unsub();
+    subscribeSingleton();
+    const handler = (c: SystemConfig | null) => setConfig(c);
+    listeners.add(handler);
+    if (cachedConfig !== null) {
+      setConfig(cachedConfig);
+    }
+
+    return () => {
+      listeners.delete(handler);
+      unsubscribeSingletonIfEmpty();
+    };
   }, []);
 
   return config;
 };
+

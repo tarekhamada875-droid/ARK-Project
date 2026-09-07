@@ -1,23 +1,5 @@
-import { Timestamp } from 'firebase/firestore';
 import { getCairoDateKey } from './businessDay';
-
-const safeDate = (date: any): Date => {
-  if (!date) return new Date();
-  if (date instanceof Timestamp) return date.toDate();
-  if (typeof date.toDate === 'function') return date.toDate();
-  if (typeof date === 'object' && date.seconds !== undefined) {
-    try {
-      return new Timestamp(date.seconds, date.nanoseconds || 0).toDate();
-    } catch (e) {
-      return new Date();
-    }
-  }
-  const d = new Date(date);
-  if (isNaN(d.getTime()) || d.getTime() < 31536000000) {
-    return new Date();
-  }
-  return d;
-};
+import { safeDate } from '../../utils';
 
 export const isSubscriptionExpired = (garage: any): boolean => {
   if (!garage) return true;
@@ -67,6 +49,73 @@ export const getRemainingDays = (garage: any): number => {
   const expiry = safeDate(garage.balanceExpiry);
   const diff = expiry.getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+};
+
+export interface RemainingSubscriptionInfo {
+  days: number;
+  remainingHours: number;
+  remainingMs: number;
+  isUrgentRed: boolean; // True when <= 5 hours or expired
+  unit: 'days' | 'hours';
+  displayCount: number;
+}
+
+export const getRemainingSubscriptionInfo = (garage: any): RemainingSubscriptionInfo => {
+  if (!garage) {
+    return { days: 0, remainingHours: 0, remainingMs: 0, isUrgentRed: true, unit: 'days', displayCount: 0 };
+  }
+
+  let expiryDate: Date | null = null;
+
+  if (garage.isTrial === true) {
+    if (!garage.balanceExpiry) {
+      if (garage.createdAt) {
+        const created = safeDate(garage.createdAt);
+        expiryDate = new Date(created.getTime() + 15 * 24 * 60 * 60 * 1000);
+      } else {
+        return { days: 15, remainingHours: 360, remainingMs: 15 * 86400000, isUrgentRed: false, unit: 'days', displayCount: 15 };
+      }
+    } else {
+      expiryDate = safeDate(garage.balanceExpiry);
+    }
+  } else {
+    if (!garage.balanceExpiry) {
+      return { days: 0, remainingHours: 0, remainingMs: 0, isUrgentRed: true, unit: 'days', displayCount: 0 };
+    }
+    expiryDate = safeDate(garage.balanceExpiry);
+  }
+
+  const nowMs = Date.now();
+  const remainingMs = expiryDate.getTime() - nowMs;
+
+  if (remainingMs <= 0) {
+    return { days: 0, remainingHours: 0, remainingMs: 0, isUrgentRed: true, unit: 'days', displayCount: 0 };
+  }
+
+  const remainingHours = Math.ceil(remainingMs / (1000 * 60 * 60));
+  const remainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+
+  // If 5 hours or less remaining, trigger red state & countdown in hours
+  if (remainingHours <= 5) {
+    return {
+      days: remainingDays,
+      remainingHours,
+      remainingMs,
+      isUrgentRed: true,
+      unit: 'hours',
+      displayCount: remainingHours
+    };
+  }
+
+  // More than 5 hours left
+  return {
+    days: remainingDays,
+    remainingHours,
+    remainingMs,
+    isUrgentRed: false,
+    unit: 'days',
+    displayCount: remainingDays
+  };
 };
 
 export const isTrialActive = (garage: any): boolean => {
@@ -139,7 +188,7 @@ export const isUnlimitedCapacity = (garage: any): boolean => {
 export const calculateCapacityUsed = (garage: any): { used: number; limit: number; isUnlimited: boolean } => {
   const today = getCairoDateKey();
   const isToday = garage?.lastTransactionDate === today;
-  const used = isToday ? (garage?.todayCount || 0) : 0;
+  const used = isToday ? (garage?.todayCount ?? garage?.carsInside ?? 0) : (garage?.todayCount === undefined && typeof garage?.carsInside === 'number' ? garage.carsInside : 0);
   const limit = getEffectiveDailyCapacity(garage);
   return {
     used,

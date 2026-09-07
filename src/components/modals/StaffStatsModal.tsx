@@ -31,22 +31,29 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
     return allTodayVehicles.filter(v => v.staffName === staffName).length;
   };
 
+  const resolveMonogram = (name: string): string => {
+    if (!name) return 'م';
+    const cleanName = name.trim();
+    const character = cleanName.charAt(0);
+    return character && character.trim() ? character : 'م';
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-[#faf9f6] dark:bg-slate-950 flex flex-col transition-colors" dir="rtl">
       {/* Header */}
-      <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-4 bg-slate-50 dark:bg-slate-900 shrink-0 transition-colors">
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none shrink-0"
-            aria-label="الرجوع"
-            title="رجوع"
-          >
-            <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
-          </button>
-          <div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">موظفي الوردية</h2>
-          </div>
+      <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4 bg-white dark:bg-slate-900 shrink-0 transition-colors shadow-sm">
+        <button 
+          onClick={onClose}
+          className="w-10 h-10 bg-slate-900 dark:bg-amber-400 text-amber-400 dark:text-slate-950 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-amber-500 transition-colors shadow-sm outline-none cursor-pointer shrink-0 active:scale-95"
+          aria-label="الرجوع"
+          title="رجوع"
+        >
+          <ChevronRight className="w-5.5 h-5.5 text-amber-400 dark:text-slate-950 stroke-[3.5]" />
+        </button>
+        <div>
+          <h2 className="text-xl font-black text-slate-900 dark:text-white leading-none">موظفي الوردية</h2>
         </div>
+      </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar stable-scrollbar pb-10">
@@ -84,7 +91,7 @@ export const StaffStatsModal: React.FC<StaffStatsModalProps> = memo(({
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 dark:text-slate-500 font-black text-lg">
-                        {staff.name.charAt(0)}
+                        {resolveMonogram(staff.name)}
                       </div>
                     </div>
                     <div>

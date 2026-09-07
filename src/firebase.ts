@@ -2,27 +2,33 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
-  enableIndexedDbPersistence
+  memoryLocalCache
 } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
+import { logDiagnostic, verifyFirebaseAppletConfig } from './utils/authDiagnosticLogger';
+
+// Verify config before initialization
+verifyFirebaseAppletConfig();
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
+logDiagnostic('FIREBASE_APP_INITIALIZED', { appName: app.name });
 
+// Enforce in-memory cache so offline mutations fail instantly instead of queuing locally
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
+  localCache: memoryLocalCache(),
 }, firebaseConfig.firestoreDatabaseId);
 
 export const functions = getFunctions(app);
 
-enableIndexedDbPersistence(db)
-  .catch((err) => {
-    if (err.code === 'failed-precondition') console.warn('Multiple tabs open');
-    if (err.code === 'unimplemented') console.warn('Not supported');
-  });
-
 export const auth = getAuth(app);
+logDiagnostic('FIREBASE_AUTH_INITIALIZED', {
+  hasCurrentUser: Boolean(auth.currentUser),
+  uid: auth.currentUser?.uid || null,
+  isAnonymous: auth.currentUser?.isAnonymous || false,
+});
 
 // Error handling for Firestore operations
 export enum OperationType {
@@ -34,44 +40,13 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
-
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const safeErrInfo = {
+    error: errorMessage,
     operationType,
     path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  };
+  console.error('Firestore Operation Error:', safeErrInfo);
+  throw new Error(`خطأ في عملية قاعدة البيانات (${operationType}): ${errorMessage}`);
 }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -11,32 +11,37 @@ import {
 import { resolveShimmerColor } from './utils';
 import { useTheme } from './utils/ThemeContext';
 import { useLocalStorageState } from './hooks/useLocalStorage';
+import { useSystemConfig } from './hooks/useSystemConfig';
 import { ErrorBoundary } from './components/layout/ErrorBoundary';
 import { LandscapeMobileView } from './components/layout/LandscapeMobileView';
 import { OfflineView } from './components/layout/OfflineView';
+import { NetworkStatusBanner } from './components/NetworkStatusBanner';
+import { logDiagnostic } from './utils/authDiagnosticLogger';
 
 import { LoginView } from './components/auth/LoginView';
 import { AdminLoginView } from './components/auth/AdminLoginView';
 import { DelegateLoginView } from './components/auth/DelegateLoginView';
+import { lazyWithRetry } from './utils/lazyWithRetry';
+
 // Loaded only when the related route or confirmation is opened.
-const CheckInModal = lazy(() => import('./components/modals/CheckInModal').then(m => ({ default: m.CheckInModal })));
-const CheckOutModal = lazy(() => import('./components/modals/CheckOutModal').then(m => ({ default: m.CheckOutModal })));
-const PackagesModal = lazy(() => import('./components/modals/PackagesModal').then(m => ({ default: m.PackagesModal })));
-const DeleteGarageConfirmModal = lazy(() => import('./components/modals/DeleteGarageConfirmModal').then(m => ({ default: m.DeleteGarageConfirmModal })));
-const DeleteVehicleConfirmModal = lazy(() => import('./components/modals/DeleteVehicleConfirmModal').then(m => ({ default: m.DeleteVehicleConfirmModal })));
-const RecentExitWarningModal = lazy(() => import('./components/modals/RecentExitWarningModal').then(m => ({ default: m.RecentExitWarningModal })));
-const LogoutConfirmModal = lazy(() => import('./components/modals/LogoutConfirmModal').then(m => ({ default: m.LogoutConfirmModal })));
-const SubscriberWarningModal = lazy(() => import('./components/modals/SubscriberWarningModal').then(m => ({ default: m.SubscriberWarningModal })));
+const CheckInModal = lazyWithRetry(() => import('./components/modals/CheckInModal').then(m => ({ default: m.CheckInModal })));
+const CheckOutModal = lazyWithRetry(() => import('./components/modals/CheckOutModal').then(m => ({ default: m.CheckOutModal })));
+const PackagesModal = lazyWithRetry(() => import('./components/modals/PackagesModal').then(m => ({ default: m.PackagesModal })));
+const DeleteGarageConfirmModal = lazyWithRetry(() => import('./components/modals/DeleteGarageConfirmModal').then(m => ({ default: m.DeleteGarageConfirmModal })));
+const DeleteVehicleConfirmModal = lazyWithRetry(() => import('./components/modals/DeleteVehicleConfirmModal').then(m => ({ default: m.DeleteVehicleConfirmModal })));
+const RecentExitWarningModal = lazyWithRetry(() => import('./components/modals/RecentExitWarningModal').then(m => ({ default: m.RecentExitWarningModal })));
+const LogoutConfirmModal = lazyWithRetry(() => import('./components/modals/LogoutConfirmModal').then(m => ({ default: m.LogoutConfirmModal })));
+const SubscriberWarningModal = lazyWithRetry(() => import('./components/modals/SubscriberWarningModal').then(m => ({ default: m.SubscriberWarningModal })));
 import { useGarageApp } from './hooks/useGarageApp';
 import { useBackTrapping } from './hooks/useBackTrapping';
-import { firestoreServiceV2 as firestoreService } from './services/domain/firestoreServiceV2';
+import { firestoreService } from './services';
 
 // Lazy Loaded Dashboard Views
-const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const DelegateDashboardView = lazy(() => import('./components/delegate/DelegateDashboardView').then(m => ({ default: m.DelegateDashboardView })));
-const AdminGarageDetailsView = lazy(() => import('./components/admin/AdminGarageDetailsView').then(m => ({ default: m.AdminGarageDetailsView })));
-const AdminDelegateDetailsView = lazy(() => import('./components/admin/AdminDelegateDetailsView').then(m => ({ default: m.AdminDelegateDetailsView })));
-const GarageDashboardView = lazy(() => import('./components/garage/GarageDashboardView').then(m => ({ default: m.GarageDashboardView })));
+const AdminDashboard = lazyWithRetry(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const DelegateDashboardView = lazyWithRetry(() => import('./components/delegate/DelegateDashboardView').then(m => ({ default: m.DelegateDashboardView })));
+const AdminGarageDetailsView = lazyWithRetry(() => import('./components/admin/AdminGarageDetailsView').then(m => ({ default: m.AdminGarageDetailsView })));
+const AdminDelegateDetailsView = lazyWithRetry(() => import('./components/admin/AdminDelegateDetailsView').then(m => ({ default: m.AdminDelegateDetailsView })));
+const GarageDashboardView = lazyWithRetry(() => import('./components/garage/GarageDashboardView').then(m => ({ default: m.GarageDashboardView })));
 
 export default function App() {
   const {
@@ -115,6 +120,7 @@ export default function App() {
     handleGarageLogin,
     handleDelegateLogin,
     handleDelegateRecharge,
+    handleDelegateBalanceTopupRequest,
     handleCheckIn,
     confirmCheckOut,
     handleDeleteVehicle,
@@ -126,7 +132,9 @@ export default function App() {
   } = useGarageApp();
 
   const { theme } = useTheme();
-  const [adminColor] = useLocalStorageState<string>('app_admin_color', '#10b981');
+  const systemConfig = useSystemConfig();
+  const [localAdminColor] = useLocalStorageState<string>('app_admin_color', '#10b981');
+  const adminColor = systemConfig?.adminColor || localAdminColor || '#10b981';
 
   const activeColor = (view && (view.startsWith('admin_') || view === 'admin_dashboard'))
     ? adminColor
@@ -137,17 +145,24 @@ export default function App() {
   // View auto-recovery fallback when persisted view data is missing
   useEffect(() => {
     if (!isLoading && isAuthReady) {
-      if (view === 'garage' && !garage) {
-        setView('login');
+      if (view === 'garage' && !garage && !currentStaff) {
+        const storedGarage = localStorage.getItem('app_garage');
+        const storedStaff = localStorage.getItem('app_staff');
+        if (!storedGarage && !storedStaff) {
+          setView('login');
+        }
       } else if (view === 'delegate_dashboard' && !delegate) {
-        setView('login');
+        const storedDelegate = localStorage.getItem('app_delegate');
+        if (!storedDelegate) {
+          setView('login');
+        }
       } else if (view === 'admin_garage_details' && !selectedGarageForDetails) {
         setView('admin_dashboard');
       } else if (view === 'admin_delegate_details' && !selectedDelegateForDetails) {
         setView('admin_dashboard');
       }
     }
-  }, [view, garage, delegate, selectedGarageForDetails, selectedDelegateForDetails, isLoading, isAuthReady, setView]);
+  }, [view, garage, delegate, currentStaff, selectedGarageForDetails, selectedDelegateForDetails, isLoading, isAuthReady, setView]);
 
   // Call useBackTrapping hook to handle browser navigation / Android popstate
   useBackTrapping({
@@ -179,8 +194,11 @@ export default function App() {
   });
 
   const renderView = () => {
-    // Balance/Lock Block - REMOVED: We no longer block the entire app when expired.
-    // The restriction is now handled directly inside GarageDashboardView.tsx to only prevent checking in new vehicles.
+    logDiagnostic('RENDER_VIEW_EVALUATED', {
+      view,
+      isAuthReady,
+      isLoading,
+    });
 
     if (view === 'login') {
       return (
@@ -203,6 +221,7 @@ export default function App() {
           showToast={showToast}
           closeKeyboard={closeKeyboard}
           correctAdminPin={activeAdminPin}
+          onLogin={handleGarageLogin}
         />
       );
     }
@@ -252,10 +271,11 @@ export default function App() {
             allGarages={delegateGarages}
             onLogout={handleInitiateLogout}
             onRecharge={handleDelegateRecharge}
+            onRechargeBalance={handleDelegateBalanceTopupRequest}
             onCreateGarage={createNewGarage}
             isLoading={isLoading}
             packages={sortedPackages}
-            pendingRequests={rechargeRequests}
+            pendingRequests={delegateRequests.filter(r => r.status === 'pending')}
             delegateRequests={delegateRequests}
             showToast={showToast}
             subscriptionPrices={subscriptionPrices}
@@ -332,6 +352,7 @@ export default function App() {
             setShowSubscribers={setShowSubscribers}
             walletNumber={walletNumber}
             subscriptionPrices={subscriptionPrices}
+            isLoading={isLoading}
           />
         </ErrorBoundary>
       );
@@ -347,6 +368,10 @@ export default function App() {
           subscriptionPrices={subscriptionPrices}
           hasMonthlySubscribers={garage.hasMonthlySubscribers}
           referrerId={garage.referrerId || garage.createdByDelegateId || null}
+          garage={garage}
+          garageId={garage.id}
+          garageBalance={garage.balance || 0}
+          showToast={showToast}
         />
       );
     }
@@ -373,6 +398,7 @@ export default function App() {
 
   // --- Initial Loading State ---
   if (!isAuthReady) {
+    logDiagnostic('APP_WAITING_FOR_AUTH_READY', { isAuthReady, isLoading, view });
     return (
       <div className="w-full h-full min-h-screen bg-[#faf9f6] dark:bg-slate-950 flex flex-col items-center justify-center p-4 text-center font-sans" dir="rtl">
         <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
@@ -391,6 +417,7 @@ export default function App() {
       style={{ '--theme-accent-color': resolvedColor } as React.CSSProperties}
     >
       <ErrorBoundary>
+        <NetworkStatusBanner />
         {toast && (
           <div 
             onClick={() => setToast(null)}

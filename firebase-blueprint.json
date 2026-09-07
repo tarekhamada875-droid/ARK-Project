@@ -27,6 +27,10 @@
         "referredByGarageName": { "type": "string", "description": "Name of referring garage" },
         "lastReferralRewardMonth": { "type": "string", "description": "Last month referral bonus was awarded (YYYY-MM)" },
         "referralRewardMonthsCount": { "type": "number", "description": "Count of months referral bonus was awarded" },
+        "totalReferralRewardDays": { "type": "number", "description": "Total reward days accumulated from referrals" },
+        "lastReferralClaimAt": { "type": "string", "format": "date-time", "description": "Timestamp when reward days were last claimed" },
+        "totalGaragesReferredCount": { "type": "number", "description": "Total number of garages referred" },
+        "referralRewardAwardedAt": { "type": "string", "format": "date-time", "description": "Timestamp when referral reward was awarded" },
         "activePlates": { "type": "object", "description": "Map of currently active plate numbers to their vehicle IDs" }
       },
       "required": ["name", "phone", "hourlyRate", "overnightRate", "subscriptionExpiry", "subscriptionDays"]
@@ -193,6 +197,24 @@
         }
       },
       "description": "Global collection of administrative variables like wallet number or admin pin."
+    },
+    "/system_config/{configId}": {
+      "schema": {
+        "title": "SystemConfig",
+        "type": "object",
+        "properties": {
+          "defaultTrialDays": { "type": "number" },
+          "warningDaysThreshold": { "type": "number" },
+          "supportPhone": { "type": "string" },
+          "walletNumber": { "type": "string" },
+          "monthlySubscribersFlatFee": { "type": "number" },
+          "monthlySubscribersSurchargePercent": { "type": "number" },
+          "referralFeePerRenewal": { "type": "number" },
+          "isMaintenanceMode": { "type": "boolean" },
+          "maintenanceMessage": { "type": "string" }
+        }
+      },
+      "description": "Global public system configuration (fees, commissions, wallet, status)."
     }
   }
 }

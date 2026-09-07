@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Garage } from '../../types';
-import type { GarageDeletionProgress } from '../../services/domain/firestoreServiceV2';
+import type { GarageDeletionProgress } from '../../services/garageService';
 
 interface DeleteGarageConfirmModalProps {
   garage: Garage;
@@ -29,9 +29,9 @@ export const DeleteGarageConfirmModal: React.FC<DeleteGarageConfirmModalProps> =
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div 
         onClick={isLoading ? undefined : onCancel}
-        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80"
+        className="absolute inset-0 bg-slate-900/60 dark:bg-slate-950/80 animate-overlay-30fps"
       />
-      <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-xs rounded-[2rem] p-6 text-center border border-transparent dark:border-slate-800" dir="rtl">
+      <div className="relative bg-[#faf9f6] dark:bg-slate-900 w-full max-w-xs rounded-[2rem] p-6 text-center border border-transparent dark:border-slate-800 animate-popup-30fps" dir="rtl">
         <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border-2 border-red-100 dark:border-red-900/30">
           <Trash2 className="w-8 h-8 text-red-500 dark:text-red-400" />
         </div>
@@ -70,13 +70,13 @@ export const DeleteGarageConfirmModal: React.FC<DeleteGarageConfirmModalProps> =
             <button 
               onClick={onConfirm}
               disabled={isLoading}
-              className="w-full py-4 bg-red-500 dark:bg-red-600 text-white rounded-xl font-black text-lg disabled:opacity-50 transition-all outline-none"
+              className="w-full py-4 bg-red-500 dark:bg-red-600 text-white rounded-xl font-black text-lg disabled:opacity-50 active:scale-95 transition-all duration-150 outline-none cursor-pointer shadow-sm hover:bg-red-600 dark:hover:bg-red-700"
             >
               نعم، حذف الجراج
             </button>
             <button 
               onClick={onCancel}
-              className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all outline-none"
+              className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all duration-150 outline-none cursor-pointer"
             >
               إلغاء
             </button>

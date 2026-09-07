@@ -10,7 +10,7 @@ export const OfflineView: React.FC = memo(() => {
         </div>
         
         <div className="space-y-2">
-          <h2 className="text-2xl font-black text-white tracking-tight">مفيش اتصال بالإنترنت</h2>
+          <h2 className="text-2xl font-black text-white">مفيش اتصال بالإنترنت</h2>
           <p className="text-slate-300 font-bold text-base leading-relaxed px-2">
             البرنامج بيشتغل بالنت بس، اتأكد من توصيل النت وجرب تاني.
           </p>
