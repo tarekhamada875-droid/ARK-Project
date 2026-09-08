@@ -13,6 +13,7 @@ export default async function handler(req: any, res: any) {
     return app(req, res);
   } catch (error) {
     console.error('[Vercel API] Express startup failed:', error);
-    return res.status(503).json({ success: false, error: 'API_STARTUP_FAILED' });
+    const detail = error instanceof Error ? error.message : String(error);
+    return res.status(503).json({ success: false, error: 'API_STARTUP_FAILED', detail });
   }
 }
