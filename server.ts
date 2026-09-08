@@ -806,10 +806,16 @@ async function startServer() {
         return res.status(500).json({ success: false, error: 'Admin DB غير مهيأ' });
       }
 
+      const authorization = req.headers.authorization;
+      const headerToken = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+      if (!headerToken || !adminAuth) {
+        return res.status(401).json({ success: false, error: 'AUTHORIZATION_REQUIRED' });
+      }
+
       let verifiedUid = '';
-      if (firebaseIdToken && adminAuth) {
+      if (adminAuth) {
         try {
-          const decoded = await adminAuth.verifyIdToken(firebaseIdToken);
+          const decoded = await adminAuth.verifyIdToken(headerToken);
           verifiedUid = decoded.uid;
         } catch (tokenErr) {
           console.warn('[Server Auth] Invalid Firebase ID token during claim-admin-session:', tokenErr);
@@ -817,11 +823,11 @@ async function startServer() {
         }
       }
 
-      if (verifiedUid && uid.trim() !== verifiedUid) {
+      if (!verifiedUid || uid.trim() !== verifiedUid) {
         return res.status(401).json({ success: false, error: 'UID_MISMATCH' });
       }
 
-      const effectiveUid = verifiedUid || uid.trim();
+      const effectiveUid = verifiedUid;
 
       // Check authorization: Must either have valid admin PIN OR already have an active matching session
       let isAuthorized = false;

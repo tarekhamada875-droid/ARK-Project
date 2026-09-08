@@ -96,8 +96,11 @@ export const authService = {
       const firebaseIdToken = typeof auth.currentUser?.getIdToken === 'function' ? await auth.currentUser.getIdToken().catch(() => '') : '';
       const res = await fetch(getApiUrl('/api/auth/claim-admin-session'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid, sessionId, pin, firebaseIdToken })
+        headers: {
+          'Content-Type': 'application/json',
+          ...(firebaseIdToken ? { Authorization: `Bearer ${firebaseIdToken}` } : {})
+        },
+        body: JSON.stringify({ uid, sessionId, pin })
       });
       if (res.ok) {
         const data = await res.json();
@@ -240,4 +243,3 @@ export const authService = {
     } catch (e) {}
   }
 };
-
