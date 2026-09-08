@@ -157099,6 +157099,7 @@ var init_parseAst = __esm({
 });
 
 // node_modules/.pnpm/rollup@4.63.1/node_modules/rollup/dist/es/parseAst.js
+import "node:path";
 var import_native2;
 var init_parseAst2 = __esm({
   "node_modules/.pnpm/rollup@4.63.1/node_modules/rollup/dist/es/parseAst.js"() {
@@ -170025,6 +170026,14 @@ __export(api_exports, {
   register: () => ar2,
   require: () => s4
 });
+import "node:path";
+import "node:os";
+import "node:module";
+import "node:url";
+import "node:fs";
+import "node:crypto";
+import "node:net";
+import "node:util";
 var import_esbuild2;
 var init_api = __esm({
   "node_modules/.pnpm/tsx@4.23.13/node_modules/tsx/dist/cjs/api/index.mjs"() {
@@ -181710,6 +181719,8 @@ import require$$1 from "stream";
 import require$$2$1 from "os";
 import require$$0$3 from "events";
 import { platform } from "node:os";
+import "node:perf_hooks";
+import "node:fs/promises";
 function requireConstants$3() {
   if (hasRequiredConstants$3) return constants$3;
   hasRequiredConstants$3 = 1;
@@ -210663,6 +210674,10 @@ __export(rollup_exports, {
   rollup: () => rollup,
   watch: () => watch
 });
+import "node:path";
+import "node:process";
+import "node:perf_hooks";
+import "node:fs/promises";
 var import_native5;
 var init_rollup = __esm({
   "node_modules/.pnpm/rollup@4.63.1/node_modules/rollup/dist/es/rollup.js"() {
@@ -301942,8 +301957,32 @@ init_dep_Dm0c1Wj2();
 init_dep_Dm0c1Wj2();
 init_constants();
 var import_esbuild4 = __toESM(require_main(), 1);
+import "node:fs";
+import "node:path";
+import "node:fs/promises";
+import "node:url";
+import "node:util";
+import "node:perf_hooks";
+import "node:module";
+import "node:crypto";
 init_dist2();
+import "node:child_process";
+import "node:http";
+import "node:https";
+import "tty";
 init_module_runner();
+import "node:os";
+import "node:net";
+import "node:dns";
+import "node:buffer";
+import "node:readline";
+import "node:process";
+import "node:events";
+import "node:assert";
+import "node:v8";
+import "node:worker_threads";
+import "node:querystring";
+import "node:zlib";
 
 // server.ts
 function normalizeDigits(str2) {
