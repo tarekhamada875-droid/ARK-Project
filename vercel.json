@@ -4,7 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/index.ts": {
-      "includeFiles": "api/server.cjs"
+      "includeFiles": "api/server.mjs"
     }
   },
   "rewrites": [
