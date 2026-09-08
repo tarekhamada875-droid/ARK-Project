@@ -106,7 +106,18 @@ export const vehicleService = {
       where('status', '==', 'inside')
     );
     return onSnapshot(q, (snapshot) => {
-      const vehicles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
+      const vehicles = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Vehicle))
+        .sort((a, b) => {
+          const toMillis = (value: any) => {
+            if (!value) return 0;
+            if (typeof value.toMillis === 'function') return value.toMillis();
+            if (typeof value.toDate === 'function') return value.toDate().getTime();
+            const millis = new Date(value).getTime();
+            return Number.isFinite(millis) ? millis : 0;
+          };
+          return toMillis(b.entryTime) - toMillis(a.entryTime);
+        });
       callback(vehicles);
     });
   },
