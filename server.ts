@@ -444,9 +444,14 @@ async function startServer() {
     }
   };
 
-  // Health endpoint
+  // Health endpoint: readiness must fail closed when server-side Firebase is unavailable.
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    const ready = Boolean(adminAuth && adminDb);
+    res.status(ready ? 200 : 503).json({
+      status: ready ? 'ok' : 'not_ready',
+      adminSdk: ready,
+      timestamp: new Date().toISOString()
+    });
   });
 
   // Secure Server API: Verify User Credentials (PIN or Phone+PIN)
@@ -2198,5 +2203,4 @@ async function startServer() {
 
 const appPromise = startServer();
 export default appPromise;
-
 
