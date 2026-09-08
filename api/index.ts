@@ -1,10 +1,10 @@
 /**
- * Vercel entry point. The build command creates api/server.mjs beside this
- * handler. Dynamic import keeps Firebase Admin's ESM dependencies compatible.
+ * Vercel entry point. The build command creates api/server.cjs beside this
+ * handler. Firebase Admin 13 uses a CommonJS-compatible dependency tree.
  */
 export default async function handler(req: any, res: any) {
   try {
-    const serverModule = await import('./server.mjs');
+    const serverModule = await import('./server.cjs');
     const appPromise = serverModule.default ?? serverModule;
     const app = await appPromise;
     return app(req, res);
