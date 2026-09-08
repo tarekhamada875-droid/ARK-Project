@@ -2176,7 +2176,10 @@ async function startServer() {
     res.status(404).json({ success: false, error: 'API route not found' });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  // Vercel functions must always use production behavior, even if NODE_ENV is
+  // omitted by the platform. Starting Vite inside a serverless function can
+  // crash the invocation and prevent every API route from responding.
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
@@ -2209,4 +2212,3 @@ async function startServer() {
 
 const appPromise = startServer();
 export default appPromise;
-

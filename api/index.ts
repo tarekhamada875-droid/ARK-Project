@@ -6,6 +6,11 @@ import appPromise from '../server';
  * as the handler itself.
  */
 export default async function handler(req: any, res: any) {
-  const app = await appPromise;
-  return app(req, res);
+  try {
+    const app = await appPromise;
+    return app(req, res);
+  } catch (error) {
+    console.error('[Vercel API] Express startup failed:', error);
+    return res.status(503).json({ success: false, error: 'API_STARTUP_FAILED' });
+  }
 }
