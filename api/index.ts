@@ -1,12 +1,14 @@
+import { createRequire } from 'node:module';
+
 /**
- * Vercel entry point. The explicit source extension lets Vercel's Node
- * builder trace and package the Express server instead of leaving an
- * extensionless /var/task/server import that fails at runtime.
+ * Vercel entry point. The build command emits dist/server.cjs. Requiring that
+ * explicit CommonJS filename avoids Vercel's extensionless ESM trace issue
+ * (`Cannot find module /var/task/server`).
  */
 export default async function handler(req: any, res: any) {
   try {
-    // @ts-expect-error Vercel resolves and transpiles this server entry point.
-    const serverModule = await import('../server.ts');
+    const require = createRequire(import.meta.url);
+    const serverModule = require('../dist/server.cjs');
     const appPromise = serverModule.default ?? serverModule;
     const app = await appPromise;
     return app(req, res);
