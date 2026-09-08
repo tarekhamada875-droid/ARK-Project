@@ -5,7 +5,7 @@
 export default async function handler(req: any, res: any) {
   try {
     const serverModule = await import('./server.cjs');
-    const appPromise = serverModule.default ?? serverModule;
+    const appPromise = serverModule.default?.default ?? serverModule.default ?? serverModule;
     const app = await appPromise;
     return app(req, res);
   } catch (error) {
